@@ -43,9 +43,12 @@ export default async function EquipmentPage({
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '32px 20px', fontFamily: 'system-ui, sans-serif' }}>
       <h1 style={{ fontSize: 28, marginBottom: 4 }}>Equipment &amp; Tags</h1>
-      <p style={{ color: '#555', marginBottom: 24 }}>
+      <p style={{ color: '#555', marginBottom: 8 }}>
         Project:{' '}
         {project ? project.name : 'No project found — run the Week 2 SQL step first.'}
+      </p>
+      <p style={{ marginBottom: 24 }}>
+        <a href="/plan">View Project Plan &amp; Rollup &rarr;</a>
       </p>
 
       {error && (
@@ -153,6 +156,9 @@ export default async function EquipmentPage({
                 <td style={tdStyle}>{item.install_status}</td>
                 <td style={tdStyle}>{item.location}</td>
                 <td style={tdStyle}>
+                  <a href={`/equipment/${item.id}/checklist`} style={{ marginRight: 12 }}>
+                    Checklist
+                  </a>
                   <a href={`/equipment/${item.id}/edit`} style={{ marginRight: 12 }}>
                     Edit
                   </a>

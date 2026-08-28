@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { thStyle, tdStyle } from '../equipment/styles'
 import { LEVELS } from '@/lib/checklist'
+import { TopNav } from '@/components/TopNav'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,9 +40,7 @@ export default async function PlanPage() {
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px', fontFamily: 'system-ui, sans-serif' }}>
-      <p style={{ marginBottom: 8 }}>
-        <a href="/equipment">&larr; Back to Equipment &amp; Tags</a>
-      </p>
+      <TopNav />
       <h1 style={{ fontSize: 28, marginBottom: 4 }}>Project Plan &amp; Rollup</h1>
       <p style={{ color: '#555', marginBottom: 24 }}>
         Project: {project ? project.name : 'No project found — run the Week 2 SQL step first.'}

@@ -42,6 +42,9 @@ export default function Home() {
           <a className={styles.primary} href="/equipment">
             Open Equipment &amp; Tags
           </a>
+          <a className={styles.primary} href="/issues">
+            Open Issues &amp; Punchlist
+          </a>
           <a
             className={styles.primary}
             href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"

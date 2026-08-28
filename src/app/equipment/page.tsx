@@ -9,6 +9,7 @@ import {
   CATEGORIES,
   INSTALL_STATUSES,
 } from './styles'
+import { TopNav } from '@/components/TopNav'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,13 +43,11 @@ export default async function EquipmentPage({
 
   return (
     <main style={{ maxWidth: 960, margin: '0 auto', padding: '32px 20px', fontFamily: 'system-ui, sans-serif' }}>
+      <TopNav />
       <h1 style={{ fontSize: 28, marginBottom: 4 }}>Equipment &amp; Tags</h1>
-      <p style={{ color: '#555', marginBottom: 8 }}>
+      <p style={{ color: '#555', marginBottom: 24 }}>
         Project:{' '}
         {project ? project.name : 'No project found — run the Week 2 SQL step first.'}
-      </p>
-      <p style={{ marginBottom: 24 }}>
-        <a href="/plan">View Project Plan &amp; Rollup &rarr;</a>
       </p>
 
       {error && (

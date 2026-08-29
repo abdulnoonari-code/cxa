@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { LEVELS } from '@/lib/checklist'
+import { uploadDocument, deleteDocument } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +41,7 @@ export default async function DocumentsPage({
 
   let attachmentsQuery = supabase
     .from('attachments')
-    .select('id, checklist_item_id, file_name, file_url, review_status, review_note, created_at')
+    .select('id, checklist_item_id, file_name, file_url, file_path, review_status, review_note, created_at')
     .order('created_at', { ascending: false })
 
   if (itemIds.length > 0) {
@@ -52,7 +54,14 @@ export default async function DocumentsPage({
   const { data: attachmentsRaw } = itemIds.length > 0 ? await attachmentsQuery : { data: [] }
   const attachments = attachmentsRaw ?? []
 
-  const needsLookCount = (attachmentsRaw ?? []).filter((a) => a.review_status === 'warning').length
+  const needsLookCount = attachments.filter((a) => a.review_status === 'warning').length
+  const levelLabel = (value: string) => LEVELS.find((l) => l.value === value)?.label ?? value
+
+  // Group checklist items by equipment so the picker below reads as
+  // "GEN-01 → which check is this evidence for".
+  const itemsByEquipment = equipment
+    .map((e) => ({ tag: e.tag_id, items: items.filter((it) => it.equipment_id === e.id) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <>
@@ -69,9 +78,51 @@ export default async function DocumentsPage({
         )}
       </p>
 
-      <div style={{ margin: '20px 0 16px' }}>
+      <div className="card">
+        <h2 className="section-title">Attach a document</h2>
+        {itemsByEquipment.length > 0 ? (
+          <form action={uploadDocument} style={{ display: 'grid', gap: 12 }}>
+            <label className="field">
+              What is this evidence for? *
+              <select name="checklist_item_id" required className="input" defaultValue="">
+                <option value="" disabled>
+                  — choose a checklist item —
+                </option>
+                {itemsByEquipment.map((group) => (
+                  <optgroup key={group.tag} label={group.tag}>
+                    {group.items.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {levelLabel(it.level)} — {it.item}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              File *
+              <input type="file" name="file" required className="input" />
+            </label>
+            <div>
+              <button type="submit" className="btn btn-primary">
+                Upload document
+              </button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-secondary" style={{ fontSize: 14, marginBottom: 0 }}>
+            Documents attach to a checklist item, and there aren&apos;t any yet. Open{' '}
+            <a href="/checklists" className="link">
+              Checklists
+            </a>{' '}
+            to add your first one, then come back here to upload evidence against it.
+          </p>
+        )}
+      </div>
+
+      <div style={{ margin: '24px 0 16px' }}>
         <form style={{ display: 'flex', gap: 10 }}>
-          <select name="review" defaultValue={review ?? ''} className="input">
+          <select name="review" defaultValue={review ?? ''} className="input" style={{ maxWidth: 260 }}>
             <option value="">All documents</option>
             <option value="ok">Passed intake check</option>
             <option value="warning">Needs a look</option>
@@ -119,11 +170,20 @@ export default async function DocumentsPage({
                       )}
                     </td>
                     <td>
-                      {item && (
-                        <a href={`/equipment/${item.equipment_id}/checklist`} className="link">
-                          Open checklist
-                        </a>
-                      )}
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                        {item && (
+                          <a href={`/equipment/${item.equipment_id}/checklist`} className="link">
+                            Open checklist
+                          </a>
+                        )}
+                        <form action={deleteDocument}>
+                          <input type="hidden" name="id" value={a.id} />
+                          <input type="hidden" name="file_path" value={a.file_path} />
+                          <button type="submit" className="btn-link">
+                            Delete
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -131,7 +191,7 @@ export default async function DocumentsPage({
             ) : (
               <tr>
                 <td colSpan={5} className="empty-row">
-                  No documents uploaded yet — attach evidence from any checklist item.
+                  No documents yet — upload your first one above.
                 </td>
               </tr>
             )}

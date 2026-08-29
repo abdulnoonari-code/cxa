@@ -10,9 +10,8 @@ export const metadata: Metadata = {
 };
 
 // The sidebar only appears once you're logged in, so the login and signup
-// screens stay clean and full-width. Everything else — equipment, checklists,
-// tests, issues, documents, plan, milestones — renders inside the sidebar
-// shell, which is why no individual page has to draw its own navigation.
+// screens stay clean and full-width. Everything else renders inside the
+// sidebar shell, which is why no individual page draws its own navigation.
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const supabase = await createClient();
   const {
@@ -21,6 +20,18 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* Loaded here rather than via next/font so the stylesheet is fetched by
+            the browser at runtime. The lint rule below targets the old Pages
+            Router; in the App Router this root layout applies to every page. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+        />
+      </head>
       <body>
         {user ? (
           <div className="app-layout">

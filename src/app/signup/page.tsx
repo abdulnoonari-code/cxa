@@ -1,5 +1,4 @@
 import { signup } from '../login/actions'
-import { inputStyle, buttonStyle, labelStyle } from '../equipment/styles'
 
 export default async function SignupPage({
   searchParams,
@@ -9,33 +8,59 @@ export default async function SignupPage({
   const { error } = await searchParams
 
   return (
-    <main style={{ maxWidth: 420, margin: '80px auto', padding: '0 20px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>CXA — Create account</h1>
-      <p style={{ color: '#555', marginBottom: 24 }}>Commissioning platform</p>
-
-      {error && (
-        <p style={{ padding: 10, background: '#fbeeee', color: '#b23a3a', borderRadius: 6, marginBottom: 16, fontSize: 14 }}>
-          {error}
+    <main className="auth-shell">
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            background: 'var(--color-primary)',
+            color: '#fff',
+            fontWeight: 800,
+            fontSize: 16,
+            marginBottom: 14,
+          }}
+        >
+          CX
+        </div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>CxSentinel</h1>
+        <p className="text-secondary" style={{ fontSize: 14 }}>
+          Create your account
         </p>
-      )}
+      </div>
 
-      <form action={signup} style={{ display: 'grid', gap: 14 }}>
-        <label style={labelStyle}>
-          Email
-          <input type="email" name="email" required style={inputStyle} />
-        </label>
-        <label style={labelStyle}>
-          Password
-          <input type="password" name="password" required minLength={6} style={inputStyle} />
-        </label>
-        <button type="submit" style={buttonStyle}>
-          Create account
-        </button>
-      </form>
+      <div className="auth-card">
+        {error && <p className="alert alert-danger">{error}</p>}
 
-      <p style={{ marginTop: 16, fontSize: 14 }}>
-        Already have an account? <a href="/login">Log in</a>
-      </p>
+        <form action={signup} style={{ display: 'grid', gap: 14 }}>
+          <label className="field">
+            Your name
+            <input type="text" name="full_name" placeholder="e.g. Abdul Jabbar" className="input" />
+          </label>
+          <label className="field">
+            Email
+            <input type="email" name="email" required className="input" />
+          </label>
+          <label className="field">
+            Password
+            <input type="password" name="password" required minLength={6} className="input" />
+          </label>
+          <button type="submit" className="btn btn-primary" style={{ marginTop: 4 }}>
+            Create account
+          </button>
+        </form>
+
+        <p style={{ marginTop: 18, fontSize: 14, textAlign: 'center' }} className="text-secondary">
+          Already have an account?{' '}
+          <a href="/login" className="link">
+            Log in
+          </a>
+        </p>
+      </div>
     </main>
   )
 }

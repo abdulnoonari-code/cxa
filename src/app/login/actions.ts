@@ -24,16 +24,23 @@ export async function login(formData: FormData) {
 export async function signup(formData: FormData) {
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
+  const full_name = String(formData.get('full_name') ?? '').trim()
 
   if (!email || !password) {
     redirect('/signup?error=' + encodeURIComponent('Enter an email and password.'))
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signUp({ email, password })
+  const { data, error } = await supabase.auth.signUp({ email, password })
 
   if (error) {
     redirect('/signup?error=' + encodeURIComponent(error.message))
+  }
+
+  // The profiles row is created automatically by a database trigger when the
+  // auth user is created (see the Week 4 SQL). Here we just fill in the name.
+  if (full_name && data.user) {
+    await supabase.from('profiles').update({ full_name }).eq('id', data.user.id)
   }
 
   redirect(

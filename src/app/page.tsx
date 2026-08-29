@@ -1,75 +1,56 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import Link from 'next/link'
 
 export default function Home() {
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a className={styles.primary} href="/equipment">
-            Open Equipment &amp; Tags
-          </a>
-          <a className={styles.primary} href="/issues">
-            Open Issues &amp; Punchlist
-          </a>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="app-shell" style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center', paddingTop: 96 }}>
+      <div
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 56,
+          height: 56,
+          borderRadius: 14,
+          background: 'var(--color-primary)',
+          color: '#fff',
+          fontWeight: 800,
+          fontSize: 22,
+          marginBottom: 20,
+        }}
+      >
+        CX
+      </div>
+      <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 10 }}>CxSentinel</h1>
+      <p style={{ fontSize: 16, color: 'var(--color-text-secondary)', marginBottom: 36, lineHeight: 1.6 }}>
+        AI commissioning copilot for data centers, substations, and power plants — equipment
+        registers, checklists with document attachments, and issue tracking, watched over by an
+        AI reviewer.
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 32 }}>
+        <Link href="/equipment" className="btn btn-primary">
+          Equipment &amp; Tags
+        </Link>
+        <Link href="/plan" className="btn btn-secondary">
+          Project Plan
+        </Link>
+        <Link href="/milestones" className="btn btn-secondary">
+          Milestones
+        </Link>
+        <Link href="/issues" className="btn btn-secondary">
+          Issues &amp; Punchlist
+        </Link>
+      </div>
+
+      <p style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
+        <Link href="/login" className="link">
+          Log in
+        </Link>{' '}
+        or{' '}
+        <Link href="/signup" className="link">
+          create an account
+        </Link>
+      </p>
     </div>
   );
 }

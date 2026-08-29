@@ -1,30 +1,5 @@
-import { logout } from '@/app/login/actions'
-
-export function TopNav() {
-  return (
-    <nav
-      style={{
-        display: 'flex',
-        gap: 16,
-        alignItems: 'center',
-        marginBottom: 24,
-        paddingBottom: 12,
-        borderBottom: '1px solid #eee',
-        fontSize: 14,
-        flexWrap: 'wrap',
-      }}
-    >
-      <a href="/equipment">Equipment &amp; Tags</a>
-      <a href="/plan">Project Plan</a>
-      <a href="/issues">Issues &amp; Punchlist</a>
-      <form action={logout} style={{ marginLeft: 'auto' }}>
-        <button
-          type="submit"
-          style={{ background: 'none', border: 'none', color: '#b23a3a', cursor: 'pointer', fontSize: 14, padding: 0 }}
-        >
-          Log out
-        </button>
-      </form>
-    </nav>
-  )
-}
+// Retired. The top navigation bar was replaced by the left sidebar in
+// Sidebar.tsx, which is rendered once from src/app/layout.tsx for every
+// signed-in page. This file is deliberately left empty rather than deleted so
+// that an older copy of it can't linger in the repository and break the build.
+export {}

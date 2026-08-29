@@ -1,7 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase'
+import { LEVELS } from '@/lib/checklist'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -31,7 +33,13 @@ export async function updateChecklistItem(formData: FormData) {
   const notes = str(formData, 'notes')
   if (!id || !equipment_id) return
 
-  await supabase.from('checklist_items').update({ status, notes }).eq('id', id)
+  // Every Save now runs the rule-based check automatically — no separate
+  // "Check" click needed. This is what "AI checks everything automatically"
+  // means today (rule-based, free); Part 2 swaps this for a real API call
+  // without changing this call site.
+  const ai_comment = generateCheckComment(status, notes)
+
+  await supabase.from('checklist_items').update({ status, notes, ai_comment }).eq('id', id)
 
   revalidatePath(`/equipment/${equipment_id}/checklist`)
 }
@@ -68,16 +76,125 @@ function generateCheckComment(status: string, notes: string | null): string {
   return 'Not yet checked — no status has been recorded for this item.'
 }
 
-export async function checkItem(formData: FormData) {
-  const id = str(formData, 'id')
+// Phase 0 "initial assessment" is a fast, rule-based intake check that runs the
+// instant a file is uploaded — no API key, no cost. It checks the file itself
+// (name, extension, size), not its content. Real content review (Part 2) is a
+// separate, deeper AI pass that reads what's actually in the document.
+const ACCEPTED_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'png', 'jpg', 'jpeg', 'csv']
+
+function generateAttachmentReview(
+  fileName: string,
+  fileSize: number,
+  tagId: string | null
+): { status: 'ok' | 'warning'; note: string } {
+  const issues: string[] = []
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
+
+  if (!ext || !ACCEPTED_EXTENSIONS.includes(ext)) {
+    issues.push(`unexpected file type ".${ext || '?'}" — confirm this is the right document`)
+  }
+  if (tagId && !fileName.toLowerCase().includes(tagId.toLowerCase())) {
+    issues.push(`file name doesn't include the equipment tag "${tagId}" — consider renaming for traceability`)
+  }
+  if (fileSize < 2048) {
+    issues.push('file is unusually small — confirm it isn\'t a blank or corrupted scan')
+  }
+
+  if (issues.length === 0) {
+    return { status: 'ok', note: 'Initial check passed — file type and name look correct.' }
+  }
+  return { status: 'warning', note: `Initial check flagged: ${issues.join('; ')}.` }
+}
+
+export async function uploadAttachment(formData: FormData) {
+  const checklist_item_id = str(formData, 'checklist_item_id')
   const equipment_id = str(formData, 'equipment_id')
-  const status = str(formData, 'status') ?? 'pending'
-  const notes = str(formData, 'notes')
+  const file = formData.get('file')
+
+  if (!checklist_item_id || !equipment_id || !(file instanceof File) || file.size === 0) return
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const path = `${checklist_item_id}/${Date.now()}-${safeName}`
+
+  const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
+  if (uploadError) return
+
+  const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(path)
+
+  const { data: equipment } = await supabase.from('equipment').select('tag_id').eq('id', equipment_id).single()
+  const review = generateAttachmentReview(file.name, file.size, equipment?.tag_id ?? null)
+
+  await supabase.from('attachments').insert({
+    checklist_item_id,
+    file_name: file.name,
+    file_path: path,
+    file_url: publicUrlData.publicUrl,
+    review_status: review.status,
+    review_note: review.note,
+  })
+
+  revalidatePath(`/equipment/${equipment_id}/checklist`)
+}
+
+export async function deleteAttachment(formData: FormData) {
+  const id = str(formData, 'id')
+  const file_path = str(formData, 'file_path')
+  const equipment_id = str(formData, 'equipment_id')
   if (!id || !equipment_id) return
 
-  const ai_comment = generateCheckComment(status, notes)
+  if (file_path) {
+    await supabase.storage.from('documents').remove([file_path])
+  }
+  await supabase.from('attachments').delete().eq('id', id)
 
-  await supabase.from('checklist_items').update({ status, notes, ai_comment }).eq('id', id)
+  revalidatePath(`/equipment/${equipment_id}/checklist`)
+}
+
+function findLevelValueByLabel(text: string): string | null {
+  const normalized = text.trim().toLowerCase()
+  const byValue = LEVELS.find((l) => l.value.toLowerCase() === normalized)
+  if (byValue) return byValue.value
+  const byLabel = LEVELS.find(
+    (l) => l.label.toLowerCase() === normalized || l.label.toLowerCase().startsWith(normalized)
+  )
+  if (byLabel) return byLabel.value
+  // Loose match: "L1", "L1 FAT", "Factory Acceptance", etc.
+  const byContains = LEVELS.find((l) => l.label.toLowerCase().includes(normalized) || normalized.includes(l.value.toLowerCase().split('_')[0]))
+  return byContains?.value ?? null
+}
+
+// Bulk-add checklist items from an uploaded .xlsx file (two columns: Level, Item —
+// the same layout the Export button produces, so a downloaded sheet can be edited
+// and re-imported). Unrecognized levels or blank rows are skipped, not rejected,
+// so one bad row doesn't block the rest of the import.
+export async function importChecklist(formData: FormData) {
+  const equipment_id = str(formData, 'equipment_id')
+  const file = formData.get('file')
+  if (!equipment_id || !(file instanceof File) || file.size === 0) return
+
+  const buffer = await file.arrayBuffer()
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer)
+  const sheet = workbook.worksheets[0]
+  if (!sheet) return
+
+  const rows: { equipment_id: string; level: string; item: string }[] = []
+
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return // header row
+    const levelCell = String(row.getCell(1).value ?? '').trim()
+    const itemCell = String(row.getCell(2).value ?? '').trim()
+    if (!levelCell || !itemCell) return
+
+    const level = findLevelValueByLabel(levelCell)
+    if (!level) return
+
+    rows.push({ equipment_id, level, item: itemCell })
+  })
+
+  if (rows.length > 0) {
+    await supabase.from('checklist_items').insert(rows)
+  }
 
   revalidatePath(`/equipment/${equipment_id}/checklist`)
 }

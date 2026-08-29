@@ -12,3 +12,16 @@ export const STATUSES = [
   { value: 'fail', label: 'Fail' },
   { value: 'na', label: 'N/A' },
 ]
+
+export function statusBadgeClass(status: string): string {
+  switch (status) {
+    case 'pass':
+      return 'badge badge-success'
+    case 'fail':
+      return 'badge badge-danger'
+    case 'na':
+      return 'badge badge-neutral'
+    default:
+      return 'badge badge-warning'
+  }
+}

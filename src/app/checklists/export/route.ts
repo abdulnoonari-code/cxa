@@ -1,17 +1,12 @@
 import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { LEVELS, STATUSES } from '@/lib/checklist'
 
 // The whole project's checklist in one workbook — every tag, every level, with
 // status, comments and how many documents are attached to each check.
 export async function GET() {
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 
   const { data: equipmentRows } = await supabase

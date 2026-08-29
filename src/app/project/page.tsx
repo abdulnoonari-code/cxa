@@ -1,16 +1,11 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { updateProject } from './actions'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ProjectPage() {
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name, client, location, start_date, target_date')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   if (!project) {
     return (

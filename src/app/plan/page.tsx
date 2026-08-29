@@ -1,18 +1,13 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
 import { MILESTONE_STATUSES, milestoneBadgeClass, isOverdue } from '@/lib/milestones'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PlanPage() {
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   const { data: equipmentRows } = project
     ? await supabase.from('equipment').select('id').eq('project_id', project.id)

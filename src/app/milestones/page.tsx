@@ -1,17 +1,12 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { createMilestone, updateMilestone, deleteMilestone } from './actions'
 import { MILESTONE_STATUSES, milestoneBadgeClass, isOverdue } from '@/lib/milestones'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MilestonesPage() {
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   const { data: milestonesRaw } = project
     ? await supabase

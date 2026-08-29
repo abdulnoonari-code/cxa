@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
-import { LEVELS, STATUSES, statusBadgeClass } from '@/lib/checklist'
+import { getCurrentProject } from '@/lib/project'
+import { LEVELS, STATUSES, statusBadgeClass, reviewBadgeClass, reviewLabel } from '@/lib/checklist'
 import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
 import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence } from './actions'
 
@@ -30,13 +31,7 @@ export default async function ChecklistsPage({
     headings,
   } = await searchParams
 
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   const { data: equipmentRows } = project
     ? await supabase.from('equipment').select('id, tag_id, description').eq('project_id', project.id).order('tag_id')
@@ -47,7 +42,7 @@ export default async function ChecklistsPage({
 
   let query = supabase
     .from('checklist_items')
-    .select('id, level, item, status, notes, ai_comment, equipment_id')
+    .select('id, level, item, status, notes, ai_comment, review_state, equipment_id')
     .order('level', { ascending: true })
 
   if (equipmentIds.length > 0) query = query.in('equipment_id', equipmentIds)
@@ -318,9 +313,12 @@ export default async function ChecklistsPage({
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 14.5 }}>{it.item}</div>
                     </div>
-                    <span className={statusBadgeClass(it.status)}>
-                      {STATUSES.find((s) => s.value === it.status)?.label ?? it.status}
-                    </span>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span className={reviewBadgeClass(it.review_state)}>{reviewLabel(it.review_state)}</span>
+                      <span className={statusBadgeClass(it.status)}>
+                        {STATUSES.find((s) => s.value === it.status)?.label ?? it.status}
+                      </span>
+                    </div>
                   </div>
 
                   <form style={{ display: 'grid', gap: 10, gridTemplateColumns: '150px 1fr auto', alignItems: 'end' }}>

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { logout } from '@/app/login/actions'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentProject, listProjects } from '@/lib/project'
+import { selectProject } from '@/app/projects/actions'
 
 // Small line icons, drawn inline so the rail needs no icon library and nothing
 // to download. 16px grid, 1.6 stroke to match the type weight.
@@ -27,6 +29,19 @@ const ICONS = {
       <rect x="14" y="3" width="7" height="5" rx="1.5" />
       <rect x="14" y="12" width="7" height="9" rx="1.5" />
       <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    </>
+  ),
+  projects: icon(
+    <>
+      <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7.5A1.5 1.5 0 0 1 17.5 19h-13A1.5 1.5 0 0 1 3 17.5Z" />
+      <path d="M21 9v9a2 2 0 0 1-2 2H6" opacity="0.55" />
+    </>
+  ),
+  review: icon(
+    <>
+      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h9L20 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5Z" />
+      <path d="M14 4v6h6" />
+      <path d="M8.2 15.4l2 2 4-4.6" />
     </>
   ),
   settings: icon(
@@ -88,6 +103,7 @@ const ICONS = {
 }
 
 export async function Sidebar() {
+  const [projects, current] = await Promise.all([listProjects(), getCurrentProject()])
   const supabase = await createClient()
   const {
     data: { user },
@@ -106,11 +122,31 @@ export async function Sidebar() {
         CxSentinel
       </Link>
 
+      {/* Which site you're looking at. Changing it re-scopes every screen. */}
+      <form action={selectProject} className="project-switch">
+        <span className="project-switch-label">Project</span>
+        <select name="id" defaultValue={current?.id ?? ''} className="project-switch-select">
+          {projects.length === 0 && <option value="">No projects yet</option>}
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="project-switch-go">
+          Open
+        </button>
+      </form>
+
       <nav className="sidebar-nav">
         <div className="sidebar-section-label">Overview</div>
         <Link href="/dashboard" className="nav-link">
           {ICONS.dashboard}
           Dashboard
+        </Link>
+        <Link href="/projects" className="nav-link">
+          {ICONS.projects}
+          All Projects
         </Link>
         <Link href="/project" className="nav-link">
           {ICONS.settings}
@@ -148,6 +184,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Quality</div>
+        <Link href="/review" className="nav-link">
+          {ICONS.review}
+          Review &amp; Approvals
+        </Link>
         <Link href="/documents" className="nav-link">
           {ICONS.document}
           Document Review

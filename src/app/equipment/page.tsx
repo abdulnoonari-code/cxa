@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { createEquipment, deleteEquipment } from './actions'
 import { CATEGORIES, INSTALL_STATUSES, installBadgeClass } from './styles'
 
@@ -12,13 +13,7 @@ export default async function EquipmentPage({
 }) {
   const { q, category } = await searchParams
 
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   let query = supabase
     .from('equipment')

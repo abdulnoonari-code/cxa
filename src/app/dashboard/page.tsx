@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
 import { CATEGORIES } from '@/lib/issues'
 import { MILESTONE_STATUSES, isOverdue } from '@/lib/milestones'
@@ -80,13 +81,7 @@ function Donut({
 }
 
 export default async function DashboardPage() {
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name, client, location, start_date, target_date')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   const { data: equipmentRows } = project
     ? await supabase.from('equipment').select('id, tag_id, install_status').eq('project_id', project.id).order('tag_id')

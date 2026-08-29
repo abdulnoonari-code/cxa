@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
 import { uploadDocument, deleteDocument } from './actions'
 
@@ -11,13 +12,7 @@ export default async function DocumentsPage({
 }) {
   const { review } = await searchParams
 
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id, name')
-    .order('created_at', { ascending: true })
-    .limit(1)
-
-  const project = projects?.[0]
+  const project = await getCurrentProject()
 
   const { data: equipmentRows } = project
     ? await supabase.from('equipment').select('id, tag_id').eq('project_id', project.id).order('tag_id')

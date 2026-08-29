@@ -44,6 +44,31 @@ const ICONS = {
       <path d="M8.2 15.4l2 2 4-4.6" />
     </>
   ),
+  task: icon(
+    <>
+      <rect x="3" y="4.5" width="18" height="16" rx="2" />
+      <path d="M8 3v3M16 3v3M3 9.5h18" />
+      <path d="M8.5 14.2l1.6 1.6 3.4-3.6" />
+    </>
+  ),
+  files: icon(
+    <>
+      <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h3.2l1.8 2.2h8A1.5 1.5 0 0 1 20 8.7V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18Z" />
+    </>
+  ),
+  report: icon(
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
+      <path d="M8 16.5V11M12 16.5V7.5M16 16.5v-3.5" />
+    </>
+  ),
+  meeting: icon(
+    <>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19.5a5.5 5.5 0 0 1 11 0" />
+      <path d="M16 5.5a3 3 0 0 1 0 5.4M17.5 19.5a5.4 5.4 0 0 0-2-4.2" />
+    </>
+  ),
   settings: icon(
     <>
       <circle cx="12" cy="12" r="3" />
@@ -139,7 +164,7 @@ export async function Sidebar() {
       </form>
 
       <nav className="sidebar-nav">
-        <div className="sidebar-section-label">Overview</div>
+        <div className="sidebar-section-label">Project</div>
         <Link href="/dashboard" className="nav-link">
           {ICONS.dashboard}
           Dashboard
@@ -161,7 +186,7 @@ export async function Sidebar() {
           Milestones &amp; Timeline
         </Link>
 
-        <div className="sidebar-section-label">Delivery</div>
+        <div className="sidebar-section-label">Assets &amp; Checks</div>
         <Link href="/equipment" className="nav-link">
           {ICONS.equipment}
           Equipment &amp; Tags
@@ -178,12 +203,12 @@ export async function Sidebar() {
           {ICONS.integrated}
           Integrated Functional Tests
         </Link>
+
+        <div className="sidebar-section-label">Quality</div>
         <Link href="/issues" className="nav-link">
           {ICONS.issue}
           Issues &amp; Punch List
         </Link>
-
-        <div className="sidebar-section-label">Quality</div>
         <Link href="/review" className="nav-link">
           {ICONS.review}
           Review &amp; Approvals
@@ -191,6 +216,26 @@ export async function Sidebar() {
         <Link href="/documents" className="nav-link">
           {ICONS.document}
           Document Review
+        </Link>
+
+        <div className="sidebar-section-label">Manage</div>
+        <Link href="/tasks" className="nav-link">
+          {ICONS.task}
+          Tasks
+        </Link>
+        <Link href="/meetings" className="nav-link">
+          {ICONS.meeting}
+          Meetings
+        </Link>
+        <Link href="/files" className="nav-link">
+          {ICONS.files}
+          Files
+        </Link>
+
+        <div className="sidebar-section-label">Reports</div>
+        <Link href="/reports" className="nav-link">
+          {ICONS.report}
+          Progress Report
         </Link>
       </nav>
 

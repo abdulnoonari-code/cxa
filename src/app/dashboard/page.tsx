@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { LEVELS } from '@/lib/checklist'
 import { CATEGORIES } from '@/lib/issues'
 import { MILESTONE_STATUSES, isOverdue } from '@/lib/milestones'
+import { HeroScene } from '@/components/HeroScene'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,43 +25,6 @@ const MILESTONE_COLORS: Record<string, string> = {
   on_track: 'var(--color-primary)',
   at_risk: 'var(--color-danger-solid)',
   planned: 'var(--color-neutral-solid)',
-}
-
-// A single-line-diagram motif for the hero: busbars, breakers, a generator and
-// a transformer. Drawn rather than photographed so it always loads instantly
-// and stays sharp at any width.
-function HeroArt() {
-  const units = [0, 1, 2, 3, 4, 5]
-  return (
-    <svg className="hero-art" viewBox="0 0 900 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <g stroke="#9fd8ff" strokeWidth="1.6" fill="none">
-        <line x1="0" y1="58" x2="900" y2="58" />
-        <line x1="0" y1="206" x2="900" y2="206" />
-        {units.map((u) => {
-          const x = 75 + u * 155
-          return (
-            <g key={u}>
-              <line x1={x} y1="58" x2={x} y2="104" />
-              <rect x={x - 9} y="104" width="18" height="22" rx="2" />
-              <line x1={x} y1="126" x2={x} y2="152" />
-              {u % 2 === 0 ? (
-                <>
-                  <circle cx={x} cy="166" r="14" />
-                  <path d={`M${x - 7} 166 q3.5 -6 7 0 t7 0`} />
-                </>
-              ) : (
-                <>
-                  <circle cx={x} cy="162" r="11" />
-                  <circle cx={x} cy="174" r="11" />
-                </>
-              )}
-              <line x1={x} y1="185" x2={x} y2="206" />
-            </g>
-          )
-        })}
-      </g>
-    </svg>
-  )
 }
 
 function Donut({
@@ -118,7 +82,7 @@ function Donut({
 export default async function DashboardPage() {
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name')
+    .select('id, name, client, location, start_date, target_date')
     .order('created_at', { ascending: true })
     .limit(1)
 
@@ -230,7 +194,8 @@ export default async function DashboardPage() {
   return (
     <>
       <section className="hero rise rise-1">
-        <HeroArt />
+        <HeroScene />
+        <div className="hero-scrim" />
         <div className="hero-inner">
           <p className="hero-eyebrow">Commissioning readiness</p>
           <h1>{project ? project.name : 'No project yet'}</h1>
@@ -250,6 +215,35 @@ export default async function DashboardPage() {
           <div className="hero-meter">
             <div className="hero-meter-fill" style={{ width: `${completion}%` }} />
           </div>
+
+          {project && (project.client || project.location || project.start_date || project.target_date) && (
+            <div className="hero-meta">
+              {project.client && (
+                <div className="hero-meta-item">
+                  <span className="hero-meta-label">Client</span>
+                  <span className="hero-meta-value">{project.client}</span>
+                </div>
+              )}
+              {project.location && (
+                <div className="hero-meta-item">
+                  <span className="hero-meta-label">Location</span>
+                  <span className="hero-meta-value">{project.location}</span>
+                </div>
+              )}
+              {project.start_date && (
+                <div className="hero-meta-item">
+                  <span className="hero-meta-label">Start</span>
+                  <span className="hero-meta-value mono">{project.start_date}</span>
+                </div>
+              )}
+              {project.target_date && (
+                <div className="hero-meta-item">
+                  <span className="hero-meta-label">Target</span>
+                  <span className="hero-meta-value mono">{project.target_date}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

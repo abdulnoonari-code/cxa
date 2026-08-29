@@ -1,17 +1,34 @@
 import { supabase } from '@/lib/supabase'
 import { LEVELS, STATUSES, statusBadgeClass } from '@/lib/checklist'
 import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
+import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence } from './actions'
 
 export const dynamic = 'force-dynamic'
 
-// Every checklist item on the project, across all equipment, in one place —
-// so a checklist doesn't have to be reached by first finding its equipment.
 export default async function ChecklistsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ level?: string; equipment?: string }>
+  searchParams: Promise<{
+    level?: string
+    equipment?: string
+    import?: string
+    checks?: string
+    tags?: string
+    total?: string
+    skipped?: string
+    headings?: string
+  }>
 }) {
-  const { level, equipment: equipmentFilter } = await searchParams
+  const {
+    level,
+    equipment: equipmentFilter,
+    import: importResult,
+    checks,
+    tags,
+    total,
+    skipped,
+    headings,
+  } = await searchParams
 
   const { data: projects } = await supabase
     .from('projects')
@@ -27,7 +44,6 @@ export default async function ChecklistsPage({
 
   const equipment = equipmentRows ?? []
   const equipmentIds = equipment.map((e) => e.id)
-  const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   let query = supabase
     .from('checklist_items')
@@ -44,31 +60,147 @@ export default async function ChecklistsPage({
 
   const { data: attachmentsRaw } =
     itemIds.length > 0
-      ? await supabase.from('attachments').select('checklist_item_id').in('checklist_item_id', itemIds)
-      : { data: [] as { checklist_item_id: string }[] }
+      ? await supabase
+          .from('attachments')
+          .select('id, checklist_item_id, file_name, file_url, review_status')
+          .in('checklist_item_id', itemIds)
+          .order('created_at', { ascending: true })
+      : { data: [] as { id: string; checklist_item_id: string; file_name: string; file_url: string; review_status: string | null }[] }
 
-  const evidenceCountFor = (itemId: string) =>
-    (attachmentsRaw ?? []).filter((a) => a.checklist_item_id === itemId).length
+  const attachments = attachmentsRaw ?? []
+  const filesFor = (itemId: string) => attachments.filter((a) => a.checklist_item_id === itemId)
 
-  const levelLabel = (value: string) => LEVELS.find((l) => l.value === value)?.label ?? value
+  const levelLabel = (v: string) => LEVELS.find((l) => l.value === v)?.label ?? v
   const failed = items.filter((it) => it.status === 'fail').length
   const pending = items.filter((it) => it.status === 'pending').length
+  const resolved = items.filter((it) => it.status === 'pass' || it.status === 'na').length
+  const percent = items.length > 0 ? Math.round((resolved / items.length) * 100) : 0
+
+  const groups = equipment
+    .map((e) => ({ ...e, items: items.filter((it) => it.equipment_id === e.id) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <>
       <h1 className="page-title">Checklists</h1>
-      <p className="page-subtitle" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+      <p className="page-subtitle" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
-          Project: {project ? project.name : 'No project found — run the Week 2 SQL step first.'} — every
-          commissioning check on the project, at every level.
+          Project: {project ? project.name : 'No project found — run the Week 2 SQL step first.'} — every check,
+          at every level, with its comment and its evidence.
         </span>
+        <span className="badge badge-info">{percent}% resolved</span>
         {failed > 0 && <span className="badge badge-danger">{failed} failed</span>}
         {pending > 0 && <span className="badge badge-warning">{pending} not started</span>}
       </p>
 
+      {importResult === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+          <strong>Imported.</strong> {checks} check{checks === '1' ? '' : 's'} read from your file and created
+          against {tags} tag{tags === '1' ? '' : 's'} — {total} in total.
+          {skipped && skipped !== '0' ? ` ${skipped} row${skipped === '1' ? '' : 's'} skipped (no level could be worked out).` : ''}
+        </div>
+      )}
+      {importResult === 'empty' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> No rows could be read from that file.
+          {headings ? ` The column headings found were: ${headings}.` : ''} The file needs a column headed
+          something like Item, Description, Check or Task. Pick a level below if the file doesn&apos;t have a
+          Level column.
+        </div>
+      )}
+      {importResult === 'nofile' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> Choose a file and tick at least one equipment tag.
+        </div>
+      )}
+
       <div className="card">
-        <h2 className="section-title">Add a checklist item</h2>
-        <form action={addChecklistItem} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
+        <h2 className="section-title">Upload a checklist</h2>
+        <p className="text-secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+          Use your own Excel sheet or the template below — CxSentinel finds the header row wherever it sits and
+          recognises columns named Item, Description, Check, Task, Level, Stage, Notes or Remarks. Tick every tag
+          the checklist applies to and it gets created against each one.
+        </p>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+          <a href="/checklists/template" className="btn btn-secondary btn-sm">
+            Download blank template
+          </a>
+          <a href="/checklists/export" className="btn btn-secondary btn-sm">
+            Export whole project (Excel)
+          </a>
+        </div>
+
+        <form action={importProjectChecklist} style={{ display: 'grid', gap: 14 }}>
+          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '1.4fr 1fr' }}>
+            <label className="field">
+              Checklist file (.xlsx or .csv) *
+              <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+            </label>
+            <label className="field">
+              Level to use if the file doesn&apos;t say
+              <select name="default_level" className="input" defaultValue="">
+                <option value="">— file must specify —</option>
+                {LEVELS.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="field">
+            Apply to these tags *
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+                gap: 8,
+                marginTop: 2,
+              }}
+            >
+              {equipment.map((e) => (
+                <label
+                  key={e.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 13,
+                    fontWeight: 400,
+                    color: 'var(--color-text)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                  }}
+                >
+                  <input type="checkbox" name="equipment_ids" value={e.id} />
+                  <span className="mono">{e.tag_id}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <button type="submit" className="btn btn-primary" disabled={equipment.length === 0}>
+              Import checklist
+            </button>
+          </div>
+        </form>
+
+        {equipment.length === 0 && (
+          <p className="text-secondary" style={{ fontSize: 13, marginTop: 10 }}>
+            Add equipment first — checks belong to a tag.
+          </p>
+        )}
+      </div>
+
+      <details className="card" style={{ marginTop: 16 }}>
+        <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>
+          Add a single check by hand
+        </summary>
+        <form action={addChecklistItem} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr', marginTop: 16 }}>
           <label className="field">
             Equipment *
             <select name="equipment_id" required className="input" defaultValue="">
@@ -102,19 +234,14 @@ export default async function ChecklistsPage({
           </label>
           <div style={{ gridColumn: '1 / -1' }}>
             <button type="submit" className="btn btn-primary" disabled={equipment.length === 0}>
-              Add item
+              Add check
             </button>
           </div>
         </form>
-        {equipment.length === 0 && (
-          <p className="text-secondary" style={{ fontSize: 13, marginTop: 10 }}>
-            Add equipment first — checks belong to a tag.
-          </p>
-        )}
-      </div>
+      </details>
 
-      <div style={{ margin: '24px 0 16px' }}>
-        <form style={{ display: 'flex', gap: 10 }}>
+      <div style={{ margin: '26px 0 16px' }}>
+        <form style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <select name="equipment" defaultValue={equipmentFilter ?? ''} className="input" style={{ maxWidth: 240 }}>
             <option value="">All equipment</option>
             {equipment.map((e) => (
@@ -137,61 +264,158 @@ export default async function ChecklistsPage({
         </form>
       </div>
 
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Equipment</th>
-              <th>Level</th>
-              <th>Item</th>
-              <th>Status</th>
-              <th>Evidence</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length > 0 ? (
-              items.map((it) => (
-                <tr key={it.id}>
-                  <td style={{ fontWeight: 600 }}>{tagById.get(it.equipment_id) ?? '—'}</td>
-                  <td style={{ fontSize: 13 }}>{levelLabel(it.level)}</td>
-                  <td>
-                    {it.item}
-                    {it.ai_comment && (
-                      <div className="text-secondary" style={{ fontSize: 11, marginTop: 2, maxWidth: 340 }}>
-                        {it.ai_comment}
+      {groups.length > 0 ? (
+        groups.map((g) => (
+          <div key={g.id} className="card" style={{ marginTop: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+                marginBottom: 16,
+              }}
+            >
+              <div>
+                <span className="mono" style={{ fontSize: 15, fontWeight: 600 }}>
+                  {g.tag_id}
+                </span>
+                {g.description && (
+                  <span className="text-secondary" style={{ fontSize: 13, marginLeft: 10 }}>
+                    {g.description}
+                  </span>
+                )}
+              </div>
+              <span className="text-secondary" style={{ fontSize: 12 }}>
+                {g.items.length} check{g.items.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              {g.items.map((it) => (
+                <div
+                  key={it.id}
+                  style={{
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 10,
+                    padding: 14,
+                    background: '#fcfdff',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div>
+                      <div className="text-secondary mono" style={{ fontSize: 11, marginBottom: 3 }}>
+                        {levelLabel(it.level)}
                       </div>
-                    )}
-                  </td>
-                  <td>
+                      <div style={{ fontWeight: 500, fontSize: 14.5 }}>{it.item}</div>
+                    </div>
                     <span className={statusBadgeClass(it.status)}>
                       {STATUSES.find((s) => s.value === it.status)?.label ?? it.status}
                     </span>
-                  </td>
-                  <td>
-                    {evidenceCountFor(it.id) > 0 ? (
-                      <span className="badge badge-info">{evidenceCountFor(it.id)}</span>
+                  </div>
+
+                  <form style={{ display: 'grid', gap: 10, gridTemplateColumns: '150px 1fr auto', alignItems: 'end' }}>
+                    <input type="hidden" name="id" value={it.id} />
+                    <input type="hidden" name="equipment_id" value={g.id} />
+                    <label className="field">
+                      Check
+                      <select
+                        key={`s-${it.id}-${it.status}`}
+                        name="status"
+                        defaultValue={it.status}
+                        className="input"
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      Comment
+                      <input
+                        key={`n-${it.id}-${it.notes ?? ''}`}
+                        name="notes"
+                        defaultValue={it.notes ?? ''}
+                        placeholder="What was verified, or why it failed"
+                        className="input"
+                      />
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button formAction={saveCheck} type="submit" className="btn btn-primary btn-sm">
+                        Save
+                      </button>
+                      <button formAction={deleteCheck} type="submit" className="btn btn-danger-outline btn-sm">
+                        Delete
+                      </button>
+                    </div>
+                  </form>
+
+                  {it.ai_comment && (
+                    <p className="alert alert-info" style={{ marginTop: 12, marginBottom: 0, fontSize: 12.5 }}>
+                      <strong>Automatic check:</strong> {it.ai_comment}
+                    </p>
+                  )}
+
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border-soft)' }}>
+                    <div className="text-secondary mono" style={{ fontSize: 10.5, letterSpacing: '0.09em', marginBottom: 8 }}>
+                      DOCUMENTS
+                    </div>
+
+                    {filesFor(it.id).length > 0 ? (
+                      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 10px 0', display: 'grid', gap: 6 }}>
+                        {filesFor(it.id).map((a) => (
+                          <li key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+                            <a href={a.file_url} target="_blank" rel="noopener noreferrer" className="link">
+                              {a.file_name}
+                            </a>
+                            {a.review_status && (
+                              <span className={a.review_status === 'ok' ? 'badge badge-success' : 'badge badge-warning'}>
+                                {a.review_status === 'ok' ? 'Passed intake check' : 'Needs a look'}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     ) : (
-                      <span className="badge badge-neutral">None</span>
+                      <p className="text-secondary" style={{ fontSize: 12.5, marginBottom: 10 }}>
+                        No document attached yet.
+                      </p>
                     )}
-                  </td>
-                  <td>
-                    <a href={`/equipment/${it.equipment_id}/checklist`} className="link">
-                      Open
-                    </a>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6} className="empty-row">
-                  No checklist items yet — add your first one above.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+                    <form action={attachEvidence} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="hidden" name="checklist_item_id" value={it.id} />
+                      <input type="hidden" name="equipment_id" value={g.id} />
+                      <input type="hidden" name="tag_id" value={g.tag_id} />
+                      <input type="file" name="file" required style={{ fontSize: 12.5 }} />
+                      <button type="submit" className="btn btn-secondary btn-sm">
+                        Attach
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div className="card" style={{ marginTop: 16 }}>
+          <p className="text-secondary" style={{ fontSize: 14 }}>
+            No checks yet. Download the template above, fill it in, and upload it against your tags — or add one by
+            hand.
+          </p>
+        </div>
+      )}
     </>
   )
 }

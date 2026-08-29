@@ -30,3 +30,25 @@ export function generateAttachmentReview(
   }
   return { status: 'warning', note: `Initial check flagged: ${issues.join('; ')}.` }
 }
+
+// The same rule-based reviewer the checklist runs on every save. Kept here so
+// both the equipment checklist and the project-wide Checklists screen can call
+// it — a 'use server' file may only export async functions.
+export function generateCheckComment(status: string, notes: string | null): string {
+  if (status === 'fail' && !notes) {
+    return 'Flagged: marked Fail with no note explaining why or what corrective action is planned. Add a note before this can be treated as resolved.'
+  }
+  if (status === 'fail' && notes) {
+    return 'Marked Fail with a note on file. Confirm a retest is scheduled once the corrective action is complete.'
+  }
+  if (status === 'pass' && !notes) {
+    return 'Marked Pass with no supporting note. For audit traceability, add what was verified (a reading, a test result, or who witnessed it).'
+  }
+  if (status === 'pass' && notes) {
+    return 'Looks complete — status and a supporting note are both present.'
+  }
+  if (status === 'na') {
+    return 'Marked Not Applicable. Confirm this was a deliberate engineering decision, not a step that was skipped.'
+  }
+  return 'Not yet checked — no status has been recorded for this item.'
+}

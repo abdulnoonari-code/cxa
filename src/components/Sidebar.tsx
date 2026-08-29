@@ -29,6 +29,12 @@ const ICONS = {
       <rect x="3" y="16" width="7" height="5" rx="1.5" />
     </>
   ),
+  settings: icon(
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 14.5a1.6 1.6 0 0 0 .32 1.77l.06.05a2 2 0 1 1-2.83 2.83l-.05-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-1 1.47V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.77.32l-.05.06a2 2 0 1 1-2.83-2.83l.06-.05A1.6 1.6 0 0 0 4.6 15a1.6 1.6 0 0 0-1.47-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.32-1.77l-.06-.05a2 2 0 1 1 2.83-2.83l.05.06A1.6 1.6 0 0 0 9 4.6h.06A1.6 1.6 0 0 0 10 3.13V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.47 1.6 1.6 0 0 0 1.77-.32l.05-.06a2 2 0 1 1 2.83 2.83l-.06.05A1.6 1.6 0 0 0 19.4 9v.06a1.6 1.6 0 0 0 1.47 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.44Z" />
+    </>
+  ),
   plan: icon(
     <>
       <path d="M4 5h16M4 12h10M4 19h13" />
@@ -105,6 +111,10 @@ export async function Sidebar() {
         <Link href="/dashboard" className="nav-link">
           {ICONS.dashboard}
           Dashboard
+        </Link>
+        <Link href="/project" className="nav-link">
+          {ICONS.settings}
+          Project Details
         </Link>
         <Link href="/plan" className="nav-link">
           {ICONS.plan}

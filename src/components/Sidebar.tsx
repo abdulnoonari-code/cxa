@@ -175,6 +175,13 @@ const ICONS = {
       <circle cx="13" cy="12" r="2.2" />
     </>
   ),
+  gate: icon(
+    <>
+      <path d="M3 4v16M21 4v16" />
+      <path d="M6.5 8h11M6.5 12h11M6.5 16h11" opacity="0.55" />
+      <path d="M12 6.2v11.6" />
+    </>
+  ),
   tree: icon(
     <>
       <rect x="9" y="2.5" width="6" height="4.5" rx="1" />
@@ -317,6 +324,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Quality</div>
+        <Link href="/gates" className="nav-link">
+          {ICONS.gate}
+          Readiness Gates
+        </Link>
         <Link href="/readiness" className="nav-link">
           {ICONS.readiness}
           Readiness

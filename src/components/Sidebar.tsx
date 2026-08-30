@@ -44,6 +44,20 @@ const ICONS = {
       <path d="M8.2 15.4l2 2 4-4.6" />
     </>
   ),
+  system: icon(
+    <>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="8.5" y="14" width="7" height="7" rx="1.5" />
+      <path d="M6.5 10v2h11v-2M12 12v2" />
+    </>
+  ),
+  readiness: icon(
+    <>
+      <path d="M12 3l7.5 3.4v5.2c0 4.3-3.1 7.6-7.5 9.1-4.4-1.5-7.5-4.8-7.5-9.1V6.4Z" />
+      <path d="M8.8 12.2l2.1 2.1 4.3-4.6" />
+    </>
+  ),
   testrec: icon(
     <>
       <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" />
@@ -201,6 +215,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Assets &amp; Checks</div>
+        <Link href="/systems" className="nav-link">
+          {ICONS.system}
+          Systems
+        </Link>
         <Link href="/equipment" className="nav-link">
           {ICONS.equipment}
           Equipment &amp; Tags
@@ -227,6 +245,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Quality</div>
+        <Link href="/readiness" className="nav-link">
+          {ICONS.readiness}
+          Readiness
+        </Link>
         <Link href="/issues" className="nav-link">
           {ICONS.issue}
           Issues &amp; Punch List

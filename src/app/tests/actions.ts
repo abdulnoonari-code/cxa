@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { evaluateTest, criteriaLabel } from '@/lib/tests'
+import { getCurrentProject } from '@/lib/project'
+import { actorCan, recordAudit } from '@/lib/audit'
+import { reviewLabel } from '@/lib/checklist'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -22,6 +25,9 @@ function refresh() {
   revalidatePath('/tests')
   revalidatePath('/dashboard')
   revalidatePath('/reports')
+  revalidatePath('/readiness')
+  revalidatePath('/systems')
+  revalidatePath('/audit')
 }
 
 export async function createTest(formData: FormData) {
@@ -83,6 +89,19 @@ export async function recordResult(formData: FormData) {
     })
     .eq('id', id)
 
+  const project = await getCurrentProject()
+  await recordAudit({
+    projectId: project?.id ?? null,
+    action: `recorded result — ${result.toUpperCase()}`,
+    entity: 'test_record',
+    entityId: id,
+    entityLabel: test.name,
+    oldValue: criteriaLabel(test.criteria_type, test.expected_min, test.expected_max, test.unit, test.criteria_text),
+    newValue:
+      actual_value !== null ? `${actual_value}${test.unit ? ` ${test.unit}` : ''}` : (manualResult ?? 'not tested'),
+    comment: str(formData, 'comments'),
+  })
+
   refresh()
 
   // A failure is the moment something has to happen next, so say so rather
@@ -143,7 +162,28 @@ export async function approveTest(formData: FormData) {
   const approval_state = str(formData, 'approval_state') ?? 'draft'
   if (!id) return
 
+  const project = await getCurrentProject()
+  const capability = approval_state === 'approved' || approval_state === 'rejected' ? 'approve' : 'review'
+  if (!(await actorCan(capability, project?.id ?? null))) return
+
+  const { data: before } = await supabase
+    .from('test_records')
+    .select('name, approval_state')
+    .eq('id', id)
+    .single()
+
   await supabase.from('test_records').update({ approval_state }).eq('id', id)
+
+  await recordAudit({
+    projectId: project?.id ?? null,
+    action: `set approval to ${reviewLabel(approval_state)}`,
+    entity: 'test_record',
+    entityId: id,
+    entityLabel: before?.name ?? null,
+    oldValue: reviewLabel(before?.approval_state ?? 'draft'),
+    newValue: reviewLabel(approval_state),
+  })
+
   refresh()
 }
 

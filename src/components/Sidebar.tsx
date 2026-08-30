@@ -3,6 +3,8 @@ import { logout } from '@/app/login/actions'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProject, listProjects } from '@/lib/project'
 import { selectProject } from '@/app/projects/actions'
+import { getActor } from '@/lib/audit'
+import { roleLabel } from '@/lib/roles'
 
 // Small line icons, drawn inline so the rail needs no icon library and nothing
 // to download. 16px grid, 1.6 stroke to match the type weight.
@@ -42,6 +44,19 @@ const ICONS = {
       <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h9L20 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5Z" />
       <path d="M14 4v6h6" />
       <path d="M8.2 15.4l2 2 4-4.6" />
+    </>
+  ),
+  team: icon(
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3 20a6 6 0 0 1 12 0" />
+      <path d="M16.5 5.4a3.2 3.2 0 0 1 0 5.6M21 20a5.9 5.9 0 0 0-2.6-4.6" />
+    </>
+  ),
+  audit: icon(
+    <>
+      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h11A1.5 1.5 0 0 1 19 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z" />
+      <path d="M8.5 8h7M8.5 12h7M8.5 16h4" />
     </>
   ),
   system: icon(
@@ -157,6 +172,7 @@ const ICONS = {
 
 export async function Sidebar() {
   const [projects, current] = await Promise.all([listProjects(), getCurrentProject()])
+  const actor = await getActor(current?.id ?? null)
   const supabase = await createClient()
   const {
     data: { user },
@@ -276,6 +292,16 @@ export async function Sidebar() {
           Files
         </Link>
 
+        <div className="sidebar-section-label">Governance</div>
+        <Link href="/team" className="nav-link">
+          {ICONS.team}
+          Project Team
+        </Link>
+        <Link href="/audit" className="nav-link">
+          {ICONS.audit}
+          Audit Trail
+        </Link>
+
         <div className="sidebar-section-label">Reports</div>
         <Link href="/reports" className="nav-link">
           {ICONS.report}
@@ -284,7 +310,12 @@ export async function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
-        {displayName && <div className="nav-user">{displayName}</div>}
+        {displayName && (
+          <div className="nav-user">
+            {displayName}
+            <div style={{ fontSize: 11, opacity: 0.72, marginTop: 2 }}>{roleLabel(actor.role)}</div>
+          </div>
+        )}
         <form action={logout}>
           <button type="submit" className="btn-link">
             Log out

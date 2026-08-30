@@ -175,6 +175,20 @@ const ICONS = {
       <circle cx="13" cy="12" r="2.2" />
     </>
   ),
+  requirement: icon(
+    <>
+      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h8L19 7.5v12a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z" />
+      <path d="M14 3v5h5" />
+      <path d="M8.5 12.6l1.4 1.4 3-3.2M8.5 17.1l1.4 1.4 3-3.2" />
+    </>
+  ),
+  doccontrol: icon(
+    <>
+      <rect x="3" y="4" width="13" height="16" rx="1.6" />
+      <path d="M18.5 7.5v11a2 2 0 0 1-2 2H7" opacity="0.5" />
+      <path d="M6.5 8.5h6M6.5 12h6M6.5 15.5h3.5" />
+    </>
+  ),
   bell: icon(
     <>
       <path d="M18 8.5a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5Z" />
@@ -248,6 +262,16 @@ export async function Sidebar() {
         <Link href="/milestones" className="nav-link">
           {ICONS.milestone}
           Milestones &amp; Timeline
+        </Link>
+
+        <div className="sidebar-section-label">Traceability</div>
+        <Link href="/requirements" className="nav-link">
+          {ICONS.requirement}
+          Requirements
+        </Link>
+        <Link href="/doc-control" className="nav-link">
+          {ICONS.doccontrol}
+          Document Control
         </Link>
 
         <div className="sidebar-section-label">Assets &amp; Checks</div>

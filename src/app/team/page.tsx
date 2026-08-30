@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { getActor } from '@/lib/audit'
-import { ROLES, roleLabel, roleBadgeClass, can } from '@/lib/roles'
+import { roleBadgeClass } from '@/lib/roles'
+import { loadRoles } from '@/data/project-roles'
+import { activeRoles, canIn, roleLabelIn, CAPABILITIES } from '@/lib/project-roles'
 import { addMember, updateMemberRole, removeMember } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +11,10 @@ export const dynamic = 'force-dynamic'
 export default async function TeamPage() {
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
+
+  // The role list THIS site works to, not the twelve compiled in.
+  const roles = await loadRoles(project?.id ?? null)
+  const offered = activeRoles(roles)
 
   const { data: rows } = project
     ? await supabase
@@ -20,9 +26,9 @@ export default async function TeamPage() {
 
   const members = rows ?? []
   const isFirst = members.length === 0
-  const mayManage = can(actor.role, 'manage')
+  const mayManage = canIn(roles, actor.role, 'manage')
 
-  const approvers = members.filter((m) => can(m.role, 'approve')).length
+  const approvers = members.filter((m) => canIn(roles, m.role, 'approve')).length
 
   return (
     <>
@@ -30,7 +36,7 @@ export default async function TeamPage() {
       <p className="page-subtitle">
         {project ? project.name : 'No project selected'} — who is on this project and what each of them may do.
         Signed in as <strong>{actor.name || actor.email}</strong>{' '}
-        <span className={roleBadgeClass(actor.role)}>{roleLabel(actor.role)}</span>
+        <span className={roleBadgeClass(actor.role)}>{roleLabelIn(roles, actor.role)}</span>
       </p>
 
       {isFirst && (
@@ -74,7 +80,7 @@ export default async function TeamPage() {
             <label className="field" style={{ gridColumn: '1 / -1' }}>
               Role
               <select name="role" className="input" defaultValue={isFirst ? 'project_admin' : 'engineer'}>
-                {ROLES.map((r) => (
+                {offered.map((r) => (
                   <option key={r.value} value={r.value}>
                     {r.label} — {r.note}
                   </option>
@@ -95,7 +101,7 @@ export default async function TeamPage() {
       ) : (
         <div className="card">
           <p className="text-secondary" style={{ fontSize: 14, marginBottom: 0 }}>
-            Your role is {roleLabel(actor.role)}, which cannot change the project team. Ask a Project Admin or
+            Your role is {roleLabelIn(roles, actor.role)}, which cannot change the project team. Ask a Project Admin or
             Commissioning Manager.
           </p>
         </div>
@@ -116,7 +122,7 @@ export default async function TeamPage() {
             {members.length > 0 ? (
               members.map((m) => {
                 const isMe = m.email.toLowerCase() === actor.email.toLowerCase()
-                const caps = ROLES.find((r) => r.value === m.role)?.caps ?? ['view']
+                const caps = roles.find((r) => r.value === m.role)?.caps ?? ['view']
                 return (
                   <tr key={m.id}>
                     <td>
@@ -134,7 +140,7 @@ export default async function TeamPage() {
                     </td>
                     <td style={{ fontSize: 13.5 }}>{m.company ?? '—'}</td>
                     <td>
-                      <span className={roleBadgeClass(m.role)}>{roleLabel(m.role)}</span>
+                      <span className={roleBadgeClass(m.role)}>{roleLabelIn(roles, m.role)}</span>
                     </td>
                     <td className="text-secondary mono" style={{ fontSize: 11.5 }}>
                       {caps.join(' · ')}
@@ -146,7 +152,7 @@ export default async function TeamPage() {
                           <input type="hidden" name="email" value={m.email} />
                           <input type="hidden" name="previous_role" value={m.role} />
                           <select key={`r-${m.id}-${m.role}`} name="role" defaultValue={m.role} className="input">
-                            {ROLES.map((r) => (
+                            {offered.map((r) => (
                               <option key={r.value} value={r.value}>
                                 {r.label}
                               </option>
@@ -190,7 +196,7 @@ export default async function TeamPage() {
               </tr>
             </thead>
             <tbody>
-              {ROLES.map((r) => (
+              {offered.map((r) => (
                 <tr key={r.value}>
                   <td>
                     <div style={{ fontWeight: 500 }}>{r.label}</div>
@@ -198,9 +204,9 @@ export default async function TeamPage() {
                       {r.note}
                     </div>
                   </td>
-                  {(['view', 'record', 'review', 'approve', 'manage'] as const).map((c) => (
-                    <td key={c} style={{ textAlign: 'center' }}>
-                      {r.caps.includes(c) ? (
+                  {CAPABILITIES.map((cap) => (
+                    <td key={cap.value} style={{ textAlign: 'center' }}>
+                      {r.caps.includes(cap.value) ? (
                         <span style={{ color: 'var(--color-success)', fontWeight: 700 }}>&#10003;</span>
                       ) : (
                         <span className="text-secondary">&ndash;</span>

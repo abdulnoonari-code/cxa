@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProject } from '@/lib/project'
 import { can, type Capability, type RoleValue } from '@/lib/roles'
+import { resolveRoles, canIn } from '@/lib/project-roles'
+import type { ProjectRoleRow } from '@/lib/project-roles'
 
 export type Actor = {
   email: string
@@ -45,9 +47,32 @@ export async function getActor(projectId?: string | null): Promise<Actor> {
   return { email, name: mine.full_name || name, role: (mine.role as RoleValue) ?? 'viewer' }
 }
 
+// What this person may do here, according to THIS project's role list.
+//
+// A project can rename a role, change what it may do, switch it off, or add
+// one of its own — so the check has to ask the project, not a table compiled
+// into the application. If the project has defined nothing, resolveRoles
+// returns the twelve built-ins unchanged and the answer is what it always was.
+//
+// Two safety properties are preserved deliberately: an unknown role is never
+// permissive, and Project Admin can never lose 'manage' (enforced in
+// resolveRoles), so no role edit or import can lock the last administrator out
+// of their own project.
 export async function actorCan(capability: Capability, projectId?: string | null): Promise<boolean> {
   const actor = await getActor(projectId)
-  return can(actor.role, capability)
+
+  const id = projectId ?? (await getCurrentProject())?.id ?? null
+  if (!id) return can(actor.role, capability)
+
+  const { data } = await supabase
+    .from('project_roles')
+    .select('id, role_key, label, note, caps, sequence, active')
+    .eq('project_id', id)
+
+  const rows = (data ?? []) as ProjectRoleRow[]
+  if (rows.length === 0) return can(actor.role, capability)
+
+  return canIn(resolveRoles(rows), actor.role, capability)
 }
 
 type AuditInput = {

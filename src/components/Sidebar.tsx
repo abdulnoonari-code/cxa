@@ -175,6 +175,13 @@ const ICONS = {
       <circle cx="13" cy="12" r="2.2" />
     </>
   ),
+  roles: icon(
+    <>
+      <circle cx="8.5" cy="8" r="3" />
+      <path d="M3 19a5.5 5.5 0 0 1 11 0" />
+      <path d="M16 8.5h5M16 12h5M16 15.5h3" opacity="0.6" />
+    </>
+  ),
   gate: icon(
     <>
       <path d="M3 4v16M21 4v16" />
@@ -375,6 +382,10 @@ export async function Sidebar() {
         <Link href="/team" className="nav-link">
           {ICONS.team}
           Project Team
+        </Link>
+        <Link href="/roles" className="nav-link">
+          {ICONS.roles}
+          Roles
         </Link>
         <Link href="/audit" className="nav-link">
           {ICONS.audit}

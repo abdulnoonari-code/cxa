@@ -7,7 +7,7 @@ import { loadProjectRollup } from '@/data/rollup'
 import { loadGates } from '@/data/gates'
 import { getSubject, subjectTitle, subjectLabel, SUBJECT_TYPES } from '@/lib/subjects'
 import { GATE_TEMPLATES, gateVerdict, gateBadgeClass } from '@/lib/gates'
-import { createGate, deleteGate } from './actions'
+import { createGate, deleteGate, importGateRules } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -137,6 +137,55 @@ export default async function GatesPage() {
             </div>
           </form>
         </details>
+      )}
+
+
+      {/* ── Excel round trip ─────────────────────────────────────── */}
+      {gates.length > 0 && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2 className="section-title" style={{ marginTop: 0 }}>
+            Gate requirements in Excel
+          </h2>
+          <p className="text-secondary" style={{ fontSize: 13.5 }}>
+            Every requirement on every gate, in one sheet. Edit it the way your ITP and your utility actually word
+            things, then bring it back. Each row carries its own ID, so a row comes back to the right requirement
+            even if you rewrite the text completely.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <a href="/gate-requirements/export" className="btn btn-secondary btn-sm">
+              Download all gate requirements (.xlsx)
+            </a>
+          </div>
+
+          {mayEdit && (
+            <form
+              action={importGateRules}
+              style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}
+            >
+              <label className="field" style={{ flex: '1 1 320px' }}>
+                Import gate requirements
+                <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="input" />
+              </label>
+              <button type="submit" className="btn btn-primary">
+                Import
+              </button>
+            </form>
+          )}
+
+          <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 14, marginBottom: 0 }}>
+            A row that keeps its ID is updated. A new row with the ID left blank is added to whichever gate its
+            <em> Gate</em> column names. Put <strong>Y</strong> in <em>Remove</em> to delete one. If any row is
+            wrong, <strong>nothing is imported at all</strong> and every bad row is listed in the{' '}
+            <Link href="/audit" className="link">
+              audit trail
+            </Link>{' '}
+            by row number.
+          </p>
+          <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 8, marginBottom: 0 }}>
+            An import changes what the requirements <em>are</em>. It never changes whether somebody has confirmed
+            one, or who did — a spreadsheet must not be able to mark a permit as issued.
+          </p>
+        </div>
       )}
 
       {gates.map((g) => {

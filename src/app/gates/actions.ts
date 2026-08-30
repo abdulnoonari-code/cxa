@@ -8,6 +8,7 @@ import { getActor, actorCan, recordAudit } from '@/lib/audit'
 import { roleLabel } from '@/lib/roles'
 import { templateFor, GATE_TEMPLATES } from '@/lib/gates'
 import { DECISIONS, decisionLabel, decisionStatement } from '@/lib/inspection'
+import { parseGateRuleWorkbook, resolveKind, settingToParams } from '@/lib/gate-rules-io'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -187,6 +188,215 @@ export async function deleteGate(formData: FormData) {
     entity: 'gate',
     entityId: id,
     entityLabel: str(formData, 'label'),
+  })
+
+  refresh()
+}
+
+// ── Editing rules directly ────────────────────────────────────────────────
+
+export async function addRule(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) return
+  if (!(await actorCan('review', project.id))) return
+
+  const gateId = str(formData, 'gate_id')
+  const label = str(formData, 'label')
+  const kind = resolveKind(str(formData, 'rule_kind') ?? 'manual_confirmation')
+  if (!gateId || !label || !kind) return
+
+  const { params, error } = settingToParams(kind, str(formData, 'setting') ?? '')
+  if (error) return
+
+  const { data: existing } = await supabase.from('gate_rules').select('sequence').eq('gate_id', gateId)
+  const next = Math.max(0, ...((existing ?? []) as { sequence: number | null }[]).map((r) => r.sequence ?? 0)) + 1
+
+  await supabase.from('gate_rules').insert({
+    gate_id: gateId,
+    rule_kind: kind,
+    label,
+    params,
+    category: str(formData, 'category'),
+    mandatory: formData.get('mandatory') === 'on',
+    sequence: next,
+  })
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'added gate requirement',
+    entity: 'gate',
+    entityId: gateId,
+    entityLabel: str(formData, 'gate_name'),
+    newValue: label,
+  })
+
+  refresh()
+}
+
+export async function removeRule(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) return
+  if (!(await actorCan('review', project.id))) return
+
+  const id = str(formData, 'rule_id')
+  if (!id) return
+
+  await supabase.from('gate_rules').delete().eq('id', id)
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'removed gate requirement',
+    entity: 'gate',
+    entityId: str(formData, 'gate_id'),
+    entityLabel: str(formData, 'gate_name'),
+    oldValue: str(formData, 'label'),
+  })
+
+  refresh()
+}
+
+// ── The Excel round trip ──────────────────────────────────────────────────
+//
+// A row that comes back with its CXA ID updates that exact rule. A row with a
+// blank ID is a new rule, added to the gate its Gate column names. A row
+// marked Remove is deleted.
+//
+// An import changes a rule's DEFINITION only. It never sets, clears or alters
+// whether somebody has confirmed a prerequisite, or who did — a spreadsheet
+// must not be able to mark a permit as issued.
+export async function importGateRules(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) return
+  if (!(await actorCan('review', project.id))) return
+
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) return
+
+  const parsed = await parseGateRuleWorkbook(await file.arrayBuffer(), { fileName: file.name })
+
+  if (parsed.rows.length === 0 && parsed.errors.length === 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'gate requirement import failed',
+      entity: 'gate',
+      entityLabel: file.name,
+      comment:
+        parsed.headingsSeen.length > 0
+          ? `No requirement column found. Headings seen: ${parsed.headingsSeen.slice(0, 15).join(', ')}`
+          : 'The file had nothing readable in it.',
+    })
+    refresh()
+    return
+  }
+
+  const { data: gateRows } = await supabase.from('gates').select('id, name').eq('project_id', project.id)
+  const gates = (gateRows ?? []) as { id: string; name: string }[]
+  const gateByName = new Map(gates.map((g) => [g.name.trim().toLowerCase(), g.id]))
+  const gateIds = new Set(gates.map((g) => g.id))
+
+  const { data: ruleRows } =
+    gateIds.size > 0
+      ? await supabase.from('gate_rules').select('id, gate_id').in('gate_id', [...gateIds])
+      : { data: [] }
+  const ruleGate = new Map(((ruleRows ?? []) as { id: string; gate_id: string }[]).map((r) => [r.id, r.gate_id]))
+
+  // Validate every row against this project before writing anything.
+  const errors = [...parsed.errors]
+
+  for (const row of parsed.rows) {
+    if (row.id) {
+      if (!ruleGate.has(row.id)) {
+        errors.push({
+          row: row.row,
+          column: 'CXA ID',
+          value: row.id,
+          message: 'No requirement on this project has that ID. Leave the cell blank to add a new one.',
+        })
+      }
+    } else if (!row.remove) {
+      const gateId = gateByName.get(row.gate.trim().toLowerCase())
+      if (!gateId) {
+        errors.push({
+          row: row.row,
+          column: 'Gate',
+          value: row.gate,
+          message: row.gate
+            ? 'No gate on this project has that name.'
+            : 'A new requirement needs a Gate name so it knows where to go.',
+        })
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'gate requirement import rejected',
+      entity: 'gate',
+      entityLabel: file.name,
+      newValue: `${errors.length} errors — nothing imported`,
+      comment: errors
+        .slice(0, 10)
+        .map((e) => `Row ${e.row} · ${e.column}: ${e.message}${e.value ? ` (found "${e.value}")` : ''}`)
+        .join(' | '),
+    })
+    refresh()
+    return
+  }
+
+  let inserted = 0
+  let updated = 0
+  let removed = 0
+
+  for (const row of parsed.rows) {
+    if (row.remove) {
+      if (row.id && ruleGate.has(row.id)) {
+        await supabase.from('gate_rules').delete().eq('id', row.id)
+        removed += 1
+      }
+      continue
+    }
+
+    if (row.id) {
+      await supabase
+        .from('gate_rules')
+        .update({
+          rule_kind: row.rule_kind,
+          label: row.label,
+          params: row.params,
+          category: row.category,
+          mandatory: row.mandatory,
+          sequence: row.sequence,
+        })
+        .eq('id', row.id)
+      updated += 1
+    } else {
+      await supabase.from('gate_rules').insert({
+        gate_id: gateByName.get(row.gate.trim().toLowerCase()),
+        rule_kind: row.rule_kind,
+        label: row.label,
+        params: row.params,
+        category: row.category,
+        mandatory: row.mandatory,
+        sequence: row.sequence,
+      })
+      inserted += 1
+    }
+  }
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'imported gate requirements',
+    entity: 'gate',
+    entityLabel: file.name,
+    newValue: `${inserted} added, ${updated} updated, ${removed} removed`,
+    comment:
+      parsed.warnings.length > 0
+        ? `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. ${parsed.warnings.length} warnings: ${parsed.warnings
+            .slice(0, 6)
+            .map((w) => `row ${w.row} ${w.column}`)
+            .join(', ')}`
+        : `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Confirmations were left untouched.`,
   })
 
   refresh()

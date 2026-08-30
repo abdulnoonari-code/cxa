@@ -14,9 +14,11 @@ import {
   ruleKindLabel,
   isDerived,
   CONFIRMATION_STATUSES,
+  RULE_KINDS,
 } from '@/lib/gates'
+import { settingHelp, paramsToSetting } from '@/lib/gate-rules-io'
 import { DECISIONS, decisionLabel, decisionBadgeClass } from '@/lib/inspection'
-import { confirmRule, signGate } from '../actions'
+import { confirmRule, signGate, addRule, removeRule } from '../actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -219,15 +221,93 @@ export default async function GatePage({ params }: { params: Promise<{ id: strin
 
                 {!manual && (
                   <p className="text-secondary" style={{ fontSize: 11.5, marginTop: 8, marginBottom: 0 }}>
-                    {ruleKindLabel(o.rule.rule_kind)} — worked out from the records. It cannot be answered by hand;
-                    change the records and this changes with them.
+                    {ruleKindLabel(o.rule.rule_kind)}
+                    {paramsToSetting(o.rule.rule_kind, o.rule.params) ? ` · ${paramsToSetting(o.rule.rule_kind, o.rule.params)}` : ''} —
+                    worked out from the records. It cannot be answered by hand; change the records and this changes
+                    with them.
                   </p>
+                )}
+
+                {mayConfirm && (
+                  <form action={removeRule} style={{ marginTop: 8 }}>
+                    <input type="hidden" name="rule_id" value={o.rule.id} />
+                    <input type="hidden" name="gate_id" value={gate.id} />
+                    <input type="hidden" name="gate_name" value={gate.name} />
+                    <input type="hidden" name="label" value={o.rule.label} />
+                    <button type="submit" className="btn-link" style={{ fontSize: 11.5 }}>
+                      remove this requirement
+                    </button>
+                  </form>
                 )}
               </div>
             )
           })}
         </div>
       ))}
+
+      {/* ── Adding a requirement of your own ───────────────────────── */}
+      {mayConfirm && (
+        <details className="card" style={{ marginTop: 24 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 15 }}>
+            Add a requirement to this gate
+          </summary>
+          <form action={addRule} style={{ display: 'grid', gap: 14, marginTop: 16 }}>
+            <input type="hidden" name="gate_id" value={gate.id} />
+            <input type="hidden" name="gate_name" value={gate.name} />
+            <label className="field">
+              Requirement *
+              <input
+                name="label"
+                required
+                className="input"
+                placeholder="e.g. Utility switching authority notified and outage confirmed"
+              />
+            </label>
+            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '1.3fr 1fr 1fr' }}>
+              <label className="field">
+                Proved by
+                <select name="rule_kind" className="input" defaultValue="manual_confirmation">
+                  {RULE_KINDS.map((k) => (
+                    <option key={k.value} value={k.value}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                Setting
+                <input name="setting" className="input" placeholder="only some types use this" />
+              </label>
+              <label className="field">
+                Category
+                <input name="category" className="input" placeholder="Permit & isolation" />
+              </label>
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5 }}>
+              <input type="checkbox" name="mandatory" defaultChecked />
+              Mandatory — the gate cannot be met without it
+            </label>
+            <div className="text-secondary" style={{ fontSize: 12 }}>
+              What each type accepts as a setting:
+              <ul style={{ margin: '6px 0 0', paddingLeft: 20 }}>
+                {RULE_KINDS.filter((k) => settingHelp(k.value) !== 'not used by this rule').map((k) => (
+                  <li key={k.value} style={{ marginBottom: 2 }}>
+                    <strong>{k.label}</strong> — {settingHelp(k.value)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button type="submit" className="btn btn-primary">
+                Add requirement
+              </button>
+              <a href={`/gate-requirements/export?gate=${gate.id}`} className="btn btn-secondary">
+                Export this gate to Excel
+              </a>
+            </div>
+          </form>
+        </details>
+      )}
 
       {/* ── Authorisation ──────────────────────────────────────────── */}
       <h2 className="section-title" style={{ marginTop: 30 }}>

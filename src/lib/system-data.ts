@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { computeReadiness, type Readiness } from '@/lib/readiness'
+import { latestSignature, releaseState, type SignatureLike } from '@/lib/inspection'
 
 export type SystemRow = {
   id: string
@@ -73,21 +74,75 @@ export async function loadProjectReadiness(projectId: string | null): Promise<Pr
     equipmentIds.length > 0
       ? await supabase
           .from('checklist_items')
-          .select('id, status, review_state, equipment_id')
+          .select('id, item, status, review_state, inspection_type, notified_at, equipment_id')
           .in('equipment_id', equipmentIds)
-      : { data: [] as { id: string; status: string; review_state: string | null; equipment_id: string }[] }
+      : {
+          data: [] as {
+            id: string
+            item: string
+            status: string
+            review_state: string | null
+            inspection_type: string | null
+            notified_at: string | null
+            equipment_id: string
+          }[],
+        }
 
-  const checks = checkRows ?? []
+  const checksRaw = checkRows ?? []
 
   const { data: testRows } =
     equipmentIds.length > 0
       ? await supabase
           .from('test_records')
-          .select('id, name, result, approval_state, instrument_id, equipment_id')
+          .select('id, name, result, approval_state, inspection_type, notified_at, instrument_id, equipment_id')
           .in('equipment_id', equipmentIds)
-      : { data: [] as { id: string; name: string; result: string; approval_state: string | null; instrument_id: string | null; equipment_id: string }[] }
+      : {
+          data: [] as {
+            id: string
+            name: string
+            result: string
+            approval_state: string | null
+            inspection_type: string | null
+            notified_at: string | null
+            instrument_id: string | null
+            equipment_id: string
+          }[],
+        }
 
-  const tests = testRows ?? []
+  const testsRaw = testRows ?? []
+
+  // Signatures are what turn a hold point from "reached" into "released", so
+  // readiness cannot be computed without them.
+  const { data: signatureRows } = await supabase
+    .from('signatures')
+    .select('entity, entity_id, decision, created_at')
+    .eq('project_id', projectId)
+
+  const signatures = (signatureRows ?? []) as SignatureLike[]
+
+  const tagOf = new Map(equipment.map((e) => [e.id, e.tag_id]))
+
+  const checks = checksRaw.map((c) => ({
+    ...c,
+    release: releaseState({
+      inspectionType: c.inspection_type,
+      workComplete: c.status !== 'pending',
+      notifiedAt: c.notified_at,
+      signature: latestSignature(signatures, 'checklist_item', c.id),
+    }),
+    hold_label: `${tagOf.get(c.equipment_id) ?? 'Equipment'} — ${c.item}`,
+  }))
+
+  const tests = testsRaw.map((t) => ({
+    ...t,
+    release: releaseState({
+      inspectionType: t.inspection_type,
+      workComplete: t.result !== 'pending',
+      notifiedAt: t.notified_at,
+      signature: latestSignature(signatures, 'test_record', t.id),
+    }),
+    hold_label: `${tagOf.get(t.equipment_id) ?? 'Equipment'} — ${t.name}`,
+  }))
 
   const { data: instrumentRows } = await supabase
     .from('instruments')

@@ -168,6 +168,13 @@ const ICONS = {
       <path d="M14 3v5h5M9 13h6M9 17h4" />
     </>
   ),
+  hold: icon(
+    <>
+      <path d="M4 4v16" />
+      <path d="M8.5 8.5h9M8.5 15.5h9" />
+      <circle cx="13" cy="12" r="2.2" />
+    </>
+  ),
 }
 
 export async function Sidebar() {
@@ -276,6 +283,10 @@ export async function Sidebar() {
         <Link href="/documents" className="nav-link">
           {ICONS.document}
           Document Review
+        </Link>
+        <Link href="/holdpoints" className="nav-link">
+          {ICONS.hold}
+          Hold &amp; Witness Points
         </Link>
 
         <div className="sidebar-section-label">Manage</div>

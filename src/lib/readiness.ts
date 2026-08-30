@@ -1,4 +1,5 @@
 import { calibrationStatus } from '@/lib/tests'
+import { releaseBlocks, type ReleaseState } from '@/lib/inspection'
 
 // The commissioning stages a system moves through. Configurable per project is
 // a later job; this is the common industrial sequence.
@@ -27,14 +28,22 @@ export type Readiness = {
   warnings: Finding[]
 }
 
-type CheckRow = { status: string; review_state?: string | null }
+// The two ITP fields are optional so that anything computing readiness from a
+// narrower query still works — a row without them is simply surveillance.
+type InspectionFields = {
+  inspection_type?: string | null
+  release?: ReleaseState
+  hold_label?: string | null
+}
+
+type CheckRow = { status: string; review_state?: string | null } & InspectionFields
 type TestRow = {
   result: string
   approval_state?: string | null
   name: string
   instrument_expiry?: string | null
   has_instrument?: boolean
-}
+} & InspectionFields
 type IssueRow = { category: string | null; severity: string; status: string; title: string }
 
 // Readiness is computed from the records themselves, never stored — so it can
@@ -115,6 +124,68 @@ export function computeReadiness(
     blockers.push({
       kind: 'blocker',
       text: `${badInstrument.length} test result${badInstrument.length === 1 ? '' : 's'} recorded on an instrument whose calibration had expired`,
+    })
+  }
+
+  // ── Hold and witness points ─────────────────────────────────────────────
+  // A hold point is the one thing in this engine that blocks even when
+  // everything around it passed. Reaching a hold point without a release
+  // signature means the work is finished and the authority to continue has
+  // not been given — which is precisely the situation the hold point exists
+  // to create.
+  const itpRows: { type: string | null | undefined; release: ReleaseState; label: string }[] = [
+    ...checks
+      .filter((c) => c.release)
+      .map((c) => ({
+        type: c.inspection_type,
+        release: c.release as ReleaseState,
+        label: c.hold_label ?? 'checklist item',
+      })),
+    ...tests
+      .filter((t) => t.release)
+      .map((t) => ({
+        type: t.inspection_type,
+        release: t.release as ReleaseState,
+        label: t.hold_label ?? t.name,
+      })),
+  ]
+
+  for (const r of itpRows) {
+    if (releaseBlocks(r.type, r.release)) {
+      const reason =
+        r.release === 'rejected'
+          ? 'refused at inspection and not released'
+          : r.release === 'notified'
+            ? 'reached, notice given, awaiting release signature'
+            : 'reached and not released — no notice given yet'
+      blockers.push({
+        kind: 'blocker',
+        text: `Hold point ${reason} — ${r.label}`,
+      })
+    }
+  }
+
+  const holdsAhead = itpRows.filter((r) => r.type === 'hold' && r.release === 'awaiting_work')
+  if (holdsAhead.length > 0) {
+    warnings.push({
+      kind: 'warning',
+      text: `${holdsAhead.length} hold point${holdsAhead.length === 1 ? '' : 's'} still ahead — each will stop the work until released`,
+    })
+  }
+
+  const witnessUnnotified = itpRows.filter((r) => r.type === 'witness' && r.release === 'awaiting_notice')
+  if (witnessUnnotified.length > 0) {
+    warnings.push({
+      kind: 'warning',
+      text: `${witnessUnnotified.length} witness point${witnessUnnotified.length === 1 ? '' : 's'} carried out without notice being given`,
+    })
+  }
+
+  const witnessWaiting = itpRows.filter((r) => r.type === 'witness' && r.release === 'notified')
+  if (witnessWaiting.length > 0) {
+    warnings.push({
+      kind: 'warning',
+      text: `${witnessWaiting.length} witness point${witnessWaiting.length === 1 ? '' : 's'} notified but not yet signed`,
     })
   }
 

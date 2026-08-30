@@ -44,6 +44,20 @@ const ICONS = {
       <path d="M8.2 15.4l2 2 4-4.6" />
     </>
   ),
+  testrec: icon(
+    <>
+      <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5Z" />
+      <path d="M7.5 9.5h5M7.5 13h3" />
+      <path d="M14 14.6l1.5 1.5 3-3.4" />
+    </>
+  ),
+  gauge: icon(
+    <>
+      <path d="M4 17a8 8 0 1 1 16 0" />
+      <path d="M12 17l4.2-4.6" />
+      <circle cx="12" cy="17" r="1.4" />
+    </>
+  ),
   task: icon(
     <>
       <rect x="3" y="4.5" width="18" height="16" rx="2" />
@@ -202,6 +216,14 @@ export async function Sidebar() {
         <Link href="/integrated-tests" className="nav-link">
           {ICONS.integrated}
           Integrated Functional Tests
+        </Link>
+        <Link href="/tests" className="nav-link">
+          {ICONS.testrec}
+          Test Records
+        </Link>
+        <Link href="/instruments" className="nav-link">
+          {ICONS.gauge}
+          Test Instruments
         </Link>
 
         <div className="sidebar-section-label">Quality</div>

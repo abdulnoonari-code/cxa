@@ -175,6 +175,14 @@ const ICONS = {
       <circle cx="13" cy="12" r="2.2" />
     </>
   ),
+  tree: icon(
+    <>
+      <rect x="9" y="2.5" width="6" height="4.5" rx="1" />
+      <rect x="2.5" y="17" width="6" height="4.5" rx="1" />
+      <rect x="15.5" y="17" width="6" height="4.5" rx="1" />
+      <path d="M12 7v5M5.5 17v-2.5h13V17" />
+    </>
+  ),
   requirement: icon(
     <>
       <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h8L19 7.5v12a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z" />
@@ -246,6 +254,10 @@ export async function Sidebar() {
         <Link href="/dashboard" className="nav-link">
           {ICONS.dashboard}
           Dashboard
+        </Link>
+        <Link href="/assets" className="nav-link">
+          {ICONS.tree}
+          Assets
         </Link>
         <Link href="/projects" className="nav-link">
           {ICONS.projects}

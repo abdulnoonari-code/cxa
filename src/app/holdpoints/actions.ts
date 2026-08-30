@@ -7,6 +7,7 @@ import { getCurrentProject } from '@/lib/project'
 import { getActor, actorCan, recordAudit } from '@/lib/audit'
 import { roleLabel } from '@/lib/roles'
 import { inspectionLabel, decisionLabel, decisionStatement, DECISIONS } from '@/lib/inspection'
+import { noticeSubject, noticeBody, type NoticeInput } from '@/lib/notify'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -29,6 +30,7 @@ function refresh() {
   revalidatePath('/checklists')
   revalidatePath('/tests')
   revalidatePath('/audit')
+  revalidatePath('/notifications')
 }
 
 export async function setInspectionType(formData: FormData) {
@@ -60,7 +62,9 @@ export async function setInspectionType(formData: FormData) {
 }
 
 // Giving notice is a record in its own right: on a witness point, whether the
-// client was invited is exactly the thing that gets argued about later.
+// client was invited is exactly the thing that gets argued about later. So
+// this writes the full wording and the recipient list into `notifications`,
+// where neither can be rewritten afterwards, as well as stamping notified_at.
 export async function giveNotice(formData: FormData) {
   const project = await getCurrentProject()
   if (!project) return
@@ -71,16 +75,95 @@ export async function giveNotice(formData: FormData) {
   const id = str(formData, 'id')
   if (!target || !id) return
 
+  const actor = await getActor(project.id)
+  const label = str(formData, 'label')
+
+  // Recipients arrive as one checkbox per contact, value "email|name".
+  const picked = formData
+    .getAll('recipient')
+    .filter((v): v is string => typeof v === 'string' && v.includes('|'))
+    .map((v) => {
+      const [email, ...rest] = v.split('|')
+      return { email: email.trim(), name: rest.join('|').trim() }
+    })
+    .filter((r) => r.email.includes('@'))
+
+  const scheduledFor = str(formData, 'scheduled_for')
+
+  const notice: NoticeInput = {
+    projectName: project.name,
+    projectNumber: null,
+    equipmentTag: str(formData, 'tag') ?? '',
+    activity: str(formData, 'activity') ?? label ?? '',
+    inspectionType: str(formData, 'inspection_type') ?? 'hold',
+    scheduledFor,
+    location: str(formData, 'location'),
+    procedureRef: str(formData, 'procedure_ref'),
+    acceptanceCriteria: str(formData, 'acceptance'),
+    note: str(formData, 'note'),
+    fromName: actor.name || actor.email,
+    fromRole: roleLabel(actor.role),
+    fromCompany: str(formData, 'from_company'),
+  }
+
+  const subject = noticeSubject(notice)
+  const body = noticeBody(notice)
   const now = new Date().toISOString()
+
+  await supabase.from('notifications').insert({
+    project_id: project.id,
+    kind: 'inspection_notice',
+    entity: target.entity,
+    entity_id: id,
+    entity_label: label,
+    subject,
+    body,
+    recipients: picked.map((r) => r.email).join(', '),
+    recipient_names: picked.map((r) => r.name).filter(Boolean).join(', '),
+    scheduled_for: scheduledFor,
+    channel: 'manual_email',
+    status: 'composed',
+    created_by_email: actor.email,
+    created_by_name: actor.name,
+  })
+
   await supabase.from(target.table).update({ notified_at: now }).eq('id', id)
 
   await recordAudit({
     projectId: project.id,
-    action: 'gave notice for inspection',
+    action: 'issued inspection notice',
     entity: target.entity,
     entityId: id,
+    entityLabel: label,
+    newValue: picked.map((r) => r.email).join(', ') || 'no recipients',
+    comment: scheduledFor ? `Scheduled for ${scheduledFor}` : null,
+  })
+
+  refresh()
+}
+
+// The app writes the notice; the engineer's own email client sends it. This
+// records that it actually went out, so the register distinguishes a notice
+// that was merely prepared from one that was issued.
+export async function markNoticeSent(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) return
+  if (!(await actorCan('record', project.id))) return
+
+  const id = str(formData, 'notification_id')
+  if (!id) return
+
+  await supabase
+    .from('notifications')
+    .update({ status: 'sent', sent_at: new Date().toISOString() })
+    .eq('id', id)
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'confirmed notice sent',
+    entity: 'notification',
+    entityId: id,
     entityLabel: str(formData, 'label'),
-    newValue: now,
   })
 
   refresh()

@@ -22,7 +22,23 @@ import {
   type ReleaseState,
   type SignatureLike,
 } from '@/lib/inspection'
-import { setInspectionType, giveNotice, signHoldPoint } from './actions'
+import { defaultRecipients, canBeNotified, type Contact } from '@/lib/contacts'
+import { mailtoLink, mailtoIsSafe } from '@/lib/notify'
+import { setInspectionType, giveNotice, signHoldPoint, markNoticeSent } from './actions'
+
+type NoticeRow = {
+  id: string
+  entity: string
+  entity_id: string
+  subject: string | null
+  body: string | null
+  recipients: string | null
+  recipient_names: string | null
+  scheduled_for: string | null
+  status: string | null
+  sent_at: string | null
+  created_at: string | null
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +56,10 @@ type Point = {
   statusClass: string
   release: ReleaseState
   signature: SignatureRow | null
+  notice: NoticeRow | null
+  location: string | null
+  procedureRef: string | null
+  acceptance: string | null
 }
 
 type SignatureRow = SignatureLike & {
@@ -51,6 +71,30 @@ type SignatureRow = SignatureLike & {
   signed_name: string | null
   statement: string | null
   comment: string | null
+}
+
+// Written out in words so it can go straight into a notice email that a client
+// reads on a phone, rather than as a code only this app understands.
+function describeCriteria(t: {
+  criteria_type: string | null
+  expected_min: number | null
+  expected_max: number | null
+  unit: string | null
+  criteria_text: string | null
+}): string | null {
+  const u = t.unit ? ` ${t.unit}` : ''
+  switch (t.criteria_type) {
+    case 'max':
+      return t.expected_max != null ? `Not more than ${t.expected_max}${u}` : t.criteria_text
+    case 'min':
+      return t.expected_min != null ? `Not less than ${t.expected_min}${u}` : t.criteria_text
+    case 'range':
+      return t.expected_min != null && t.expected_max != null
+        ? `Between ${t.expected_min} and ${t.expected_max}${u}`
+        : t.criteria_text
+    default:
+      return t.criteria_text
+  }
 }
 
 function when(value: string | null | undefined): string {
@@ -78,12 +122,44 @@ export default async function HoldPointsPage({
   const mayAssign = can(actor.role, 'review')
 
   const { data: equipmentRows } = project
-    ? await supabase.from('equipment').select('id, tag_id, description').eq('project_id', project.id).order('tag_id')
-    : { data: [] as { id: string; tag_id: string; description: string | null }[] }
+    ? await supabase
+        .from('equipment')
+        .select('id, tag_id, description, location')
+        .eq('project_id', project.id)
+        .order('tag_id')
+    : { data: [] as { id: string; tag_id: string; description: string | null; location: string | null }[] }
 
   const equipment = equipmentRows ?? []
   const equipmentIds = equipment.map((e) => e.id)
   const tagOf = new Map(equipment.map((e) => [e.id, e.tag_id]))
+  const locationOf = new Map(equipment.map((e) => [e.id, e.location]))
+
+  const { data: contactRows } = project
+    ? await supabase
+        .from('project_contacts')
+        .select('id, full_name, company, email, phone, party, job_title, discipline, is_witness')
+        .eq('project_id', project.id)
+        .order('company', { ascending: true })
+    : { data: [] as Contact[] }
+
+  const contacts = (contactRows ?? []) as Contact[]
+  const reachable = contacts.filter(canBeNotified)
+  const preselected = new Set(defaultRecipients(contacts).map((c) => c.id))
+
+  const { data: noticeRows } = project
+    ? await supabase
+        .from('notifications')
+        .select(
+          'id, entity, entity_id, subject, body, recipients, recipient_names, scheduled_for, status, sent_at, created_at'
+        )
+        .eq('project_id', project.id)
+        .eq('kind', 'inspection_notice')
+        .order('created_at', { ascending: false })
+    : { data: [] as NoticeRow[] }
+
+  const notices = (noticeRows ?? []) as NoticeRow[]
+  const latestNotice = (entity: string, entityId: string): NoticeRow | null =>
+    notices.find((n) => n.entity === entity && n.entity_id === entityId) ?? null
 
   const { data: checkRows } =
     equipmentIds.length > 0
@@ -108,7 +184,9 @@ export default async function HoldPointsPage({
     equipmentIds.length > 0
       ? await supabase
           .from('test_records')
-          .select('id, name, test_ref, result, inspection_type, notified_at, equipment_id')
+          .select(
+            'id, name, test_ref, result, inspection_type, notified_at, procedure_ref, criteria_type, expected_min, expected_max, unit, criteria_text, equipment_id'
+          )
           .in('equipment_id', equipmentIds)
           .order('created_at', { ascending: true })
       : {
@@ -119,6 +197,12 @@ export default async function HoldPointsPage({
             result: string
             inspection_type: string | null
             notified_at: string | null
+            procedure_ref: string | null
+            criteria_type: string | null
+            expected_min: number | null
+            expected_max: number | null
+            unit: string | null
+            criteria_text: string | null
             equipment_id: string
           }[],
         }
@@ -159,6 +243,10 @@ export default async function HoldPointsPage({
           signature,
         }),
         signature,
+        notice: latestNotice('checklist_item', c.id),
+        location: locationOf.get(c.equipment_id) ?? null,
+        procedureRef: null,
+        acceptance: null,
       }
     }),
     ...(testRows ?? []).map((t) => {
@@ -184,6 +272,10 @@ export default async function HoldPointsPage({
           signature,
         }),
         signature,
+        notice: latestNotice('test_record', t.id),
+        location: locationOf.get(t.equipment_id) ?? null,
+        procedureRef: t.procedure_ref,
+        acceptance: describeCriteria(t),
       }
     }),
   ]
@@ -330,17 +422,168 @@ export default async function HoldPointsPage({
                   </div>
                 </div>
 
-                {carriesRelease(p.inspection_type) && !p.notified_at && mayRecord && (
-                  <form action={giveNotice}>
-                    <input type="hidden" name="kind" value={p.kind} />
-                    <input type="hidden" name="id" value={p.id} />
-                    <input type="hidden" name="label" value={p.label} />
-                    <button type="submit" className="btn btn-secondary btn-sm">
-                      Give notice
-                    </button>
-                  </form>
-                )}
               </div>
+
+              {/* ── Giving notice ─────────────────────────────────────── */}
+              {carriesRelease(p.inspection_type) && mayRecord && (!p.notice || p.release === 'rejected') && (
+                <details style={{ marginTop: 14 }} open={p.release === 'awaiting_notice'}>
+                  <summary style={{ cursor: 'pointer', fontSize: 13.5, fontWeight: 600 }}>
+                    {p.notice
+                      ? 'Give notice again — re-present after rework'
+                      : 'Give notice — invite the client to inspect'}
+                  </summary>
+
+                  {reachable.length === 0 ? (
+                    <p className="text-secondary" style={{ fontSize: 13, marginTop: 10, marginBottom: 0 }}>
+                      Nobody has an email address on file yet. Add the client&rsquo;s representative on the{' '}
+                      <Link href="/contacts" className="link">
+                        Contacts
+                      </Link>{' '}
+                      page first.
+                    </p>
+                  ) : (
+                    <form action={giveNotice} style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+                      <input type="hidden" name="kind" value={p.kind} />
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="hidden" name="label" value={p.label} />
+                      <input type="hidden" name="tag" value={p.tag} />
+                      <input type="hidden" name="activity" value={p.detail} />
+                      <input type="hidden" name="inspection_type" value={p.inspection_type} />
+                      <input type="hidden" name="location" value={p.location ?? ''} />
+                      <input type="hidden" name="procedure_ref" value={p.procedureRef ?? ''} />
+                      <input type="hidden" name="acceptance" value={p.acceptance ?? ''} />
+
+                      <div className="field">
+                        Who to notify
+                        <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+                          {reachable.map((c) => (
+                            <label
+                              key={c.id}
+                              style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, fontWeight: 400 }}
+                            >
+                              <input
+                                type="checkbox"
+                                name="recipient"
+                                value={`${c.email}|${c.full_name}`}
+                                defaultChecked={preselected.has(c.id)}
+                              />
+                              {c.full_name}
+                              <span className="text-secondary" style={{ fontSize: 12 }}>
+                                {c.company ? `${c.company} · ` : ''}
+                                {c.email}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
+                        <label className="field">
+                          Inspection date &amp; time
+                          <input name="scheduled_for" type="datetime-local" className="input" />
+                        </label>
+                        <label className="field">
+                          Your company
+                          <input name="from_company" className="input" placeholder="e.g. CxA" />
+                        </label>
+                      </div>
+
+                      <label className="field">
+                        Anything to add
+                        <input
+                          name="note"
+                          className="input"
+                          placeholder="e.g. Please report to the site office for a permit before entering the switchyard."
+                        />
+                      </label>
+
+                      <p className="text-secondary" style={{ fontSize: 12, margin: 0 }}>
+                        This writes the notice and records it permanently — the wording and the recipients cannot be
+                        changed afterwards. You then send it from your own email in one click, so it goes out from
+                        your real work address.
+                      </p>
+                      <div>
+                        <button type="submit" className="btn btn-primary btn-sm">
+                          Write the notice
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </details>
+              )}
+
+              {p.notice && (
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: '14px 16px',
+                    borderRadius: 8,
+                    border: '1px solid var(--color-success-solid)',
+                    background: 'var(--color-success-bg, rgba(16,185,129,0.07))',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span className={p.notice.status === 'sent' ? 'badge badge-success' : 'badge badge-warning'}>
+                      {p.notice.status === 'sent' ? 'Notice sent' : 'Notice written — not sent yet'}
+                    </span>
+                    <span className="text-secondary" style={{ fontSize: 12.5 }}>
+                      To {p.notice.recipient_names || p.notice.recipients || 'nobody'} · issued{' '}
+                      {when(p.notice.created_at)}
+                      {p.notice.sent_at ? ` · sent ${when(p.notice.sent_at)}` : ''}
+                    </span>
+                  </div>
+
+                  {p.notice.status !== 'sent' && (
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+                      {p.notice.recipients &&
+                        p.notice.subject &&
+                        p.notice.body &&
+                        mailtoIsSafe(
+                          mailtoLink(p.notice.recipients.split(',').map((s) => s.trim()), p.notice.subject, p.notice.body)
+                        ) && (
+                          <a
+                            href={mailtoLink(
+                              p.notice.recipients.split(',').map((s) => s.trim()),
+                              p.notice.subject,
+                              p.notice.body
+                            )}
+                            className="btn btn-primary btn-sm"
+                          >
+                            Open in my email
+                          </a>
+                        )}
+                      <form action={markNoticeSent}>
+                        <input type="hidden" name="notification_id" value={p.notice.id} />
+                        <input type="hidden" name="label" value={p.label} />
+                        <button type="submit" className="btn btn-secondary btn-sm">
+                          I&rsquo;ve sent it
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  <details style={{ marginTop: 12 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      Read the notice / copy the text
+                    </summary>
+                    <div className="text-secondary" style={{ fontSize: 12.5, marginTop: 8 }}>
+                      <strong>Subject:</strong> {p.notice.subject}
+                    </div>
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        fontSize: 12.5,
+                        lineHeight: 1.55,
+                        marginTop: 8,
+                        marginBottom: 0,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {p.notice.body}
+                    </pre>
+                  </details>
+                </div>
+              )}
 
               {p.signature && (
                 <div

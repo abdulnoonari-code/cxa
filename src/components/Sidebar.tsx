@@ -175,6 +175,19 @@ const ICONS = {
       <circle cx="13" cy="12" r="2.2" />
     </>
   ),
+  bell: icon(
+    <>
+      <path d="M18 8.5a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5Z" />
+      <path d="M10.3 19a2 2 0 0 0 3.4 0" />
+    </>
+  ),
+  contacts: icon(
+    <>
+      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h11A1.5 1.5 0 0 1 19 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z" />
+      <circle cx="12" cy="10" r="2.2" />
+      <path d="M8.5 16.5a3.6 3.6 0 0 1 7 0M2.5 8h2.5M2.5 12h2.5M2.5 16h2.5" />
+    </>
+  ),
 }
 
 export async function Sidebar() {
@@ -304,6 +317,14 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Governance</div>
+        <Link href="/notifications" className="nav-link">
+          {ICONS.bell}
+          Alerts &amp; Notices
+        </Link>
+        <Link href="/contacts" className="nav-link">
+          {ICONS.contacts}
+          Contacts
+        </Link>
         <Link href="/team" className="nav-link">
           {ICONS.team}
           Project Team

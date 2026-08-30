@@ -175,6 +175,13 @@ const ICONS = {
       <circle cx="13" cy="12" r="2.2" />
     </>
   ),
+  daily: icon(
+    <>
+      <rect x="3" y="4.5" width="18" height="16" rx="2" />
+      <path d="M8 3v3M16 3v3M3 9.5h18" />
+      <path d="M7.5 13h4M7.5 16.5h8" />
+    </>
+  ),
   roles: icon(
     <>
       <circle cx="8.5" cy="8" r="3" />
@@ -393,6 +400,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Reports</div>
+        <Link href="/reports/daily" className="nav-link">
+          {ICONS.daily}
+          Daily Report
+        </Link>
         <Link href="/reports" className="nav-link">
           {ICONS.report}
           Progress Report

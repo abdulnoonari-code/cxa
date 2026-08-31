@@ -8,6 +8,7 @@ import { getActor, actorCan, recordAudit } from '@/lib/audit'
 import { extractDocument } from '@/lib/doc-extract'
 import { readObligations, nextRef, refSeries, type Candidate } from '@/lib/obligations'
 import { loadObligationRefs, loadObligationKeys, dedupeKey } from '@/data/obligations'
+import { parseObligationWorkbook, type ObligationProblem } from '@/lib/obligation-io'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -302,4 +303,205 @@ export async function discardRead(formData: FormData) {
   })
 
   refresh()
+}
+
+// ── Import ───────────────────────────────────────────────────────────────
+
+function describeProblem(p: ObligationProblem): string {
+  return `Row ${p.row} · ${p.column}: ${p.message}${p.value ? ` (found "${p.value}")` : ''}`
+}
+
+function stampsFor(status: string, actorName: string, previous: { closed_at: string | null; closed_by: string | null; accepted_at: string | null }) {
+  return stamps(status, actorName, previous)
+}
+
+/**
+ * Import a marked-up obligations register.
+ *
+ * This is the file that goes out to a party and comes back with their column
+ * filled in, so a row is matched in the order that loses the least: the CXA ID
+ * first, then the reference, then — for a row with neither — a new obligation
+ * with a new reference.
+ *
+ * All-or-nothing on errors, like every other importer. An unreadable party is
+ * an error rather than a warning here, because a party the file names and we
+ * cannot recognise would otherwise be silently orphaned on a re-import.
+ */
+export async function importObligations(formData: FormData) {
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) redirect('/obligations?import=nofile')
+
+  const project = await getCurrentProject()
+  if (!project) redirect('/obligations?import=noproject')
+  if (!(await actorCan('review', project.id))) redirect('/obligations?import=denied')
+
+  const parsed = await parseObligationWorkbook(await file.arrayBuffer(), { fileName: file.name })
+
+  if (parsed.rows.length === 0 && parsed.errors.length === 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'obligation import failed',
+      entity: 'obligation',
+      entityLabel: file.name,
+      comment:
+        parsed.headingsSeen.length > 0
+          ? `No obligation column found. Headings seen: ${parsed.headingsSeen.slice(0, 15).join(', ')}`
+          : 'The file had nothing readable in it.',
+    })
+    redirect(`/obligations?import=empty&headings=${encodeURIComponent(parsed.headingsSeen.slice(0, 8).join(', '))}`)
+  }
+
+  const errors: ObligationProblem[] = [...parsed.errors]
+
+  const { data: existingRows } = await supabase
+    .from('obligations')
+    .select('id, ref')
+    .eq('project_id', project.id)
+  const existing = (existingRows ?? []) as { id: string; ref: string | null }[]
+  const byId = new Map(existing.map((r) => [r.id, r]))
+  const byRef = new Map(existing.filter((r) => r.ref).map((r) => [r.ref as string, r]))
+
+  type Plan = { row: (typeof parsed.rows)[number]; targetId: string | null }
+  const plans: Plan[] = []
+  const seenRefs = new Set<string>()
+
+  for (const row of parsed.rows) {
+    let targetId: string | null = null
+
+    if (row.id) {
+      if (!byId.has(row.id)) {
+        errors.push({
+          row: row.row,
+          column: 'CXA ID',
+          value: row.id,
+          message: 'No obligation on this project has that ID. Clear the cell to add a new one instead.',
+        })
+        continue
+      }
+      targetId = row.id
+    } else if (row.ref) {
+      const found = byRef.get(row.ref)
+      if (found) targetId = found.id
+      else if (seenRefs.has(row.ref)) {
+        errors.push({
+          row: row.row,
+          column: 'Ref',
+          value: row.ref,
+          message: 'This reference appears more than once in the file. Every obligation needs its own.',
+        })
+        continue
+      }
+    }
+    if (row.ref) seenRefs.add(row.ref)
+
+    if (row.remove && !targetId) {
+      errors.push({
+        row: row.row,
+        column: 'Remove',
+        value: 'Y',
+        message: 'Only an obligation already on the register can be removed — there is nothing to identify this row by.',
+      })
+      continue
+    }
+
+    plans.push({ row, targetId })
+  }
+
+  if (errors.length > 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'obligation import rejected',
+      entity: 'obligation',
+      entityLabel: file.name,
+      newValue: `${errors.length} problems, nothing imported`,
+      comment: errors.slice(0, 12).map(describeProblem).join(' | '),
+    })
+    const detail = errors.slice(0, 3).map(describeProblem).join(' · ')
+    redirect(`/obligations?import=rejected&errors=${errors.length}&detail=${encodeURIComponent(detail.slice(0, 400))}`)
+  }
+
+  const removals = plans.filter((p) => p.row.remove && p.targetId)
+  const updates = plans.filter((p) => p.targetId && !p.row.remove)
+  const additions = plans.filter((p) => !p.targetId && !p.row.remove)
+
+  for (const part of chunk(removals.map((p) => p.targetId as string), 200)) {
+    await supabase.from('obligations').delete().in('id', part)
+  }
+
+  const actor = await getActor(project.id)
+
+  for (const p of updates) {
+    const { data: before } = await supabase
+      .from('obligations')
+      .select('closed_at, closed_by, accepted_at')
+      .eq('id', p.targetId as string)
+      .single()
+    const mark = stampsFor(p.row.status, actor.name ?? 'Import', (before ?? {
+      closed_at: null,
+      closed_by: null,
+      accepted_at: null,
+    }) as { closed_at: string | null; closed_by: string | null; accepted_at: string | null })
+
+    await supabase
+      .from('obligations')
+      .update({
+        clause: p.row.clause,
+        statement: p.row.statement,
+        party: p.row.party,
+        obligation_type: p.row.obligation_type,
+        status: p.row.status,
+        owner: p.row.owner,
+        due_date: p.row.due_date,
+        level: p.row.level,
+        evidence: p.row.evidence,
+        notes: p.row.notes,
+        ...mark,
+      })
+      .eq('id', p.targetId as string)
+  }
+
+  const needNumbers = additions.filter((p) => !p.row.ref).length
+  const series = refSeries([...existing.map((r) => r.ref), ...additions.map((p) => p.row.ref)], needNumbers)
+  let nextIndex = 0
+
+  const newRows = additions.map((p) => ({
+    project_id: project.id,
+    ref: p.row.ref ?? series[nextIndex++],
+    clause: p.row.clause,
+    statement: p.row.statement,
+    party: p.row.party,
+    obligation_type: p.row.obligation_type,
+    status: p.row.status,
+    owner: p.row.owner,
+    due_date: p.row.due_date,
+    level: p.row.level,
+    evidence: p.row.evidence,
+    notes: p.row.notes,
+    source_name: file.name,
+    origin: 'import',
+    created_by_name: actor.name ?? null,
+  }))
+
+  for (const part of chunk(newRows, 500)) {
+    await supabase.from('obligations').insert(part)
+  }
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'imported obligations',
+    entity: 'obligation',
+    entityLabel: file.name,
+    newValue: `${newRows.length} added, ${updates.length} updated, ${removals.length} removed`,
+    comment:
+      `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
+      (parsed.warnings.length > 0
+        ? ` ${parsed.warnings.length} warnings: ${parsed.warnings.slice(0, 8).map(describeProblem).join(' | ')}`
+        : ''),
+  })
+
+  refresh()
+  redirect(
+    `/obligations?import=ok&added=${newRows.length}&updated=${updates.length}&removed=${removals.length}` +
+      `&rows=${parsed.rows.length}&warnings=${parsed.warnings.length}`
+  )
 }

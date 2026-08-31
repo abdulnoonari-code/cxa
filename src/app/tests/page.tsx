@@ -47,6 +47,14 @@ export default async function TestsPage({
     actual: failedActual,
   } = sp
 
+  // The PDF and Word registers read the same filters this page does, so the
+  // pack matches what is on screen.
+  const testExportParams = new URLSearchParams()
+  for (const [k, v] of Object.entries({ result: resultFilter, equipment: equipmentFilter })) {
+    if (v) testExportParams.set(k, v)
+  }
+  const testExportSuffix = testExportParams.toString() ? `?${testExportParams.toString()}` : ''
+
   const project = await getCurrentProject()
 
   const { data: equipmentRows } = project
@@ -214,11 +222,17 @@ export default async function TestsPage({
           reading instead of a verdict.
         </p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          <a href={`/tests/pdf${testExportSuffix}`} className="btn btn-secondary btn-sm">
+            PDF
+          </a>
+          <a href={`/tests/word${testExportSuffix}`} className="btn btn-secondary btn-sm">
+            Word
+          </a>
           <a href="/tests/export" className="btn btn-secondary btn-sm">
-            Export test records (Excel)
+            Excel
           </a>
           <a href="/tests/template" className="btn btn-secondary btn-sm">
-            Download blank template
+            Blank template
           </a>
         </div>
         <form action={importTests} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>

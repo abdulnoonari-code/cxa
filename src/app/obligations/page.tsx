@@ -16,7 +16,7 @@ import {
   verdictBadgeClass,
   daysOverdue,
 } from '@/lib/obligations'
-import { readDocument, addObligation, updateObligation, deleteObligation, discardRead } from './actions'
+import { readDocument, addObligation, updateObligation, deleteObligation, discardRead, importObligations } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +40,13 @@ export default async function ObligationsPage({
     paras?: string
     format?: string
     detail?: string
+    import?: string
+    updated?: string
+    removed?: string
+    rows?: string
+    warnings?: string
+    errors?: string
+    headings?: string
   }>
 }) {
   const sp = await searchParams
@@ -302,8 +309,74 @@ export default async function ObligationsPage({
           <a href={`/obligations/export${exportSuffix}`} className="btn btn-secondary btn-sm">
             Excel
           </a>
+          <a href="/obligations/template" className="btn btn-secondary btn-sm">
+            Blank template
+          </a>
         </div>
+
+        <p className="text-secondary" style={{ fontSize: 13, margin: '18px 0 12px' }}>
+          <strong>And back again.</strong> Send the Excel out, let the other party fill in their state and their
+          evidence, and upload it here. Each row keeps its <strong>Ref</strong>, so their edits land on the right
+          obligations instead of creating a second register.
+        </p>
+        <form action={importObligations} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label className="field" style={{ flex: '1 1 320px' }}>
+            Marked-up register (.xlsx or .csv)
+            <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+          </label>
+          <button type="submit" className="btn btn-primary">
+            Import
+          </button>
+        </form>
+        <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0 }}>
+          A party the file names that CxSentinel does not recognise <strong>stops the import</strong> rather than
+          being filed as unassigned — an obligation quietly orphaned on a re-import is the one nobody chases. And
+          &ldquo;Done&rdquo; is read as <em>Submitted</em>, never Accepted: accepting is your decision, not a cell in
+          their spreadsheet.
+        </p>
       </div>
+
+      {sp.import === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)', marginTop: 18 }}>
+          <strong>Imported.</strong> {sp.rows} row{sp.rows === '1' ? '' : 's'} read — {sp.added} added
+          {sp.updated && sp.updated !== '0' ? `, ${sp.updated} updated` : ''}
+          {sp.removed && sp.removed !== '0' ? `, ${sp.removed} removed` : ''}.
+          {sp.warnings && sp.warnings !== '0'
+            ? ` ${sp.warnings} row${sp.warnings === '1' ? '' : 's'} had something worth knowing — see the audit trail.`
+            : ''}
+        </div>
+      )}
+      {sp.import === 'rejected' && (
+        <div className="alert alert-danger" style={{ marginTop: 18 }}>
+          <strong>Nothing imported.</strong> {sp.errors} row{sp.errors === '1' ? '' : 's'} could not be read, so the
+          whole file was refused.
+          {sp.detail ? <div style={{ marginTop: 6, fontSize: 13 }}>{sp.detail}</div> : null}
+          <div style={{ marginTop: 6, fontSize: 13 }}>
+            Every bad row is listed in the{' '}
+            <Link href="/audit" className="link">
+              audit trail
+            </Link>
+            .
+          </div>
+        </div>
+      )}
+      {sp.import === 'empty' && (
+        <div className="alert alert-danger" style={{ marginTop: 18 }}>
+          <strong>Nothing imported.</strong> No obligations could be read from that file.
+          {sp.headings ? ` The column headings found were: ${sp.headings}.` : ''} The file needs a column headed
+          something like Obligation, Statement, Duty or Description.
+        </div>
+      )}
+      {sp.import === 'nofile' && (
+        <div className="alert alert-danger" style={{ marginTop: 18 }}>
+          <strong>Nothing imported.</strong> Choose a file first.
+        </div>
+      )}
+      {sp.import === 'denied' && (
+        <div className="alert alert-danger" style={{ marginTop: 18 }}>
+          <strong>Nothing imported.</strong> Your role on this project cannot change obligations.
+        </div>
+      )}
 
       {/* ── Add one ────────────────────────────────────────────────────── */}
       <details className="card" style={{ marginTop: 16 }}>

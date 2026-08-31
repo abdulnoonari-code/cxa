@@ -120,8 +120,14 @@ export default async function DailyReportPage({
           </Link>
         )}
         <div style={{ flex: 1 }} />
-        <a href={`/reports/daily/export?day=${day}`} className="btn btn-primary btn-sm">
-          Download as Excel
+        <a href={`/reports/daily/pdf?day=${day}`} className="btn btn-primary btn-sm">
+          PDF
+        </a>
+        <a href={`/reports/daily/word?day=${day}`} className="btn btn-secondary btn-sm">
+          Word
+        </a>
+        <a href={`/reports/daily/export?day=${day}`} className="btn btn-secondary btn-sm">
+          Excel
         </a>
       </div>
 

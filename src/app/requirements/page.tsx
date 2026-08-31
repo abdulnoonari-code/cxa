@@ -26,9 +26,19 @@ export const dynamic = 'force-dynamic'
 export default async function RequirementsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; criticality?: string; source?: string }>
+  searchParams: Promise<{
+    status?: string
+    criticality?: string
+    source?: string
+    read?: string
+    added?: string
+    found?: string
+    dupes?: string
+    rev?: string
+  }>
 }) {
-  const { status: statusFilter, criticality: critFilter, source: sourceFilter } = await searchParams
+  const sp = await searchParams
+  const { status: statusFilter, criticality: critFilter, source: sourceFilter } = sp
 
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
@@ -94,6 +104,19 @@ export default async function RequirementsPage({
         {project ? project.name : 'No project selected'} — every stated obligation on this project, where it came
         from, and what proves it has been met. This is the spine every check, test, gate and dossier hangs from.
       </p>
+
+      {sp.read === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+          <strong>Read from {sp.rev ? `revision ${sp.rev}` : 'the document'}.</strong> {sp.found} clauses state an
+          acceptance criterion, {sp.added} added to the register
+          {sp.dupes && sp.dupes !== '0' ? `, ${sp.dupes} already on it` : ''}. Each one carries the clause it came
+          from, so a requirement can always be traced back to the sentence that created it.
+          <div style={{ marginTop: 6, fontSize: 13 }}>
+            Check the verification method and criticality on each — they are read from the wording and are a starting
+            point, not a decision.
+          </div>
+        </div>
+      )}
 
       <div className="stat-grid">
         <div className="stat">

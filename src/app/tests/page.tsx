@@ -11,7 +11,7 @@ import {
   testBlockedReason,
 } from '@/lib/tests'
 import { REVIEW_STATES, reviewBadgeClass, reviewLabel } from '@/lib/checklist'
-import { createTest, recordResult, raiseIssueFromTest, approveTest, deleteTest } from './actions'
+import { createTest, recordResult, raiseIssueFromTest, approveTest, deleteTest, importTests } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,8 +25,19 @@ export default async function TestsPage({
     name?: string
     criteria?: string
     actual?: string
+    import?: string
+    added?: string
+    updated?: string
+    removed?: string
+    rows?: string
+    warnings?: string
+    overruled?: string
+    errors?: string
+    detail?: string
+    headings?: string
   }>
 }) {
+  const sp = await searchParams
   const {
     equipment: equipmentFilter,
     result: resultFilter,
@@ -34,7 +45,7 @@ export default async function TestsPage({
     name: failedName,
     criteria: failedCriteria,
     actual: failedActual,
-  } = await searchParams
+  } = sp
 
   const project = await getCurrentProject()
 
@@ -136,6 +147,89 @@ export default async function TestsPage({
             </a>
           </div>
         </div>
+      </div>
+
+      {/* ── Import results from a testing contractor ─────────────────── */}
+      {sp.import === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+          <strong>Imported.</strong> {sp.rows} row{sp.rows === '1' ? '' : 's'} read — {sp.added} added
+          {sp.updated && sp.updated !== '0' ? `, ${sp.updated} updated` : ''}
+          {sp.removed && sp.removed !== '0' ? `, ${sp.removed} removed` : ''}.
+          {sp.overruled && sp.overruled !== '0' ? (
+            <div style={{ marginTop: 6, fontSize: 13 }}>
+              <strong>
+                {sp.overruled} row{sp.overruled === '1' ? '' : 's'} claimed a result the measured value does not
+                support.
+              </strong>{' '}
+              The measured value was used. Each one is listed in the{' '}
+              <a href="/audit" className="link">
+                audit trail
+              </a>{' '}
+              with its row number.
+            </div>
+          ) : null}
+          {sp.warnings && sp.warnings !== '0' ? (
+            <div style={{ marginTop: 4, fontSize: 13 }}>
+              {sp.warnings} row{sp.warnings === '1' ? '' : 's'} had something worth knowing — see the audit trail.
+            </div>
+          ) : null}
+        </div>
+      )}
+      {sp.import === 'rejected' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> {sp.errors} row{sp.errors === '1' ? '' : 's'} could not be read, so the
+          whole file was refused.
+          {sp.detail ? <div style={{ marginTop: 6, fontSize: 13 }}>{sp.detail}</div> : null}
+        </div>
+      )}
+      {sp.import === 'empty' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> No tests could be read from that file.
+          {sp.headings ? ` The column headings found were: ${sp.headings}.` : ''} The file needs a column headed
+          something like Test, Description, Measurement or Parameter.
+        </div>
+      )}
+      {sp.import === 'nofile' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> Choose a file first.
+        </div>
+      )}
+      {sp.import === 'denied' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> Your role on this project cannot record test results.
+        </div>
+      )}
+
+      <div className="card">
+        <h2 className="section-title">Load results from a spreadsheet</h2>
+        <p className="text-secondary" style={{ fontSize: 13, marginBottom: 14 }}>
+          Upload the testing contractor&apos;s sheet as it came. Headings are matched by name, the table can start
+          anywhere, and every tab is read. Existing tests are matched by their <strong>Test ref</strong> and updated
+          rather than duplicated.
+        </p>
+        <p className="text-secondary" style={{ fontSize: 13, marginBottom: 14 }}>
+          <strong>The Result column in their file is read and then overruled.</strong> CxSentinel works out pass or
+          fail from the measured value and the acceptance criteria, every time — and tells you, by row number, every
+          place the sheet claimed something its own numbers do not support. That is the whole reason for recording a
+          reading instead of a verdict.
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+          <a href="/tests/export" className="btn btn-secondary btn-sm">
+            Export test records (Excel)
+          </a>
+          <a href="/tests/template" className="btn btn-secondary btn-sm">
+            Download blank template
+          </a>
+        </div>
+        <form action={importTests} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label className="field" style={{ flex: '1 1 320px' }}>
+            Test results (.xlsx or .csv)
+            <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+          </label>
+          <button type="submit" className="btn btn-primary">
+            Import
+          </button>
+        </form>
       </div>
 
       <details className="card">

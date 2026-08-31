@@ -9,6 +9,9 @@ import { actorCan, recordAudit } from '@/lib/audit'
 import { reviewLabel } from '@/lib/checklist'
 import { loadPunchRefs } from '@/data/punchlist'
 import { nextRef } from '@/lib/punchlist'
+import { parseTestWorkbook, type TestProblem } from '@/lib/test-io'
+import { loadSubjectIndex } from '@/data/subjects'
+import { buildTextIndex, findSubjectByText, subjectLabel } from '@/lib/subjects'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -212,4 +215,257 @@ export async function deleteTest(formData: FormData) {
   if (!id) return
   await supabase.from('test_records').delete().eq('id', id)
   refresh()
+}
+
+// ── Import ───────────────────────────────────────────────────────────────
+
+function describeTestProblem(p: TestProblem): string {
+  return `Row ${p.row} · ${p.column}: ${p.message}${p.value ? ` (found "${p.value}")` : ''}`
+}
+
+function chunkTests<T>(list: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
+  return out
+}
+
+/**
+ * Import test results from a testing contractor's spreadsheet.
+ *
+ * The one rule that shapes everything here: the **result is never imported**.
+ * Whatever the file says in its Result column, the record stores what the
+ * measured value and the acceptance criteria actually give. Where the two
+ * disagree, the disagreement is reported by row number and the arithmetic
+ * wins — the alternative is letting a supplier's spreadsheet mark its own
+ * homework, which is the exact thing this app exists to stop.
+ *
+ * All-or-nothing on errors, as with every other importer.
+ */
+export async function importTests(formData: FormData) {
+  const file = formData.get('file')
+  if (!(file instanceof File) || file.size === 0) redirect('/tests?import=nofile')
+
+  const project = await getCurrentProject()
+  if (!project) redirect('/tests?import=noproject')
+  if (!(await actorCan('record', project.id))) redirect('/tests?import=denied')
+
+  const parsed = await parseTestWorkbook(await file.arrayBuffer(), { fileName: file.name })
+
+  if (parsed.rows.length === 0 && parsed.errors.length === 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'test import failed',
+      entity: 'test_record',
+      entityLabel: file.name,
+      comment:
+        parsed.headingsSeen.length > 0
+          ? `No test column found. Headings seen: ${parsed.headingsSeen.slice(0, 15).join(', ')}`
+          : 'The file had nothing readable in it.',
+    })
+    redirect(`/tests?import=empty&headings=${encodeURIComponent(parsed.headingsSeen.slice(0, 8).join(', '))}`)
+  }
+
+  const index = await loadSubjectIndex(project.id)
+  const text = buildTextIndex(index)
+  const errors: TestProblem[] = [...parsed.errors]
+
+  const { data: existingRows } = await supabase
+    .from('test_records')
+    .select('id, test_ref')
+    .eq('project_id', project.id)
+  const existing = (existingRows ?? []) as { id: string; test_ref: string | null }[]
+  const byId = new Map(existing.map((r) => [r.id, r]))
+  const byRef = new Map(existing.filter((r) => r.test_ref).map((r) => [r.test_ref as string, r]))
+
+  // Instruments are matched by the id printed on the label. An instrument the
+  // file names but CxSentinel does not have is a warning, not an error: the
+  // testing company's kit is not always registered here yet, and refusing the
+  // whole file over it would be useless. The reading imports with no
+  // instrument, and the Validity Review then reports exactly that.
+  const { data: instrumentRows } = await supabase
+    .from('instruments')
+    .select('id, instrument_id, name')
+    .eq('project_id', project.id)
+  const instrumentByCode = new Map(
+    ((instrumentRows ?? []) as { id: string; instrument_id: string | null; name: string | null }[]).flatMap((i) => {
+      const keys = [i.instrument_id, i.name].filter((v): v is string => !!v).map((v) => v.trim().toLowerCase())
+      return keys.map((k) => [k, i.id] as const)
+    })
+  )
+
+  type TestPlan = {
+    row: (typeof parsed.rows)[number]
+    targetId: string | null
+    equipment_id: string | null
+    subject_type: string | null
+    subject_id: string | null
+    instrument_id: string | null
+  }
+  const plans: TestPlan[] = []
+
+  for (const row of parsed.rows) {
+    let targetId: string | null = null
+    if (row.id) {
+      if (!byId.has(row.id)) {
+        errors.push({
+          row: row.row,
+          column: 'CXA ID',
+          value: row.id,
+          message: 'No test on this project has that ID. Clear the cell to create a new one instead.',
+        })
+        continue
+      }
+      targetId = row.id
+    } else if (row.test_ref) {
+      targetId = byRef.get(row.test_ref)?.id ?? null
+    }
+
+    if (row.remove && !targetId) {
+      errors.push({
+        row: row.row,
+        column: 'Remove',
+        value: 'Y',
+        message: 'Only a test already on the project can be removed — there is nothing to identify this row by.',
+      })
+      continue
+    }
+
+    let equipment_id: string | null = null
+    let subject_type: string | null = null
+    let subject_id: string | null = null
+
+    if (row.subject) {
+      const match = findSubjectByText(text, row.subject)
+      if (!match.subject) {
+        errors.push({
+          row: row.row,
+          column: 'Tag / System',
+          value: row.subject,
+          message:
+            match.candidates.length > 1
+              ? `More than one thing on the project is called that (${match.candidates
+                  .map((c) => subjectLabel(c.type))
+                  .join(', ')}). Use the tag or system code instead.`
+              : 'Not a tag, system or area on this project. Add it first, or clear the cell.',
+        })
+        continue
+      }
+      subject_type = match.subject.type
+      subject_id = match.subject.id
+      equipment_id = match.subject.type === 'equipment' ? match.subject.id : null
+    } else if (!targetId) {
+      errors.push({
+        row: row.row,
+        column: 'Tag / System',
+        value: '',
+        message: 'A new test has to say what it is against. Put a tag or a system name in this column.',
+      })
+      continue
+    }
+
+    let instrument_id: string | null = null
+    if (row.instrument) {
+      instrument_id = instrumentByCode.get(row.instrument.trim().toLowerCase()) ?? null
+      if (!instrument_id) {
+        parsed.warnings.push({
+          row: row.row,
+          column: 'Instrument',
+          value: row.instrument,
+          message:
+            'Not a test instrument registered on this project, so the reading is imported without one. Add it on the Test Instruments screen and re-import to attach it.',
+        })
+      }
+    }
+
+    plans.push({ row, targetId, equipment_id, subject_type, subject_id, instrument_id })
+  }
+
+  if (errors.length > 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'test import rejected',
+      entity: 'test_record',
+      entityLabel: file.name,
+      newValue: `${errors.length} problems, nothing imported`,
+      comment: errors.slice(0, 12).map(describeTestProblem).join(' | '),
+    })
+    const detail = errors.slice(0, 3).map(describeTestProblem).join(' · ')
+    redirect(`/tests?import=rejected&errors=${errors.length}&detail=${encodeURIComponent(detail.slice(0, 400))}`)
+  }
+
+  const removals = plans.filter((p) => p.row.remove && p.targetId)
+  const updates = plans.filter((p) => p.targetId && !p.row.remove)
+  const additions = plans.filter((p) => !p.targetId && !p.row.remove)
+
+  for (const part of chunkTests(removals.map((p) => p.targetId as string), 200)) {
+    await supabase.from('test_records').delete().in('id', part)
+  }
+
+  const fields = (p: TestPlan) => ({
+    test_ref: p.row.test_ref,
+    name: p.row.name,
+    procedure_ref: p.row.procedure_ref,
+    preconditions: p.row.preconditions,
+    criteria_type: p.row.criteria_type,
+    expected_min: p.row.expected_min,
+    expected_max: p.row.expected_max,
+    unit: p.row.unit,
+    criteria_text: p.row.criteria_text,
+    actual_value: p.row.actual_value,
+    actual_text: p.row.actual_text,
+    // Computed in the parser from the value and the criteria. Never the
+    // file's own claim.
+    result: p.row.result,
+    instrument_id: p.instrument_id,
+    tested_by: p.row.tested_by,
+    tested_at: p.row.tested_at,
+    witness: p.row.witness,
+    comments: p.row.comments,
+    inspection_type: p.row.inspection_type,
+  })
+
+  for (const p of updates) {
+    await supabase
+      .from('test_records')
+      .update({
+        ...fields(p),
+        // A blank subject cell on an existing test means "unchanged".
+        ...(p.subject_id ? { equipment_id: p.equipment_id, subject_type: p.subject_type, subject_id: p.subject_id } : {}),
+      })
+      .eq('id', p.targetId as string)
+  }
+
+  const newRows = additions.map((p) => ({
+    project_id: project.id,
+    equipment_id: p.equipment_id,
+    subject_type: p.subject_type,
+    subject_id: p.subject_id,
+    ...fields(p),
+  }))
+
+  for (const part of chunkTests(newRows, 500)) {
+    await supabase.from('test_records').insert(part)
+  }
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'imported test results',
+    entity: 'test_record',
+    entityLabel: file.name,
+    newValue: `${newRows.length} added, ${updates.length} updated, ${removals.length} removed`,
+    comment:
+      `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
+      (parsed.disagreements > 0
+        ? ` ${parsed.disagreements} row(s) claimed a result their own measured value does not support; the measured value was used.`
+        : '') +
+      (parsed.warnings.length > 0
+        ? ` ${parsed.warnings.length} warnings: ${parsed.warnings.slice(0, 8).map(describeTestProblem).join(' | ')}`
+        : ''),
+  })
+
+  refresh()
+  redirect(
+    `/tests?import=ok&added=${newRows.length}&updated=${updates.length}&removed=${removals.length}` +
+      `&rows=${parsed.rows.length}&warnings=${parsed.warnings.length}&overruled=${parsed.disagreements}`
+  )
 }

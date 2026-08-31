@@ -348,7 +348,7 @@ export async function Sidebar() {
         </Link>
         <Link href="/issues" className="nav-link">
           {ICONS.issue}
-          Issues &amp; Punch List
+          Punch List
         </Link>
         <Link href="/review" className="nav-link">
           {ICONS.review}

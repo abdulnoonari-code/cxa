@@ -7,6 +7,8 @@ import { evaluateTest, criteriaLabel } from '@/lib/tests'
 import { getCurrentProject } from '@/lib/project'
 import { actorCan, recordAudit } from '@/lib/audit'
 import { reviewLabel } from '@/lib/checklist'
+import { loadPunchRefs } from '@/data/punchlist'
+import { nextRef } from '@/lib/punchlist'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -142,14 +144,24 @@ export async function raiseIssueFromTest(formData: FormData) {
     test.criteria_text
   )
 
+  // The punch item must carry the project and a punch number like any other,
+  // or it is invisible on the punch list it was raised onto.
+  const project = await getCurrentProject()
+  const ref = project ? nextRef(await loadPunchRefs(project.id)) : null
+
   await supabase.from('issues').insert({
+    project_id: project?.id ?? null,
+    ref,
     equipment_id: test.equipment_id,
+    subject_type: test.equipment_id ? 'equipment' : null,
+    subject_id: test.equipment_id,
     checklist_item_id: test.checklist_item_id,
     title: `${test.name} failed`,
     description: `Measured ${test.actual_value ?? '—'}${test.unit ? ` ${test.unit}` : ''} against acceptance criteria ${criteria}.`,
     severity: 'major',
     category: 'A',
     status: 'open',
+    raised_by: 'Raised automatically when the test was recorded as failed',
   })
 
   revalidatePath('/issues')

@@ -198,6 +198,14 @@ const ICONS = {
       <path d="M15.2 16.6l.9.9 2-2.1" />
     </>
   ),
+  itp: icon(
+    <>
+      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h11A1.5 1.5 0 0 1 19 4.5v15a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z" />
+      <path d="M8.5 7.5h7M8.5 11h7M8.5 14.5h3" />
+      <circle cx="15.5" cy="16" r="2.6" />
+      <path d="M14.5 16.1l.7.7 1.6-1.7" />
+    </>
+  ),
   dossier: icon(
     <>
       <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5Z" />
@@ -339,6 +347,10 @@ export async function Sidebar() {
         <Link href="/equipment" className="nav-link">
           {ICONS.equipment}
           Equipment &amp; Tags
+        </Link>
+        <Link href="/itp" className="nav-link">
+          {ICONS.itp}
+          Inspection &amp; Test Plan
         </Link>
         <Link href="/checklists" className="nav-link">
           {ICONS.checklist}

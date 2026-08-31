@@ -106,6 +106,57 @@ export function buildIndex(subjects: Subject[], root: Subject | null): SubjectIn
   return { byKey, childrenOf, root }
 }
 
+// Matching a spreadsheet cell to something in the tree.
+//
+// An imported row says "GIS-115-CB-01" or "115kV GIS" or "Line Bay 01" and
+// means one of them. Codes are collected before names because a code is
+// unique by intent and a name is not, and both are kept so that a genuinely
+// ambiguous word can be reported rather than silently resolved to whichever
+// row happened to load first.
+export type SubjectTextIndex = {
+  byCode: Map<string, Subject[]>
+  byName: Map<string, Subject[]>
+}
+
+function textKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function buildTextIndex(index: SubjectIndex): SubjectTextIndex {
+  const byCode = new Map<string, Subject[]>()
+  const byName = new Map<string, Subject[]>()
+
+  const push = (map: Map<string, Subject[]>, key: string, subject: Subject) => {
+    if (!key) return
+    const list = map.get(key)
+    if (list) list.push(subject)
+    else map.set(key, [subject])
+  }
+
+  for (const s of index.byKey.values()) {
+    if (s.type === 'project') continue
+    if (s.code) push(byCode, textKey(s.code), s)
+    push(byName, textKey(s.name), s)
+  }
+
+  return { byCode, byName }
+}
+
+export type SubjectMatch = { subject: Subject | null; candidates: Subject[] }
+
+export function findSubjectByText(text: SubjectTextIndex, raw: string): SubjectMatch {
+  const key = textKey(raw)
+  if (!key) return { subject: null, candidates: [] }
+
+  const byCode = text.byCode.get(key) ?? []
+  if (byCode.length === 1) return { subject: byCode[0], candidates: byCode }
+  if (byCode.length > 1) return { subject: null, candidates: byCode }
+
+  const byName = text.byName.get(key) ?? []
+  if (byName.length === 1) return { subject: byName[0], candidates: byName }
+  return { subject: null, candidates: byName }
+}
+
 export function getSubject(index: SubjectIndex, ref: SubjectRef | null): Subject | null {
   if (!ref) return null
   return index.byKey.get(refKey(ref)) ?? null

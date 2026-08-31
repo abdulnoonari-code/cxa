@@ -33,10 +33,13 @@ export default async function ChecklistsPage({
     equipment?: string
     page?: string
     import?: string
-    checks?: string
-    tags?: string
-    total?: string
-    skipped?: string
+    added?: string
+    updated?: string
+    removed?: string
+    rows?: string
+    warnings?: string
+    errors?: string
+    detail?: string
     headings?: string
   }>
 }) {
@@ -44,10 +47,13 @@ export default async function ChecklistsPage({
     level,
     equipment: equipmentFilter,
     import: importResult,
-    checks,
-    tags,
-    total,
-    skipped,
+    added,
+    updated,
+    removed,
+    rows: rowsRead,
+    warnings,
+    errors,
+    detail,
     headings,
     page: pageParam,
   } = await searchParams
@@ -147,9 +153,27 @@ export default async function ChecklistsPage({
 
       {importResult === 'ok' && (
         <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
-          <strong>Imported.</strong> {checks} check{checks === '1' ? '' : 's'} read from your file and created
-          against {tags} tag{tags === '1' ? '' : 's'} — {total} in total.
-          {skipped && skipped !== '0' ? ` ${skipped} row${skipped === '1' ? '' : 's'} skipped (no level could be worked out).` : ''}
+          <strong>Imported.</strong> {rowsRead} row{rowsRead === '1' ? '' : 's'} read —{' '}
+          {added} check{added === '1' ? '' : 's'} added
+          {updated && updated !== '0' ? `, ${updated} updated` : ''}
+          {removed && removed !== '0' ? `, ${removed} removed` : ''}.
+          {warnings && warnings !== '0'
+            ? ` ${warnings} row${warnings === '1' ? '' : 's'} had something the importer had to assume — see the audit trail.`
+            : ''}
+        </div>
+      )}
+      {importResult === 'rejected' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> {errors} row{errors === '1' ? '' : 's'} could not be read, so the whole
+          file was refused — a half-loaded checklist is worse than none, because nobody can tell which half loaded.
+          {detail ? <div style={{ marginTop: 6, fontSize: 13 }}>{detail}</div> : null}
+          <div style={{ marginTop: 6, fontSize: 13 }}>
+            Every bad row is listed in the{' '}
+            <a href="/audit" className="link">
+              audit trail
+            </a>
+            . Fix them and upload again.
+          </div>
         </div>
       )}
       {importResult === 'empty' && (
@@ -162,16 +186,28 @@ export default async function ChecklistsPage({
       )}
       {importResult === 'nofile' && (
         <div className="alert alert-danger">
-          <strong>Nothing imported.</strong> Choose a file and tick at least one equipment tag.
+          <strong>Nothing imported.</strong> Choose a file first.
+        </div>
+      )}
+      {importResult === 'noproject' && (
+        <div className="alert alert-danger">
+          <strong>Nothing imported.</strong> No project is selected, and a check has to belong to one.
         </div>
       )}
 
       <div className="card">
         <h2 className="section-title">Upload a checklist</h2>
         <p className="text-secondary" style={{ fontSize: 13, marginBottom: 16 }}>
-          Use your own Excel sheet or the template below — CxSentinel finds the header row wherever it sits and
-          recognises columns named Item, Description, Check, Task, Level, Stage, Notes or Remarks. Tick every tag
-          the checklist applies to and it gets created against each one.
+          Use your own ITP or the template below — the header row is found wherever it sits, every tab is read, and
+          columns named Item, Description, Check, Task, Tag, KKS, System, Level, Status, ITP or Remarks are all
+          recognised. If your file has a <strong>Tag / System</strong> column, each check goes where that column
+          says. If it doesn&apos;t, tick the tags below and the whole checklist is created against each of them.
+        </p>
+        <p className="text-secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+          Export the project, edit it in Excel and upload it back and nothing duplicates — the <strong>CXA ID</strong>{' '}
+          column tells CxSentinel which check each row already is. Put <strong>Y</strong> in the Remove column to
+          delete one. If any row cannot be read, <strong>nothing is imported at all</strong> and every bad row is
+          reported with its row number.
         </p>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -203,7 +239,7 @@ export default async function ChecklistsPage({
           </div>
 
           <div className="field">
-            Apply to these tags *
+            Apply to these tags — only needed if your file has no Tag / System column
             <div
               style={{
                 display: 'grid',
@@ -235,7 +271,7 @@ export default async function ChecklistsPage({
           </div>
 
           <div>
-            <button type="submit" className="btn btn-primary" disabled={equipment.length === 0}>
+            <button type="submit" className="btn btn-primary">
               Import checklist
             </button>
           </div>
@@ -243,7 +279,8 @@ export default async function ChecklistsPage({
 
         {equipment.length === 0 && (
           <p className="text-secondary" style={{ fontSize: 13, marginTop: 10 }}>
-            Add equipment first — checks belong to a tag.
+            No tags on this page to tick — but a file with its own Tag / System column, or one that files its checks
+            against systems, still imports.
           </p>
         )}
       </div>

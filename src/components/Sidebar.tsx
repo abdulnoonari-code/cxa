@@ -189,6 +189,15 @@ const ICONS = {
       <path d="M16 8.5h5M16 12h5M16 15.5h3" opacity="0.6" />
     </>
   ),
+  obligation: icon(
+    <>
+      <path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h8L19 7.5v12a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z" />
+      <path d="M14 3v5h5" />
+      <path d="M8.5 12h7M8.5 15.5h4" />
+      <circle cx="16.5" cy="16.5" r="3.2" />
+      <path d="M15.2 16.6l.9.9 2-2.1" />
+    </>
+  ),
   validity: icon(
     <>
       <circle cx="10.5" cy="10.5" r="6.5" />
@@ -364,6 +373,10 @@ export async function Sidebar() {
         <Link href="/review" className="nav-link">
           {ICONS.review}
           Review &amp; Approvals
+        </Link>
+        <Link href="/obligations" className="nav-link">
+          {ICONS.obligation}
+          Obligations
         </Link>
         <Link href="/documents" className="nav-link">
           {ICONS.document}

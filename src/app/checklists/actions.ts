@@ -295,7 +295,10 @@ export async function attachEvidence(formData: FormData) {
   const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(path)
   const review = generateAttachmentReview(file.name, file.size, tag_id)
 
+  const project = await getCurrentProject()
+
   await supabase.from('attachments').insert({
+    project_id: project?.id ?? null,
     checklist_item_id,
     file_name: file.name,
     file_path: path,

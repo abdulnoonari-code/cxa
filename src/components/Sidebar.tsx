@@ -189,6 +189,13 @@ const ICONS = {
       <path d="M16 8.5h5M16 12h5M16 15.5h3" opacity="0.6" />
     </>
   ),
+  validity: icon(
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.4 15.4 21 21" />
+      <path d="M8 10.5l2 2 3.5-3.5" />
+    </>
+  ),
   gate: icon(
     <>
       <path d="M3 4v16M21 4v16" />
@@ -338,6 +345,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Quality</div>
+        <Link href="/validity" className="nav-link">
+          {ICONS.validity}
+          Validity Review
+        </Link>
         <Link href="/gates" className="nav-link">
           {ICONS.gate}
           Readiness Gates

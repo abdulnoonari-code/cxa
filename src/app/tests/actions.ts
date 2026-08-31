@@ -37,8 +37,16 @@ export async function createTest(formData: FormData) {
   const name = str(formData, 'name')
   if (!equipment_id || !name) return
 
+  // Same rule as everywhere else: a record that does not carry its project is
+  // invisible to every project-scoped screen. This is the third place it was
+  // missing.
+  const { data: owner } = await supabase.from('equipment').select('project_id').eq('id', equipment_id).single()
+
   await supabase.from('test_records').insert({
     equipment_id,
+    project_id: (owner as { project_id: string | null } | null)?.project_id ?? null,
+    subject_type: 'equipment',
+    subject_id: equipment_id,
     test_ref: str(formData, 'test_ref'),
     name,
     procedure_ref: str(formData, 'procedure_ref'),

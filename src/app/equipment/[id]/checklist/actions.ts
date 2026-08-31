@@ -86,6 +86,7 @@ export async function uploadAttachment(formData: FormData) {
   const review = generateAttachmentReview(file.name, file.size, equipment?.tag_id ?? null)
 
   await supabase.from('attachments').insert({
+    project_id: await projectOf(equipment_id),
     checklist_item_id,
     file_name: file.name,
     file_path: path,

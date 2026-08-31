@@ -6,12 +6,32 @@ import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence } from '
 
 export const dynamic = 'force-dynamic'
 
+// One screenful of tags. Their checks are fetched for these tags only.
+const TAGS_PER_PAGE = 25
+
+// Group rows by their equipment in one pass. The obvious nested filter is
+// equipment × rows, which is nothing on a demo project and twelve million
+// comparisons on a real substation.
+function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const row of rows) {
+    const k = key(row)
+    if (!k) continue
+    const list = map.get(k)
+    if (list) list.push(row)
+    else map.set(k, [row])
+  }
+  return map
+}
+
+
 export default async function ChecklistsPage({
   searchParams,
 }: {
   searchParams: Promise<{
     level?: string
     equipment?: string
+    page?: string
     import?: string
     checks?: string
     tags?: string
@@ -29,27 +49,46 @@ export default async function ChecklistsPage({
     total,
     skipped,
     headings,
+    page: pageParam,
   } = await searchParams
 
   const project = await getCurrentProject()
 
-  const { data: equipmentRows } = project
-    ? await supabase.from('equipment').select('id, tag_id, description').eq('project_id', project.id).order('tag_id')
-    : { data: [] }
+  // Page over equipment, then fetch only that page's checks. A real project
+  // has thousands of tags and tens of thousands of checks; loading them all to
+  // render one screen is what made this page stall.
+  const page = Math.max(1, Number(pageParam ?? '1') || 1)
+  const from = (page - 1) * TAGS_PER_PAGE
+
+  let equipmentQuery = supabase
+    .from('equipment')
+    .select('id, tag_id, description', { count: 'exact' })
+    .order('tag_id')
+    .range(from, from + TAGS_PER_PAGE - 1)
+
+  if (project) equipmentQuery = equipmentQuery.eq('project_id', project.id)
+  if (equipmentFilter) equipmentQuery = equipmentQuery.eq('id', equipmentFilter)
+
+  const { data: equipmentRows, count: tagCount } = project
+    ? await equipmentQuery
+    : { data: [], count: 0 }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
+  const totalTags = tagCount ?? 0
+  const pages = Math.max(1, Math.ceil(totalTags / TAGS_PER_PAGE))
+
+  // Bounded by the page: at most TAGS_PER_PAGE ids, never the whole project.
+  const pageIds = equipment.map((e) => e.id)
 
   let query = supabase
     .from('checklist_items')
     .select('id, level, item, status, notes, ai_comment, review_state, equipment_id')
     .order('level', { ascending: true })
+    .in('equipment_id', pageIds)
 
-  if (equipmentIds.length > 0) query = query.in('equipment_id', equipmentIds)
   if (level) query = query.eq('level', level)
-  if (equipmentFilter) query = query.eq('equipment_id', equipmentFilter)
 
-  const { data: itemsRaw } = equipmentIds.length > 0 ? await query : { data: [] }
+  const { data: itemsRaw } = project && pageIds.length > 0 ? await query : { data: [] }
   const items = itemsRaw ?? []
   const itemIds = items.map((it) => it.id)
 
@@ -66,13 +105,31 @@ export default async function ChecklistsPage({
   const filesFor = (itemId: string) => attachments.filter((a) => a.checklist_item_id === itemId)
 
   const levelLabel = (v: string) => LEVELS.find((l) => l.value === v)?.label ?? v
-  const failed = items.filter((it) => it.status === 'fail').length
-  const pending = items.filter((it) => it.status === 'pending').length
-  const resolved = items.filter((it) => it.status === 'pass' || it.status === 'na').length
-  const percent = items.length > 0 ? Math.round((resolved / items.length) * 100) : 0
 
+  // The figures at the top describe the WHOLE project, not this page — so they
+  // come from counts rather than from the rows in front of you. Four small
+  // queries instead of one enormous one.
+  const countOf = async (statuses: string[] | null) => {
+    if (!project) return 0
+    let c = supabase.from('checklist_items').select('id', { count: 'exact', head: true }).eq('project_id', project.id)
+    if (level) c = c.eq('level', level)
+    if (statuses) c = c.in('status', statuses)
+    const { count: n } = await c
+    return n ?? 0
+  }
+
+  const [totalChecks, failed, pending, resolved] = await Promise.all([
+    countOf(null),
+    countOf(['fail']),
+    countOf(['pending']),
+    countOf(['pass', 'na']),
+  ])
+
+  const percent = totalChecks > 0 ? Math.round((resolved / totalChecks) * 100) : 0
+
+  const itemsByEquipment = bucketBy(items, (it) => it.equipment_id)
   const groups = equipment
-    .map((e) => ({ ...e, items: items.filter((it) => it.equipment_id === e.id) }))
+    .map((e) => ({ ...e, items: itemsByEquipment.get(e.id) ?? [] }))
     .filter((g) => g.items.length > 0)
 
   return (
@@ -414,6 +471,27 @@ export default async function ChecklistsPage({
           </p>
         </div>
       )}
+    {pages > 1 && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+          {page > 1 && (
+            <a href={`/checklists?page=${page - 1}${level ? `&level=${level}` : ''}`} className="btn btn-secondary btn-sm">
+              ← Previous tags
+            </a>
+          )}
+          <span className="text-secondary mono" style={{ fontSize: 12.5 }}>
+            tags {from + 1}–{Math.min(from + TAGS_PER_PAGE, totalTags)} of {totalTags} · page {page} of {pages}
+          </span>
+          {page < pages && (
+            <a href={`/checklists?page=${page + 1}${level ? `&level=${level}` : ''}`} className="btn btn-secondary btn-sm">
+              Next tags →
+            </a>
+          )}
+        </div>
+      )}
+
+      <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 12 }}>
+        The figures above cover the whole project. The checks listed are for the tags on this page.
+      </p>
     </>
   )
 }

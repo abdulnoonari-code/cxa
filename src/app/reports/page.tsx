@@ -6,6 +6,22 @@ import { isOverdue } from '@/lib/milestones'
 
 export const dynamic = 'force-dynamic'
 
+// Group rows by their equipment in one pass. The obvious nested filter is
+// equipment × rows, which is nothing on a demo project and twelve million
+// comparisons on a real substation.
+function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const row of rows) {
+    const k = key(row)
+    if (!k) continue
+    const list = map.get(k)
+    if (list) list.push(row)
+    else map.set(k, [row])
+  }
+  return map
+}
+
+
 // The progress report a commissioning agent hands over: where the project
 // stands, what is blocking it, and what is coming — on one page, printable,
 // and exportable to Excel from the button at the top.
@@ -17,15 +33,14 @@ export default async function ReportsPage() {
     : { data: [] }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   const { data: itemsRaw } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('checklist_items')
           .select('id, level, item, status, review_state, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
       : { data: [] as { id: string; level: string; item: string; status: string; review_state: string | null; equipment_id: string }[] }
 
   const items = itemsRaw ?? []
@@ -37,11 +52,11 @@ export default async function ReportsPage() {
       : { data: [] as { checklist_item_id: string }[] }
 
   const { data: issuesRaw } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('issues')
           .select('id, title, severity, category, status, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
       : { data: [] as { id: string; title: string; severity: string; category: string | null; status: string; equipment_id: string }[] }
 
   const issues = issuesRaw ?? []
@@ -86,11 +101,13 @@ export default async function ReportsPage() {
     }
   })
 
+  const itemsByEquipment = bucketBy(items, (it) => it.equipment_id)
+  const issuesByEquipment = bucketBy(openIssues, (i) => i.equipment_id)
   const equipmentRowsSummary = equipment.map((e) => {
-    const own = items.filter((it) => it.equipment_id === e.id)
+    const own = itemsByEquipment.get(e.id) ?? []
     const done = own.filter((it) => it.status === 'pass' || it.status === 'na').length
     const app = own.filter((it) => (it.review_state ?? 'draft') === 'approved').length
-    const openForTag = openIssues.filter((i) => i.equipment_id === e.id).length
+    const openForTag = (issuesByEquipment.get(e.id) ?? []).length
     return {
       ...e,
       checks: own.length,

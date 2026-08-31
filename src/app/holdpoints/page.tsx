@@ -130,7 +130,6 @@ export default async function HoldPointsPage({
     : { data: [] as { id: string; tag_id: string; description: string | null; location: string | null }[] }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagOf = new Map(equipment.map((e) => [e.id, e.tag_id]))
   const locationOf = new Map(equipment.map((e) => [e.id, e.location]))
 
@@ -162,11 +161,11 @@ export default async function HoldPointsPage({
     notices.find((n) => n.entity === entity && n.entity_id === entityId) ?? null
 
   const { data: checkRows } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('checklist_items')
           .select('id, item, level, status, inspection_type, notified_at, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
           .order('level', { ascending: true })
       : {
           data: [] as {
@@ -181,13 +180,13 @@ export default async function HoldPointsPage({
         }
 
   const { data: testRows } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('test_records')
           .select(
             'id, name, test_ref, result, inspection_type, notified_at, procedure_ref, criteria_type, expected_min, expected_max, unit, criteria_text, equipment_id'
           )
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
           .order('created_at', { ascending: true })
       : {
           data: [] as {

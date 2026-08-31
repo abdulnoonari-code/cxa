@@ -43,7 +43,6 @@ export default async function TestsPage({
     : { data: [] }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   const { data: instrumentRows } = project
@@ -64,16 +63,16 @@ export default async function TestsPage({
     )
     .order('created_at', { ascending: true })
 
-  if (equipmentIds.length > 0) query = query.in('equipment_id', equipmentIds)
+  if (project) query = query.eq('project_id', project.id)
   if (equipmentFilter) query = query.eq('equipment_id', equipmentFilter)
   if (resultFilter) query = query.eq('result', resultFilter)
 
-  const { data: testsRaw } = equipmentIds.length > 0 ? await query : { data: [] }
+  const { data: testsRaw } = project ? await query : { data: [] }
   const tests = testsRaw ?? []
 
   const { data: allRaw } =
-    equipmentIds.length > 0
-      ? await supabase.from('test_records').select('result, approval_state').in('equipment_id', equipmentIds)
+    project
+      ? await supabase.from('test_records').select('result, approval_state').eq('project_id', project.id)
       : { data: [] as { result: string; approval_state: string | null }[] }
 
   const all = allRaw ?? []

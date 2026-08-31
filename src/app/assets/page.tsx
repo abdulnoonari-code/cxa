@@ -2,10 +2,14 @@ import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
 import { loadProjectRollup, rollupFor } from '@/data/rollup'
-import { childrenOf, subjectLabel, subjectBadgeClass, type Subject } from '@/lib/subjects'
+import { childrenOf, subjectLabel, subjectBadgeClass, refKey, type Subject } from '@/lib/subjects'
 import { SubjectMeter, VerdictBadge } from '@/components/SubjectMeter'
 
 export const dynamic = 'force-dynamic'
+
+// Above this many tags the tree shows structure only, and equipment is reached
+// by opening a system. Below it, every tag is listed.
+const LEAF_LIMIT = 250
 
 export default async function AssetsPage() {
   const project = await getCurrentProject()
@@ -17,9 +21,20 @@ export default async function AssetsPage() {
 
   // Flatten the tree depth-first so it renders as one scannable table rather
   // than nested boxes — an engineer comparing forty systems needs rows.
+  //
+  // But a real substation carries thousands of tags, and rendering every one
+  // of them here makes the page unusable for the thing it is actually for,
+  // which is comparing systems. Past a threshold, the tree stops at the
+  // structure and each branch reports how many tags sit under it; you open a
+  // system to see its equipment. Small projects still show everything.
+  const equipmentCount = [...index.byKey.values()].filter((s) => s.type === 'equipment').length
+  const showLeaves = equipmentCount <= LEAF_LIMIT
+  const isLeaf = (t: string) => t === 'equipment' || t === 'component'
+
   type Row = { subject: Subject; depth: number }
   const rows: Row[] = []
   const walk = (subject: Subject, depth: number) => {
+    if (!showLeaves && isLeaf(subject.type)) return
     rows.push({ subject, depth })
     for (const child of childrenOf(index, { type: subject.type, id: subject.id })) {
       walk(child, depth + 1)
@@ -28,6 +43,23 @@ export default async function AssetsPage() {
   if (root) {
     for (const child of childrenOf(index, { type: 'project', id: root.id })) walk(child, 0)
   }
+
+  // How many tags hang under each row, so a collapsed branch still says how
+  // much is in it. Counted bottom-up in one pass rather than by re-walking the
+  // subtree per row, which on two thousand tags is the difference between a
+  // page and a stall.
+  const tagCount = new Map<string, number>()
+  const countTags = (subject: Subject): number => {
+    const key = refKey(subject)
+    const cached = tagCount.get(key)
+    if (cached !== undefined) return cached
+    let n = subject.type === 'equipment' ? 1 : 0
+    for (const child of childrenOf(index, { type: subject.type, id: subject.id })) n += countTags(child)
+    tagCount.set(key, n)
+    return n
+  }
+  if (root) countTags(root)
+  const tagsUnder = (subject: Subject): number => tagCount.get(refKey(subject)) ?? 0
 
   const counts = {
     systems: [...index.byKey.values()].filter((s) => s.type === 'system').length,
@@ -151,6 +183,11 @@ export default async function AssetsPage() {
                         <span className={subjectBadgeClass(subject.type)} style={{ fontSize: 10 }}>
                           {subjectLabel(subject.type)}
                         </span>
+                        {!showLeaves && tagsUnder(subject) > 0 && (
+                          <span className="text-secondary" style={{ fontSize: 11, marginLeft: 8 }}>
+                            {tagsUnder(subject)} tag{tagsUnder(subject) === 1 ? '' : 's'}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -197,6 +234,13 @@ export default async function AssetsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!showLeaves && (
+        <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 14 }}>
+          This project has <strong>{equipmentCount} tags</strong>, so the tree shows the structure and how many tags
+          sit under each branch. Open a system to see its equipment. Every number still counts every tag beneath it.
+        </p>
       )}
 
       <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 14 }}>

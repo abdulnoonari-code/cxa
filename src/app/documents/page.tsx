@@ -5,6 +5,22 @@ import { uploadDocument, deleteDocument } from './actions'
 
 export const dynamic = 'force-dynamic'
 
+// Group rows by their equipment in one pass. The obvious nested filter is
+// equipment × rows, which is nothing on a demo project and twelve million
+// comparisons on a real substation.
+function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const row of rows) {
+    const k = key(row)
+    if (!k) continue
+    const list = map.get(k)
+    if (list) list.push(row)
+    else map.set(k, [row])
+  }
+  return map
+}
+
+
 export default async function DocumentsPage({
   searchParams,
 }: {
@@ -19,15 +35,14 @@ export default async function DocumentsPage({
     : { data: [] }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   const { data: itemsRaw } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('checklist_items')
           .select('id, level, item, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
       : { data: [] as { id: string; level: string; item: string; equipment_id: string }[] }
 
   const items = itemsRaw ?? []
@@ -54,8 +69,9 @@ export default async function DocumentsPage({
 
   // Group checklist items by equipment so the picker below reads as
   // "GEN-01 → which check is this evidence for".
+  const byEquipment = bucketBy(items, (it) => it.equipment_id)
   const itemsByEquipment = equipment
-    .map((e) => ({ tag: e.tag_id, items: items.filter((it) => it.equipment_id === e.id) }))
+    .map((e) => ({ tag: e.tag_id, items: byEquipment.get(e.id) ?? [] }))
     .filter((g) => g.items.length > 0)
 
   return (

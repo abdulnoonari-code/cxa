@@ -41,7 +41,6 @@ export default async function NotificationsPage() {
     : { data: [] as { id: string; tag_id: string }[] }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagOf = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   const { data: signatureRows } = project
@@ -50,11 +49,11 @@ export default async function NotificationsPage() {
   const signatures = (signatureRows ?? []) as SignatureLike[]
 
   const { data: checkRows } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('checklist_items')
           .select('id, item, status, review_state, inspection_type, notified_at, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
       : {
           data: [] as {
             id: string
@@ -68,11 +67,11 @@ export default async function NotificationsPage() {
         }
 
   const { data: testRows } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('test_records')
           .select('id, name, result, approval_state, inspection_type, notified_at, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
       : {
           data: [] as {
             id: string
@@ -86,8 +85,8 @@ export default async function NotificationsPage() {
         }
 
   const { data: issueRows } =
-    equipmentIds.length > 0
-      ? await supabase.from('issues').select('title, category, status, severity').in('equipment_id', equipmentIds)
+    project
+      ? await supabase.from('issues').select('title, category, status, severity').eq('project_id', project.id)
       : { data: [] as { title: string; category: string | null; status: string; severity: string }[] }
 
   const { data: instrumentRows } = project

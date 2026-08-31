@@ -16,15 +16,14 @@ export async function GET() {
     .order('tag_id')
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   const { data: itemsRaw } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('checklist_items')
           .select('id, level, item, status, notes, ai_comment, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
           .order('level', { ascending: true })
       : { data: [] as {
           id: string

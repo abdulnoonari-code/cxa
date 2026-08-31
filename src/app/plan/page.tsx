@@ -9,15 +9,9 @@ export const dynamic = 'force-dynamic'
 export default async function PlanPage() {
   const project = await getCurrentProject()
 
-  const { data: equipmentRows } = project
-    ? await supabase.from('equipment').select('id').eq('project_id', project.id)
-    : { data: [] }
-
-  const equipmentIds = (equipmentRows ?? []).map((e) => e.id)
-
   const { data: items } =
-    equipmentIds.length > 0
-      ? await supabase.from('checklist_items').select('id, level, status').in('equipment_id', equipmentIds)
+    project
+      ? await supabase.from('checklist_items').select('id, level, status').eq('project_id', project.id)
       : { data: [] }
 
   const itemIds = (items ?? []).map((it) => it.id)

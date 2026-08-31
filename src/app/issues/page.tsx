@@ -26,7 +26,6 @@ export default async function IssuesPage({
     : { data: [] }
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   let query = supabase
@@ -34,14 +33,14 @@ export default async function IssuesPage({
     .select('id, equipment_id, checklist_item_id, title, description, severity, category, status, ai_comment, created_at')
     .order('created_at', { ascending: false })
 
-  if (equipmentIds.length > 0) {
-    query = query.in('equipment_id', equipmentIds)
+  if (project) {
+    query = query.eq('project_id', project.id)
   }
   if (status) query = query.eq('status', status)
   if (severity) query = query.eq('severity', severity)
   if (category) query = query.eq('category', category)
 
-  const { data: issuesRaw } = equipmentIds.length > 0 ? await query : { data: [] }
+  const { data: issuesRaw } = project ? await query : { data: [] }
   const issues = issuesRaw ?? []
 
   const openCritical = issues.filter(

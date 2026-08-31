@@ -14,6 +14,22 @@ function styleHeader(row: ExcelJS.Row) {
 
 // The progress report as a workbook: a summary tab a client can read, then the
 // underlying detail on its own tabs so nothing is asserted without backing.
+
+// Group rows by their equipment in one pass. The obvious nested filter is
+// equipment × rows, which is nothing on a demo project and twelve million
+// comparisons on a real substation.
+function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const row of rows) {
+    const k = key(row)
+    if (!k) continue
+    const list = map.get(k)
+    if (list) list.push(row)
+    else map.set(k, [row])
+  }
+  return map
+}
+
 export async function GET() {
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
@@ -25,15 +41,14 @@ export async function GET() {
     .order('tag_id')
 
   const equipment = equipmentRows ?? []
-  const equipmentIds = equipment.map((e) => e.id)
   const tagById = new Map(equipment.map((e) => [e.id, e.tag_id]))
 
   const { data: itemsRaw } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('checklist_items')
           .select('id, level, item, status, notes, review_state, review_comment, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
           .order('level', { ascending: true })
       : { data: [] as {
           id: string
@@ -56,11 +71,11 @@ export async function GET() {
   const attachments = attachmentsRaw ?? []
 
   const { data: issuesRaw } =
-    equipmentIds.length > 0
+    project
       ? await supabase
           .from('issues')
           .select('title, description, severity, category, status, equipment_id')
-          .in('equipment_id', equipmentIds)
+          .eq('project_id', project.id)
       : { data: [] as { title: string; description: string | null; severity: string; category: string | null; status: string; equipment_id: string }[] }
   const issues = issuesRaw ?? []
 
@@ -158,6 +173,8 @@ export async function GET() {
   }
 
   // ---- By equipment --------------------------------------------------------
+  const itemsByEquipment = bucketBy(items, (it) => it.equipment_id)
+  const issuesByEquipment = bucketBy(openIssues, (i) => i.equipment_id)
   const byTag = workbook.addWorksheet('By equipment')
   byTag.columns = [
     { header: 'Tag', key: 'tag', width: 16 },
@@ -170,7 +187,7 @@ export async function GET() {
   ]
   styleHeader(byTag.getRow(1))
   for (const e of equipment) {
-    const own = items.filter((it) => it.equipment_id === e.id)
+    const own = itemsByEquipment.get(e.id) ?? []
     const done = own.filter((it) => it.status === 'pass' || it.status === 'na').length
     const app = own.filter((it) => (it.review_state ?? 'draft') === 'approved').length
     const row = byTag.addRow({
@@ -180,7 +197,7 @@ export async function GET() {
       checks: own.length,
       pct: pct(done, own.length),
       appr: pct(app, own.length),
-      issues: openIssues.filter((i) => i.equipment_id === e.id).length,
+      issues: (issuesByEquipment.get(e.id) ?? []).length,
     })
     row.font = { name: 'Arial' }
     row.getCell(5).numFmt = '0.0%'

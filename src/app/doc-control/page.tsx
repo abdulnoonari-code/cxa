@@ -13,7 +13,7 @@ import {
   revisionBadgeClass,
   effectiveRevision,
 } from '@/lib/requirements'
-import { addDocument, addRevision, deleteDocument } from './actions'
+import { addDocument, addRevision, deleteDocument, attachRevisionFile, readRevisionObligations, readRevisionRequirements } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,12 @@ function when(value: string | null): string {
   return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })
 }
 
-export default async function DocumentControlPage() {
+export default async function DocumentControlPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ read?: string; words?: string; paras?: string; format?: string; detail?: string }>
+}) {
+  const sp = await searchParams
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
   const mayEdit = can(actor.role, 'review')
@@ -64,6 +69,49 @@ export default async function DocumentControlPage() {
         revision of each is currently in force. Requirements cite a document <em>and</em> a revision, so issuing a
         new revision shows you exactly what has to be re-read.
       </p>
+
+      {sp.read === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+          <strong>Attached and read.</strong> {sp.words} words across {sp.paras} paragraphs of{' '}
+          {String(sp.format ?? '').toUpperCase()}. Use <em>Obligations</em> or <em>Requirements</em> beside the
+          revision to file what it says.
+        </div>
+      )}
+      {sp.read === 'failed' && (
+        <div className="alert alert-danger">
+          <strong>Filed, but not readable.</strong> {sp.detail} The file is still attached to the revision — it is
+          the controlled document either way.
+        </div>
+      )}
+      {sp.read === 'notext' && (
+        <div className="alert alert-danger">
+          <strong>Nothing to read.</strong> No text was ever extracted from that revision. Attach a Word or
+          text-bearing PDF to it first.
+        </div>
+      )}
+      {sp.read === 'noobligations' && (
+        <div className="alert alert-info">
+          <strong>No duties found.</strong> {sp.paras} paragraphs were read and none of them placed a duty on
+          anybody. A drawing register or a schedule of quantities reads like this.
+        </div>
+      )}
+      {sp.read === 'norequirements' && (
+        <div className="alert alert-info">
+          <strong>No acceptance criteria found.</strong> {sp.paras} paragraphs were read and none of them stated a
+          limit, cited a standard or carried a measurement. A contract that is all commercial terms reads like this —
+          try <em>Obligations</em> instead.
+        </div>
+      )}
+      {sp.read === 'nofile' && (
+        <div className="alert alert-danger">
+          <strong>Nothing attached.</strong> Choose a file first.
+        </div>
+      )}
+      {sp.read === 'denied' && (
+        <div className="alert alert-danger">
+          <strong>Not allowed.</strong> Your role on this project cannot do that.
+        </div>
+      )}
 
       <div className="stat-grid">
         <div className="stat">
@@ -208,7 +256,8 @@ export default async function DocumentControlPage() {
                       <th>Revision</th>
                       <th>Status</th>
                       <th>Issued</th>
-                      <th>Note</th>
+                      <th style={{ minWidth: 220 }}>The document itself</th>
+                      <th style={{ minWidth: 250 }}>Read it</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -216,13 +265,74 @@ export default async function DocumentControlPage() {
                       <tr key={rev.id}>
                         <td className="mono" style={{ fontWeight: 500 }}>
                           {rev.rev}
+                          {rev.id === effective?.id && (
+                            <div className="text-secondary" style={{ fontSize: 11 }}>
+                              Work to this one
+                            </div>
+                          )}
                         </td>
                         <td>
                           <span className={revisionBadgeClass(rev.status)}>{revisionStatusLabel(rev.status)}</span>
                         </td>
                         <td style={{ fontSize: 13 }}>{when(rev.issued_date)}</td>
-                        <td className="text-secondary" style={{ fontSize: 12.5 }}>
-                          {rev.id === effective?.id ? 'Work to this one' : ''}
+                        <td style={{ fontSize: 12.5 }}>
+                          {rev.file_name ? (
+                            <>
+                              {rev.file_url ? (
+                                <a href={rev.file_url} className="link" target="_blank" rel="noreferrer">
+                                  {rev.file_name}
+                                </a>
+                              ) : (
+                                rev.file_name
+                              )}
+                              <div className="text-secondary" style={{ fontSize: 11 }}>
+                                {rev.extracted_at
+                                  ? `${String(rev.source_format ?? '').toUpperCase()} · ${rev.word_count ?? 0} words${
+                                      rev.page_count ? ` · ${rev.page_count} pages` : ''
+                                    }`
+                                  : 'Filed, but no text could be read from it'}
+                              </div>
+                            </>
+                          ) : mayEdit ? (
+                            <form action={attachRevisionFile} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input type="hidden" name="revision_id" value={rev.id} />
+                              <input
+                                type="file"
+                                name="file"
+                                accept=".docx,.pdf,.txt,.md"
+                                required
+                                className="input"
+                                style={{ fontSize: 11, padding: 4 }}
+                              />
+                              <button type="submit" className="btn btn-secondary btn-sm">
+                                Attach
+                              </button>
+                            </form>
+                          ) : (
+                            <span className="text-secondary">Not attached</span>
+                          )}
+                        </td>
+                        <td>
+                          {rev.extracted_at && mayEdit ? (
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <form action={readRevisionObligations}>
+                                <input type="hidden" name="revision_id" value={rev.id} />
+                                <button type="submit" className="btn btn-secondary btn-sm">
+                                  Obligations
+                                </button>
+                              </form>
+                              <form action={readRevisionRequirements}>
+                                <input type="hidden" name="revision_id" value={rev.id} />
+                                <button type="submit" className="btn btn-secondary btn-sm">
+                                  Requirements
+                                </button>
+                              </form>
+                            </div>
+                          ) : (
+                            <span className="text-secondary" style={{ fontSize: 12 }}>
+                              {rev.file_name ? '—' : 'Attach the file first'}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

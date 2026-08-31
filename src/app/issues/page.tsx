@@ -91,6 +91,21 @@ export default async function IssuesPage({
       return (a.code ?? a.name).localeCompare(b.code ?? b.name)
     })
 
+  // The export routes read the same filters off the URL that this page does,
+  // so the file always matches what is on screen.
+  const exportParams = new URLSearchParams()
+  for (const [k, v] of Object.entries({
+    status: sp.status,
+    category: sp.category,
+    severity: sp.severity,
+    level: sp.level,
+    party: sp.party,
+    open: sp.open,
+  })) {
+    if (v) exportParams.set(k, v)
+  }
+  const exportSuffix = exportParams.toString() ? `?${exportParams.toString()}` : ''
+
   const query = (extra: Record<string, string | null>) => {
     const params = new URLSearchParams()
     const merged: Record<string, string | null> = {
@@ -230,13 +245,24 @@ export default async function IssuesPage({
           Remove column to delete one. If any row cannot be read, <strong>nothing is imported at all</strong>.
         </p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-          <a href="/issues/export" className="btn btn-secondary btn-sm">
-            Export punch list (Excel)
+          <a href={`/issues/pdf${exportSuffix}`} className="btn btn-secondary btn-sm">
+            PDF
+          </a>
+          <a href={`/issues/word${exportSuffix}`} className="btn btn-secondary btn-sm">
+            Word
+          </a>
+          <a href={`/issues/export${exportSuffix}`} className="btn btn-secondary btn-sm">
+            Excel
           </a>
           <a href="/issues/template" className="btn btn-secondary btn-sm">
-            Download blank template
+            Blank template
           </a>
         </div>
+        <p className="text-secondary" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 14 }}>
+          Whatever the filters below are set to is what goes into the file, so one contractor&apos;s items can be
+          issued to that contractor and nothing else. <strong>PDF and Word</strong> are documents to issue and file;{' '}
+          <strong>Excel</strong> is the one that comes back edited.
+        </p>
         <form action={importPunchList} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label className="field" style={{ flex: '1 1 320px' }}>
             Marked-up punch list (.xlsx or .csv)

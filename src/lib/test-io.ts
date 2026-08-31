@@ -180,15 +180,31 @@ export type Criteria = {
   criteria_text: string | null
 }
 
-const UNIT_AFTER = /([\d.]+)\s*([a-zA-Zµμ°%Ω/·⋅]+(?:\s?[a-zA-Z]+)?)\s*$/
+const UNIT_AT_END = /([\d.]+)\s*([a-zA-Zµμ°%Ω/·⋅]+(?:\s?[a-zA-Z]+)?)\s*$/
 
-function unitFrom(text: string): string | null {
-  const match = text.match(UNIT_AFTER)
-  const unit = match?.[2]?.trim()
-  if (!unit) return null
-  // Words that follow a number but are not units.
-  if (/^(and|or|to|max|min|at|of|per|each|no|nos)$/i.test(unit)) return null
-  return unit
+// Words that follow a number but are not units.
+const NOT_A_UNIT = /^(and|or|to|max|min|at|of|per|each|no|nos|above|below|from|for|in|on|with|the|a|an)$/i
+
+/**
+ * The unit belonging to a particular number.
+ *
+ * A criterion written on its own — "≤ 60 ms" — has its unit at the end of the
+ * string. A criterion written inside a specification clause does not: "shall
+ * not exceed 60 ms at rated operating voltage" has five words after the unit.
+ * So the unit is looked for immediately after the number it belongs to, and
+ * only falls back to the end of the string when that finds nothing.
+ */
+function unitFor(text: string, value: number | null): string | null {
+  if (value !== null) {
+    const literal = String(value).replace('.', '\\.')
+    const near = text.match(new RegExp(`${literal}\\s*([a-zA-Zµμ°%Ω/·⋅]+)`))
+    const unit = near?.[1]?.trim()
+    if (unit && !NOT_A_UNIT.test(unit)) return unit
+  }
+  const end = text.match(UNIT_AT_END)
+  const trailing = end?.[2]?.trim()
+  if (trailing && !NOT_A_UNIT.test(trailing)) return trailing
+  return null
 }
 
 /**
@@ -211,7 +227,6 @@ export function parseCriteria(raw: string): Criteria {
   if (!text) return asText
 
   const lower = text.toLowerCase()
-  const unit = unitFrom(text)
 
   // Ranges first — a range contains two numbers and would otherwise be read
   // as whichever comparison appears first.
@@ -226,7 +241,7 @@ export function parseCriteria(raw: string): Criteria {
         criteria_type: 'range',
         expected_min: Math.min(a, b),
         expected_max: Math.max(a, b),
-        unit,
+        unit: unitFor(text, Math.max(a, b)),
         criteria_text: text,
       }
     }
@@ -243,8 +258,11 @@ export function parseCriteria(raw: string): Criteria {
   const hasNegatedMax = negatedMax.test(text)
   const rest = text.replace(negatedMin, ' ').replace(negatedMax, ' ')
 
-  const isMin = hasNegatedMin || /(?:≥|>=|>|\bmin(?:imum)?\b|\bgreater than\b|\babove\b)/i.test(rest)
-  const isMax = hasNegatedMax || /(?:≤|<=|<|\bmax(?:imum)?\b|\bless than\b|\bbelow\b)/i.test(rest)
+  // "above" and "below" are excluded on purpose: "65 K above ambient" is a
+  // maximum, and reading "above" as a floor inverts the criterion silently.
+  const isMin = hasNegatedMin || /(?:≥|>=|>|\bmin(?:imum)?\b|\bgreater than\b)/i.test(rest)
+  const isMax =
+    hasNegatedMax || /(?:≤|<=|<|\bmax(?:imum)?\b|\bless than\b|\blimited to\b|\bup to\b|\bwithin\b)/i.test(rest)
 
   const number = toNumber(text)
   if (number === null) return asText
@@ -258,7 +276,7 @@ export function parseCriteria(raw: string): Criteria {
         criteria_type: 'range',
         expected_min: Math.min(...numbers),
         expected_max: Math.max(...numbers),
-        unit,
+        unit: unitFor(text, Math.max(...numbers)),
         criteria_text: text,
       }
     }
@@ -266,10 +284,10 @@ export function parseCriteria(raw: string): Criteria {
   }
 
   if (isMin) {
-    return { criteria_type: 'min', expected_min: number, expected_max: null, unit, criteria_text: text }
+    return { criteria_type: 'min', expected_min: number, expected_max: null, unit: unitFor(text, number), criteria_text: text }
   }
   if (isMax) {
-    return { criteria_type: 'max', expected_min: null, expected_max: number, unit, criteria_text: text }
+    return { criteria_type: 'max', expected_min: null, expected_max: number, unit: unitFor(text, number), criteria_text: text }
   }
 
   // A bare number with no comparison is not a criterion — "50" could be a

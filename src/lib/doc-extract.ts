@@ -107,6 +107,18 @@ function toParagraphs(lines: string[], pageOf: (index: number) => number | null)
 }
 
 /**
+ * Turn already-extracted text back into paragraphs.
+ *
+ * A revision's text is stored once, when the file is attached. Reading it for
+ * obligations today and for requirements next week must not mean uploading
+ * the file twice — and more importantly, both reads must see exactly the same
+ * paragraphs, or the two registers will cite the same document differently.
+ */
+export function paragraphsFromText(text: string): Para[] {
+  return toParagraphs(text.split(/\r?\n/), () => null)
+}
+
+/**
  * Turn an uploaded document into paragraphs.
  *
  * Never throws. A corrupt file, a scanned PDF with no text layer, a format

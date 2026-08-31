@@ -12,6 +12,8 @@
 //
 // Everything here is derived from the record. Nothing is stored twice.
 
+import { acceptanceIn } from '@/lib/requirement-reader'
+
 // ── Who owes it ──────────────────────────────────────────────────────────
 //
 // The parties on a commissioning job, in the order they appear in a contract
@@ -238,6 +240,16 @@ export function typeIn(text: string): string {
   return 'other'
 }
 
+// A clause can genuinely be a duty AND a criterion — "the Contractor shall
+// ensure insulation resistance is not less than 1000 MΩ" is both, and it
+// belongs on both registers. But a clause that states a plant criterion and
+// names nobody — "Breaker total break time shall not exceed 60 ms" — is a
+// requirement and nothing else. Letting it through fills the obligations
+// register with unassigned rows that no party can ever be asked about.
+function isPlantCriterionOnly(text: string, party: PartyValue | null): boolean {
+  return party === null && acceptanceIn(text) !== null
+}
+
 export type Candidate = {
   clause: string | null
   page: number | null
@@ -274,14 +286,17 @@ export function readObligations(
     // Fragments are almost always a table cell or a broken line, not a duty.
     if (para.text.length < 25) continue
 
+    // The party may be named in the clause itself or in the heading above it
+    // — "7  CONTRACTOR'S OBLIGATIONS" followed by "shall submit…" is the
+    // commonest shape there is.
+    const party = partyIn(para.text) ?? (heading ? partyIn(heading) : null)
+    if (isPlantCriterionOnly(para.text, party)) continue
+
     found.push({
       clause: para.clause,
       page: para.page,
       statement: para.text,
-      // The party may be named in the clause itself or in the heading above it
-      // — "7  CONTRACTOR'S OBLIGATIONS" followed by "shall submit…" is the
-      // commonest shape there is.
-      party: partyIn(para.text) ?? (heading ? partyIn(heading) : null),
+      party,
       obligation_type: typeIn(para.text),
       noticeDays: noticeDaysIn(para.text),
       context: heading,

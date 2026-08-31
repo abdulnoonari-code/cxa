@@ -124,6 +124,15 @@ export type Revision = {
   issued_date: string | null
   effective_from: string | null
   superseded_by: string | null
+  // Filled in when the actual document is attached and read. A revision with
+  // no text has not been read — which is different from a revision whose text
+  // contained nothing worth filing.
+  file_name?: string | null
+  file_url?: string | null
+  word_count?: number | null
+  page_count?: number | null
+  source_format?: string | null
+  extracted_at?: string | null
 }
 
 // The revision to work to: the approved one, or failing that the latest issued

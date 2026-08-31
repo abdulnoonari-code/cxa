@@ -225,6 +225,23 @@ export default async function ValidityPage({
         </div>
       )}
 
+      {/* ── Out ────────────────────────────────────────────────────────── */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2 className="section-title">Issue this review</h2>
+        <p className="text-secondary" style={{ fontSize: 13, marginBottom: 14 }}>
+          The document an auditor asks for, and the one worth issuing before they do — every finding with the reason
+          it matters written beside it. The severity filter above carries into the file.
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <a href={`/validity/pdf${sp.severity ? `?severity=${sp.severity}` : ''}`} className="btn btn-secondary btn-sm">
+            PDF
+          </a>
+          <a href={`/validity/word${sp.severity ? `?severity=${sp.severity}` : ''}`} className="btn btn-secondary btn-sm">
+            Word
+          </a>
+        </div>
+      </div>
+
       {/* ── The Claude pass ────────────────────────────────────────────── */}
       <h2 className="section-title" style={{ marginTop: 32 }}>
         Ask Claude what is missing

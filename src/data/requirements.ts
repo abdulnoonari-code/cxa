@@ -74,7 +74,7 @@ export async function loadDocuments(projectId: string | null): Promise<{
   if (documents.length > 0) {
     const { data: revRows } = await supabase
       .from('document_revisions')
-      .select('id, document_id, rev, status, issued_date, effective_from, superseded_by')
+      .select('id, document_id, rev, status, issued_date, effective_from, superseded_by, file_name, file_url, word_count, page_count, source_format, extracted_at')
       .in(
         'document_id',
         documents.map((d) => d.id)

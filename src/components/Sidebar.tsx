@@ -198,6 +198,14 @@ const ICONS = {
       <path d="M15.2 16.6l.9.9 2-2.1" />
     </>
   ),
+  dossier: icon(
+    <>
+      <path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v13a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19.5Z" />
+      <path d="M8 3v4M16 3v4M7.5 10.5h9M7.5 14h6" />
+      <circle cx="16.5" cy="16.5" r="3" />
+      <path d="M15.3 16.6l.8.8 1.9-2" />
+    </>
+  ),
   validity: icon(
     <>
       <circle cx="10.5" cy="10.5" r="6.5" />
@@ -354,6 +362,10 @@ export async function Sidebar() {
         </Link>
 
         <div className="sidebar-section-label">Quality</div>
+        <Link href="/dossier" className="nav-link">
+          {ICONS.dossier}
+          Handover Packs
+        </Link>
         <Link href="/validity" className="nav-link">
           {ICONS.validity}
           Validity Review

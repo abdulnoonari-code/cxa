@@ -172,6 +172,13 @@ export async function toPdf(report: Report): Promise<Buffer> {
     const doc = new PDFDocument({
       size: 'A4',
       margin: PAGE_MARGIN,
+      // Pages are buffered so the footers can be stamped at the end, when the
+      // total is known. Stamping them as pages appear cannot work: the handler
+      // has to move the text cursor to the bottom of the page to draw there,
+      // and the caller then writes its next line into that position, overflows
+      // immediately, and adds another page. That loop turned a four-page pack
+      // into two hundred and sixty-eight.
+      bufferPages: true,
       info: { Title: report.title, Author: 'CxSentinel', Subject: report.project },
     })
     const chunks: Buffer[] = []
@@ -182,26 +189,36 @@ export async function toPdf(report: Report): Promise<Buffer> {
     const width = doc.page.width - PAGE_MARGIN * 2
     const bottom = doc.page.height - PAGE_MARGIN - 26
 
-    // A running footer on every page, added as pages appear. A register
-    // without page numbers is not a document anybody can refer to in writing.
-    let pageNumber = 0
-    const stampFooter = () => {
-      pageNumber += 1
-      const y = doc.page.height - PAGE_MARGIN - 16
-      doc
-        .save()
-        .strokeColor(RULE)
-        .lineWidth(0.5)
-        .moveTo(PAGE_MARGIN, y - 6)
-        .lineTo(PAGE_MARGIN + width, y - 6)
-        .stroke()
-        .fillColor(MUTED)
-        .fontSize(7.5)
-        .text(`${report.project} · ${report.title} · ${when(at)}`, PAGE_MARGIN, y, { width: width - 60, lineBreak: false })
-        .text(`Page ${pageNumber}`, PAGE_MARGIN + width - 60, y, { width: 60, align: 'right', lineBreak: false })
-        .restore()
+    // A running footer on every page, stamped at the end over the buffered
+    // pages so each one can say "page 3 of 11". A register without page
+    // numbers is not a document anybody can refer to in writing.
+    const stampFooters = () => {
+      const range = doc.bufferedPageRange()
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i)
+        const y = doc.page.height - PAGE_MARGIN - 16
+        doc
+          .save()
+          .strokeColor(RULE)
+          .lineWidth(0.5)
+          .moveTo(PAGE_MARGIN, y - 6)
+          .lineTo(PAGE_MARGIN + width, y - 6)
+          .stroke()
+          .fillColor(MUTED)
+          .font('Helvetica')
+          .fontSize(7.5)
+          .text(`${report.project} · ${report.title} · ${when(at)}`, PAGE_MARGIN, y, {
+            width: width - 70,
+            lineBreak: false,
+          })
+          .text(`Page ${i - range.start + 1} of ${range.count}`, PAGE_MARGIN + width - 70, y, {
+            width: 70,
+            align: 'right',
+            lineBreak: false,
+          })
+          .restore()
+      }
     }
-    doc.on('pageAdded', stampFooter)
 
     const ensure = (needed: number) => {
       if (doc.y + needed > bottom) doc.addPage()
@@ -316,7 +333,8 @@ export async function toPdf(report: Report): Promise<Buffer> {
       doc.fillColor(MUTED).fontSize(8).font('Helvetica-Oblique').text(note, PAGE_MARGIN, doc.y, { width })
     }
 
-    stampFooter() // the first page never fires pageAdded
+    stampFooters()
+    doc.flushPages()
     doc.end()
   })
 }
@@ -340,5 +358,11 @@ export function pdfResponse(buffer: Buffer, fileName: string): Response {
 }
 
 export function safeFileName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  // Collapse the runs. A subject titled "SUB-A — Substation A" has three
+  // characters in a row that are not filename-safe, and one underscore per
+  // character gave "SUB-A___Substation_A".
+  return name
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+(?=\.)|_+$/g, '')
 }

@@ -8,6 +8,10 @@ import { actorCan, recordAudit } from '@/lib/audit'
 import { loadSubjectIndex } from '@/data/subjects'
 import { loadItp } from '@/data/itp'
 import { parseItpWorkbook, reconcile, summariseImport, type ItpProblem, type ExistingActivity } from '@/lib/itp-io'
+import { isParty, partyLabel, planPointChange, conventionAllowed } from '@/lib/itp'
+import { INSPECTION_TYPES, inspectionLabel } from '@/lib/inspection'
+import { LEVELS } from '@/lib/checklist'
+import { levelLabel } from '@/lib/levels'
 
 function refresh() {
   revalidatePath('/itp')
@@ -143,4 +147,162 @@ export async function importItp(formData: FormData) {
 
   refresh()
   redirect(`/itp?import=ok&changed=${result.updates.length}&unchanged=${result.unchanged}`)
+}
+
+// ── Setting a holder from the screen ─────────────────────────────────────
+//
+// Until now the only two ways to say who holds a point were SQL and a
+// round trip through Excel. Exporting a two-thousand-row workbook to correct
+// one hold point is not a workflow, it is a punishment, so this is the third
+// way and the one people will actually use.
+
+/** Back to the scope the user was looking at, ready for one more parameter. */
+function backTo(formData: FormData): string {
+  const scope = formData.get('scope')
+  return typeof scope === 'string' && scope ? `/itp?${scope}&` : '/itp?'
+}
+
+/**
+ * Say who holds one inspection point, and optionally what kind of point it is.
+ *
+ * Both are decisions rather than data entry, so both are audited by name with
+ * the old value beside the new one. A hold point quietly changing hands is
+ * exactly the thing somebody argues about at handover.
+ */
+export async function setPointParty(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) redirect('/itp?set=noproject')
+  if (!(await actorCan('review', project.id))) redirect('/itp?set=denied')
+
+  const entity = String(formData.get('entity') ?? '')
+  const id = String(formData.get('id') ?? '')
+  const tag = String(formData.get('tag') ?? '')
+  const activity = String(formData.get('activity') ?? '')
+  const rawParty = String(formData.get('party') ?? '')
+  const rawType = String(formData.get('inspection_type') ?? '')
+  const wasParty = String(formData.get('was_party') ?? '')
+  const wasType = String(formData.get('was_type') ?? '')
+
+  if (!id || (entity !== 'checklist_item' && entity !== 'test_record')) redirect(`${backTo(formData)}set=badrow`)
+
+  const table = entity === 'test_record' ? 'test_records' : 'checklist_items'
+
+  // The decision is a rule and lives in lib/itp.ts so it can be asserted.
+  // This function does the permission check, the write and the audit.
+  const change = planPointChange({
+    wasParty: wasParty || null,
+    wasType,
+    party: rawParty,
+    type: rawType || null,
+  })
+
+  if (!change.ok) redirect(`${backTo(formData)}set=${change.reason === 'no_change' ? 'nochange' : change.reason === 'bad_party' ? 'badparty' : 'badtype'}`)
+
+  const patch = change.patch as Record<string, unknown>
+
+  const { error } = await supabase.from(table).update(patch).eq('id', id).eq('project_id', project.id)
+  if (error) redirect(`${backTo(formData)}set=failed`)
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'inspection point changed',
+    entity,
+    entityId: id,
+    entityLabel: tag,
+    oldValue: `${inspectionLabel(wasType)}, held by ${wasParty ? partyLabel(wasParty) : 'nobody'}`,
+    newValue: `${inspectionLabel(rawType || wasType)}, held by ${rawParty ? partyLabel(rawParty) : 'nobody'}`,
+    comment: `${tag} — ${activity}: ${change.describe}`,
+  })
+
+  refresh()
+  redirect(`${backTo(formData)}set=ok`)
+}
+
+// ── The project's standing defaults ──────────────────────────────────────
+
+/**
+ * Set a project default: at this level, this kind of point belongs to this
+ * party.
+ *
+ * **It writes nothing onto any record.** A convention is a fallback the ITP
+ * applies while it is being read, so removing it later puts every point that
+ * leant on it straight back to unowned — visibly, on the screen, which is the
+ * whole reason it is derived rather than stored. If adding a default silently
+ * stamped a party onto two thousand rows, deleting it afterwards would leave
+ * them all claiming an agreement nobody made.
+ */
+export async function addConvention(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) redirect('/itp?conv=noproject')
+  if (!(await actorCan('manage', project.id))) redirect('/itp?conv=denied')
+
+  const level = String(formData.get('level') ?? '')
+  const inspectionType = String(formData.get('inspection_type') ?? '')
+  const party = String(formData.get('party') ?? '')
+  const note = String(formData.get('note') ?? '').trim()
+
+  if (!LEVELS.some((l) => l.value === level)) redirect('/itp?conv=badlevel')
+  if (!INSPECTION_TYPES.some((t) => t.value === inspectionType)) redirect('/itp?conv=badtype')
+  if (!isParty(party)) redirect('/itp?conv=badparty')
+
+  // Surveillance and review points carry no release, so nobody needs to hold
+  // them. A default for one would put a party on four hundred rows that will
+  // never be waiting on anybody.
+  if (!conventionAllowed(inspectionType)) redirect('/itp?conv=norelease')
+
+  const { error } = await supabase
+    .from('itp_conventions')
+    .upsert(
+      {
+        project_id: project.id,
+        level,
+        inspection_type: inspectionType,
+        party,
+        note: note || null,
+      },
+      { onConflict: 'project_id,level,inspection_type' }
+    )
+  if (error) redirect('/itp?conv=failed')
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'ITP default set',
+    entity: 'itp_convention',
+    entityLabel: `${level} ${inspectionType}`,
+    newValue: partyLabel(party),
+    comment: `At ${levelLabel(level)}, a ${inspectionLabel(inspectionType)} falls to the ${partyLabel(
+      party
+    )} unless the activity says otherwise. Nothing was written onto any record.`,
+  })
+
+  refresh()
+  redirect('/itp?conv=ok')
+}
+
+export async function removeConvention(formData: FormData) {
+  const project = await getCurrentProject()
+  if (!project) redirect('/itp?conv=noproject')
+  if (!(await actorCan('manage', project.id))) redirect('/itp?conv=denied')
+
+  const level = String(formData.get('level') ?? '')
+  const inspectionType = String(formData.get('inspection_type') ?? '')
+
+  const { error } = await supabase
+    .from('itp_conventions')
+    .delete()
+    .eq('project_id', project.id)
+    .eq('level', level)
+    .eq('inspection_type', inspectionType)
+  if (error) redirect('/itp?conv=failed')
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'ITP default removed',
+    entity: 'itp_convention',
+    entityLabel: `${level} ${inspectionType}`,
+    comment: `Every point that was relying on this default now has no party, and the plan says so.`,
+  })
+
+  refresh()
+  redirect('/itp?conv=removed')
 }

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { importItp } from './actions'
+import { importItp, setPointParty, addConvention, removeConvention } from './actions'
 import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
 import { loadItp } from '@/data/itp'
@@ -21,6 +21,7 @@ import {
   toneBadgeClass,
   severityBadgeClass,
   severityWord,
+  PARTIES,
   partyShort,
   partyLabel,
   PARTY_SOURCE_LABELS,
@@ -43,6 +44,8 @@ export default async function ItpPage({
     first?: string
     headings?: string
     at?: string
+    set?: string
+    conv?: string
   }>
 }) {
   const sp = await searchParams
@@ -84,6 +87,9 @@ export default async function ItpPage({
     .sort((a, b) => (a.code ?? a.name).localeCompare(b.code ?? b.name))
 
   const qs = ref ? `?type=${ref.type}&id=${ref.id}` : ''
+  // The querystring without its '?', so an action can send the user back to
+  // the scope they were looking at rather than to the whole project.
+  const scope = ref ? `type=${ref.type}&id=${ref.id}` : ''
 
   return (
     <>
@@ -469,6 +475,7 @@ export default async function ItpPage({
                       <th style={{ width: 120 }}>Point</th>
                       <th style={{ width: 170 }}>Held by</th>
                       <th style={{ width: 150 }}>State</th>
+                      <th style={{ width: 250 }}>Set who holds it</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -524,6 +531,66 @@ export default async function ItpPage({
                             </span>
                           )}
                         </td>
+                        {/* Say who holds it, here, without a round trip through
+                            Excel. Both fields are decisions, so both are
+                            audited by name with the old value beside the new. */}
+                        <td>
+                          <form
+                            action={setPointParty}
+                            style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <input type="hidden" name="entity" value={r.entity} />
+                            <input type="hidden" name="id" value={r.id} />
+                            <input type="hidden" name="tag" value={r.tag} />
+                            <input type="hidden" name="activity" value={r.activity} />
+                            <input type="hidden" name="scope" value={scope} />
+                            <input type="hidden" name="was_party" value={r.holder.source === 'explicit' ? r.holder.party ?? '' : ''} />
+                            <input type="hidden" name="was_type" value={r.inspectionType} />
+                            <select
+                              name="inspection_type"
+                              defaultValue={r.inspectionType}
+                              className="input"
+                              style={{ fontSize: 11.5, padding: '3px 5px', width: 124 }}
+                              aria-label="Point type"
+                            >
+                              {INSPECTION_TYPES.map((t) => (
+                                <option key={t.value} value={t.value}>
+                                  {t.code} — {t.label.replace(' Point', '')}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              name="party"
+                              defaultValue={r.holder.source === 'explicit' ? r.holder.party ?? '' : ''}
+                              className="input"
+                              style={{ fontSize: 11.5, padding: '3px 5px', width: 150 }}
+                              aria-label="Held by"
+                            >
+                              {/* Nobody is a real answer, not a missing one.
+                                  On a row whose party came from the project
+                                  default, the selector reads "Nobody" while the
+                                  column beside it reads "CxA", which looks like
+                                  a bug and is not: the default is a fallback,
+                                  nothing is written against the activity, and
+                                  choosing that same party here is what turns
+                                  the assumption into an agreement. So the
+                                  option says so. */}
+                              <option value="">
+                                {r.holder.source === 'convention'
+                                  ? `Nobody — default gives ${partyShort(r.holder.party)}`
+                                  : 'Nobody'}
+                              </option>
+                              {PARTIES.map((p) => (
+                                <option key={p.value} value={p.value}>
+                                  {partyShort(p.value)}
+                                </option>
+                              ))}
+                            </select>
+                            <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>
+                              Set
+                            </button>
+                          </form>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -550,33 +617,122 @@ export default async function ItpPage({
         </div>
       )}
 
-      {plan.conventions.length > 0 && (
-        <div className="card" style={{ marginTop: 18 }}>
-          <h2 className="section-title">The project&rsquo;s defaults</h2>
-          <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
-            Used only where an activity does not name a party itself. A point assigned this way is printed in brackets
-            on the ITP, because it is what this project usually does and not what anybody agreed for this activity.
+      {/* ── The project's standing defaults ─────────────────────────────── */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2 className="section-title">The project&rsquo;s defaults</h2>
+        <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 4px' }}>
+          &ldquo;At L4, Hold Points are the Client&rsquo;s, unless the activity says otherwise.&rdquo; Defaults exist so
+          a thousand imported rows are not all unowned. A point assigned this way prints in brackets on the ITP,
+          because it is what this project usually does and not what anybody agreed for that activity.
+        </p>
+        <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
+          <strong>Setting one writes nothing onto any record.</strong> It is a fallback applied while the plan is read,
+          so removing it later puts every point that leant on it straight back to unowned — visibly, on this page. If a
+          default stamped a party onto two thousand rows, deleting it afterwards would leave them all claiming an
+          agreement nobody made.
+        </p>
+
+        {sp.conv === 'ok' && <p className="badge badge-success" style={{ display: 'inline-block' }}>Default set. No record was changed.</p>}
+        {sp.conv === 'removed' && (
+          <p className="badge badge-neutral" style={{ display: 'inline-block' }}>
+            Removed. Any point that was relying on it now has no party.
           </p>
-          <table className="table">
-            <thead>
+        )}
+        {sp.conv === 'norelease' && (
+          <p className="badge badge-warning" style={{ display: 'inline-block' }}>
+            Surveillance and Review points carry no release, so nobody needs to hold them.
+          </p>
+        )}
+        {sp.conv === 'denied' && (
+          <p className="badge badge-danger" style={{ display: 'inline-block' }}>Your role cannot set project defaults.</p>
+        )}
+
+        <table className="table" style={{ marginTop: 10 }}>
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Point type</th>
+              <th>Falls to</th>
+              <th style={{ width: 200 }}>Why</th>
+              <th style={{ width: 90 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.conventions.length === 0 && (
               <tr>
-                <th>Level</th>
-                <th>Point type</th>
-                <th>Held by</th>
+                <td colSpan={5} className="text-secondary" style={{ fontSize: 12.5 }}>
+                  No defaults. Every party on this plan was written against its own activity — which is the stronger
+                  position to be in, as long as the points are not sitting unowned.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {plan.conventions.map((c, i) => (
-                <tr key={i}>
-                  <td style={{ fontSize: 12.5 }}>{LEVELS.find((l) => l.value === c.level)?.label ?? c.level}</td>
-                  <td style={{ fontSize: 12.5 }}>{inspectionLabel(c.inspection_type)}</td>
-                  <td style={{ fontSize: 12.5 }}>{partyLabel(c.party)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            )}
+            {plan.conventions.map((c, i) => (
+              <tr key={i} style={levelRuleStyle(c.level)}>
+                <td>
+                  <LevelBadge level={c.level} format="full" />
+                </td>
+                <td style={{ fontSize: 12.5 }}>{inspectionLabel(c.inspection_type)}</td>
+                <td style={{ fontSize: 12.5 }}>{partyLabel(c.party)}</td>
+                <td className="text-secondary" style={{ fontSize: 12 }}>
+                  {c.note ?? '—'}
+                </td>
+                <td>
+                  <form action={removeConvention}>
+                    <input type="hidden" name="level" value={c.level} />
+                    <input type="hidden" name="inspection_type" value={c.inspection_type} />
+                    <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>
+                      Remove
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <form
+          action={addConvention}
+          style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}
+        >
+          <select name="level" required className="input" style={{ fontSize: 12.5, maxWidth: 250 }} defaultValue="">
+            <option value="" disabled>
+              At which level…
+            </option>
+            {LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+          <select name="inspection_type" required className="input" style={{ fontSize: 12.5, maxWidth: 170 }} defaultValue="">
+            <option value="" disabled>
+              …which kind of point…
+            </option>
+            {/* Only the two that carry a release. A default for a surveillance
+                check would put a party on four hundred rows that will never be
+                waiting on anybody. */}
+            {INSPECTION_TYPES.filter((t) => t.value === 'hold' || t.value === 'witness').map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.code} — {t.label}
+              </option>
+            ))}
+          </select>
+          <select name="party" required className="input" style={{ fontSize: 12.5, maxWidth: 220 }} defaultValue="">
+            <option value="" disabled>
+              …falls to whom
+            </option>
+            {PARTIES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <input name="note" placeholder="Why, in a few words (optional)" className="input" style={{ fontSize: 12.5, maxWidth: 280 }} />
+          <button type="submit" className="btn btn-primary btn-sm">
+            Set default
+          </button>
+        </form>
+      </div>
 
       <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 18 }}>
         This plan is derived from the checklist and test registers every time the page loads. Nothing on it is stored,

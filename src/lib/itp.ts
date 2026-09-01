@@ -455,6 +455,68 @@ export function hasUnassigned(rows: ItpActivity[]): boolean {
   return rows.some((r) => !r.holder.party)
 }
 
+// ── Changing one point by hand ───────────────────────────────────────────
+
+export type PointChange =
+  | { ok: false; reason: 'bad_party' | 'bad_type' | 'no_change' }
+  | {
+      ok: true
+      patch: { point_party?: PartyValue | null; inspection_type?: string }
+      /** What the audit trail will say, in the words a reader would use. */
+      describe: string
+    }
+
+/**
+ * Work out what changing one inspection point actually does.
+ *
+ * Extracted out of the server action so it can be asserted. The action is
+ * where the writing and the permission check live; deciding *whether* a change
+ * is real, and what to call it, is a rule — and rules in this codebase are
+ * tested.
+ *
+ * Note what counts as "was". Only a party written against the activity is a
+ * previous value; one supplied by the project default is not, because setting
+ * the same party explicitly IS a change — it turns an assumption into an
+ * agreement, which is the whole distinction the brackets exist to mark.
+ */
+export function planPointChange(input: {
+  wasParty: string | null
+  wasType: string
+  party: string | null
+  type: string | null
+}): PointChange {
+  const nextParty = input.party === '' || input.party === null ? null : input.party
+  if (nextParty !== null && !isParty(nextParty)) return { ok: false, reason: 'bad_party' }
+  if (input.type && !INSPECTION_TYPES.some((t) => t.value === input.type)) return { ok: false, reason: 'bad_type' }
+
+  const wasParty = input.wasParty === '' ? null : input.wasParty
+  const patch: { point_party?: PartyValue | null; inspection_type?: string } = {}
+  const bits: string[] = []
+
+  if (nextParty !== wasParty) {
+    patch.point_party = nextParty
+    bits.push(`held by ${wasParty ? partyLabel(wasParty) : 'nobody'} → ${nextParty ? partyLabel(nextParty) : 'nobody'}`)
+  }
+  if (input.type && input.type !== input.wasType) {
+    patch.inspection_type = input.type
+    bits.push(`point type ${inspectionLabel(input.wasType)} → ${inspectionLabel(input.type)}`)
+  }
+
+  if (bits.length === 0) return { ok: false, reason: 'no_change' }
+  return { ok: true, patch, describe: bits.join('; ') }
+}
+
+/**
+ * Whether a project default may be set for this kind of point.
+ *
+ * Surveillance and Review points carry no release, so nobody needs to hold
+ * them. A default for one would put a party on four hundred rows that will
+ * never be waiting on anybody, and bury the four that are.
+ */
+export function conventionAllowed(inspectionType: string): boolean {
+  return inspectionType === 'hold' || inspectionType === 'witness'
+}
+
 export const MATRIX_KEY =
   'H = Hold Point, work stops until released · W = Witness Point, notice given and attendance invited · ' +
   'R = Review Point, documents reviewed before the next activity · S = Surveillance, record checked afterwards. ' +

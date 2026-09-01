@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { importItp } from './actions'
 import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
 import { loadItp } from '@/data/itp'
@@ -31,7 +32,18 @@ export const dynamic = 'force-dynamic'
 export default async function ItpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string; id?: string; view?: string }>
+  searchParams: Promise<{
+    type?: string
+    id?: string
+    view?: string
+    import?: string
+    changed?: string
+    unchanged?: string
+    count?: string
+    first?: string
+    headings?: string
+    at?: string
+  }>
 }) {
   const sp = await searchParams
   const project = await getCurrentProject()
@@ -177,6 +189,97 @@ export default async function ItpPage({
             {s.code ?? s.name}
           </Link>
         ))}
+      </div>
+
+      {/* ── Marking up the plan and sending it back ─────────────────────── */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2 className="section-title">Mark up the plan and upload it back</h2>
+        <p className="text-secondary" style={{ fontSize: 13, margin: '0 0 10px' }}>
+          Download the Excel, send it to the client or the CxA, and let them put an <strong>H</strong>,{' '}
+          <strong>W</strong>, <strong>S</strong> or <strong>R</strong> in the column of the party who holds each point.
+          Upload the same file back and CxSentinel changes only the rows that differ.
+        </p>
+        <ul className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px', paddingLeft: 18 }}>
+          <li>
+            <strong>The column says who, the letter says what.</strong> One letter per row — an activity held by two
+            parties is an argument the plan has to settle before the work does, so the file is refused.
+          </li>
+          <li>
+            <strong>A letter still in brackets stays a project default.</strong> Remove the brackets to write that party
+            against the activity. Leaving them means the software&rsquo;s assumption never becomes the
+            client&rsquo;s agreement by accident.
+          </li>
+          <li>
+            <strong>It never creates an activity.</strong> A row that matches no check or test is an error — add it on
+            the Checklists or Test Records page first. A plan cannot conjure work nobody did.
+          </li>
+          <li>
+            <strong>All or nothing.</strong> One unreadable row and the whole file is refused, with every problem
+            listed by sheet and row number in the audit trail.
+          </li>
+        </ul>
+
+        {sp.import === 'ok' && (
+          <p className="badge badge-success" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Imported — {sp.changed} activit{sp.changed === '1' ? 'y' : 'ies'} changed, {sp.unchanged} already agreed.
+          </p>
+        )}
+        {sp.import === 'nochange' && (
+          <p className="badge badge-neutral" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Nothing to change — all {sp.unchanged} rows already said what the file says.
+          </p>
+        )}
+        {sp.import === 'errors' && (
+          <div className="card" style={{ borderLeft: '4px solid var(--color-danger-solid)', marginBottom: 10 }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>
+              {sp.count} problem{sp.count === '1' ? '' : 's'} — nothing was saved.
+            </p>
+            <p className="text-secondary" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
+              First one: {sp.first}
+            </p>
+            <p className="text-secondary" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
+              Every one is listed by sheet and row number in the{' '}
+              <Link href="/audit" className="link">
+                audit trail
+              </Link>
+              .
+            </p>
+          </div>
+        )}
+        {sp.import === 'empty' && (
+          <p className="badge badge-warning" style={{ display: 'inline-block', marginBottom: 10 }}>
+            No plan found in that file{sp.headings ? `. Headings seen: ${sp.headings}` : '.'}
+          </p>
+        )}
+        {sp.import === 'nofile' && (
+          <p className="badge badge-warning" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Choose a file first.
+          </p>
+        )}
+        {sp.import === 'denied' && (
+          <p className="badge badge-danger" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Your role cannot change the plan.
+          </p>
+        )}
+        {sp.import === 'failed' && (
+          <p className="badge badge-danger" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Stopped part way, at {sp.at}. Earlier rows were saved — check the audit trail before retrying.
+          </p>
+        )}
+
+        <form action={importItp} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="file" name="file" accept=".xlsx,.xlsm,.csv" required className="input" style={{ maxWidth: 380 }} />
+          <button type="submit" className="btn btn-primary btn-sm">
+            Import marked-up ITP
+          </button>
+          <a href={`/itp/export${qs}`} className="btn btn-secondary btn-sm">
+            Download the plan to mark up
+          </a>
+        </form>
+        <p className="text-secondary" style={{ fontSize: 12, margin: '10px 0 0' }}>
+          There is deliberately no blank template. The plan is a view of checks and tests that already exist, so an
+          empty sheet would have nothing to mark up — the export <em>is</em> the template.
+        </p>
       </div>
 
       <div className="card" style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>

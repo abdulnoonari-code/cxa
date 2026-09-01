@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
+import { LevelBadge } from '@/components/LevelBadge'
 import { LEVELS, STATUSES, statusBadgeClass, reviewBadgeClass, reviewLabel } from '@/lib/checklist'
 import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
 import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence } from './actions'
@@ -110,7 +111,6 @@ export default async function ChecklistsPage({
   const attachments = attachmentsRaw ?? []
   const filesFor = (itemId: string) => attachments.filter((a) => a.checklist_item_id === itemId)
 
-  const levelLabel = (v: string) => LEVELS.find((l) => l.value === v)?.label ?? v
 
   // The figures at the top describe the WHOLE project, not this page — so they
   // come from counts rather than from the rows in front of you. Four small
@@ -402,8 +402,8 @@ export default async function ChecklistsPage({
                     }}
                   >
                     <div>
-                      <div className="text-secondary mono" style={{ fontSize: 11, marginBottom: 3 }}>
-                        {levelLabel(it.level)}
+                      <div style={{ marginBottom: 5 }}>
+                        <LevelBadge level={it.level} format="full" />
                       </div>
                       <div style={{ fontWeight: 500, fontSize: 14.5 }}>{it.item}</div>
                     </div>

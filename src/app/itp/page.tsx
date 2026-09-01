@@ -5,6 +5,8 @@ import { loadItp } from '@/data/itp'
 import { refKey, subjectLabel, subjectBadgeClass, type Subject, type SubjectType } from '@/lib/subjects'
 import { INSPECTION_TYPES, inspectionCode, inspectionLabel, inspectionBadgeClass, releaseLabel, releaseBadgeClass, carriesRelease } from '@/lib/inspection'
 import { LEVELS } from '@/lib/checklist'
+import { levelRuleStyle } from '@/lib/levels'
+import { LevelBadge, LevelLegend } from '@/components/LevelBadge'
 import {
   findingsIn,
   summarise,
@@ -286,6 +288,7 @@ export default async function ItpPage({
       {matrixView ? (
         <div className="card" style={{ marginTop: 18 }}>
           <h2 className="section-title">The plan, as a matrix</h2>
+          <LevelLegend style={{ marginBottom: 10 }} />
           <p className="text-secondary" style={{ fontSize: 12, margin: '0 0 12px' }}>
             {MATRIX_KEY}
           </p>
@@ -313,8 +316,8 @@ export default async function ItpPage({
                       {r.tag}
                     </td>
                     <td style={{ fontSize: 12.5 }}>{r.activity}</td>
-                    <td className="mono" style={{ fontSize: 11 }}>
-                      {r.level.split('_')[0]}
+                    <td>
+                      <LevelBadge level={r.level} dot={false} />
                     </td>
                     {columns.map((c) => (
                       <td key={c.party} style={{ textAlign: 'center', fontWeight: 600, fontSize: 12.5 }}>
@@ -347,8 +350,13 @@ export default async function ItpPage({
           const atLevel = rows.filter((r) => r.level === level.value)
           if (atLevel.length === 0) return null
           return (
-            <div className="card" style={{ marginTop: 18 }} key={level.value}>
-              <h2 className="section-title">{level.label}</h2>
+            <div className="card" style={{ marginTop: 18, ...levelRuleStyle(level.value) }} key={level.value}>
+              <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <LevelBadge level={level.value} format="full" />
+                <span className="text-secondary" style={{ fontWeight: 400, fontSize: 12.5 }}>
+                  {atLevel.length} activit{atLevel.length === 1 ? 'y' : 'ies'}
+                </span>
+              </h2>
               <div style={{ overflowX: 'auto' }}>
                 <table className="table">
                   <thead>

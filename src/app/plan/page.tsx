@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
+import { levelRuleStyle } from '@/lib/levels'
+import { LevelBadge } from '@/components/LevelBadge'
 import { MILESTONE_STATUSES, milestoneBadgeClass, isOverdue } from '@/lib/milestones'
 
 export const dynamic = 'force-dynamic'
@@ -85,8 +87,10 @@ export default async function PlanPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.value}>
-                  <td style={{ fontWeight: 600 }}>{r.label}</td>
+                <tr key={r.value} style={levelRuleStyle(r.value)}>
+                  <td style={{ fontWeight: 600 }}>
+                    <LevelBadge level={r.value} format="full" />
+                  </td>
                   <td>{r.total}</td>
                   <td>{r.pass}</td>
                   <td>{r.fail}</td>

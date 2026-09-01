@@ -10,6 +10,7 @@ import { buildTextIndex, findSubjectByText, subjectLabel } from '@/lib/subjects'
 import { loadPunchRefs } from '@/data/punchlist'
 import { nextRef, refSeries } from '@/lib/punchlist'
 import { parsePunchWorkbook, type PunchProblem } from '@/lib/punchlist-io'
+import { storeIssuePhoto } from '@/data/photo-store'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -111,7 +112,7 @@ export async function createIssue(formData: FormData) {
 
   const ref = nextRef(await loadPunchRefs(project.id))
 
-  await supabase.from('issues').insert({
+  const { data: created } = await supabase.from('issues').insert({
     // Without this the item is invisible on every project screen — they all
     // filter on project_id and none of them walk up through equipment.
     project_id: project.id,
@@ -132,7 +133,9 @@ export async function createIssue(formData: FormData) {
     location: str(formData, 'location'),
     due_date: str(formData, 'due_date'),
     ai_comment: generateIssueReview(severity, category, 'open', description),
-  })
+  }).select('id').single()
+
+  const newId = (created as { id: string } | null)?.id ?? null
 
   await recordAudit({
     projectId: project.id,
@@ -142,8 +145,56 @@ export async function createIssue(formData: FormData) {
     newValue: category ? `Category ${category}` : 'Uncategorised',
   })
 
+  // ── The photo, if one came with it ─────────────────────────────────────
+  //
+  // Somebody raising a punch item is standing in front of the defect with the
+  // photograph already on their phone. Making them save the item, find it in
+  // the list, open it and scroll down is three steps too many.
+  //
+  // The order here is deliberate and is the whole point: **the item is created
+  // first, and a photo that fails never takes it with it.** Losing a raised
+  // defect because the file was a HEIC off an iPhone would be far worse than
+  // a punch item with no picture — the defect is the thing that matters, the
+  // photograph is evidence for it.
+  const photo = formData.get('photo')
+  let photoNote: string | null = null
+
+  if (newId && photo instanceof File && photo.size > 0) {
+    const stored = await storeIssuePhoto({
+      projectId: project.id,
+      issueId: newId,
+      file: photo,
+      kind: 'defect',
+      caption: str(formData, 'photo_caption'),
+      uploadedByName: actor.name ?? actor.email ?? null,
+    })
+
+    if (stored.ok) {
+      await recordAudit({
+        projectId: project.id,
+        action: 'defect photo attached',
+        entity: 'issue',
+        entityId: newId,
+        entityLabel: `${ref} — ${photo.name}`,
+        comment: 'Attached when the item was raised.',
+      })
+    } else {
+      photoNote = `${stored.reason} ${stored.hint}`
+      await recordAudit({
+        projectId: project.id,
+        action: 'photo not attached to new punch item',
+        entity: 'issue',
+        entityId: newId,
+        entityLabel: `${ref} — ${photo.name}`,
+        comment: `${photoNote} The punch item itself was raised and is not affected.`,
+      })
+    }
+  }
+
   refresh(equipment)
   if (checklist_item_id && equipment) revalidatePath(`/equipment/${equipment}/checklist`)
+
+  if (photoNote) redirect(`/issues?raised=${encodeURIComponent(ref)}&photo=failed&reason=${encodeURIComponent(photoNote.slice(0, 200))}`)
 }
 
 export async function updateIssue(formData: FormData) {

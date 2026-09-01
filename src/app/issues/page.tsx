@@ -17,6 +17,7 @@ import {
   ageInDays,
   statusLabel,
 } from '@/lib/punchlist'
+import { ACCEPTED_TYPES, MAX_BYTES } from '@/lib/photo'
 import { createIssue, deleteIssue, importPunchList } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -55,6 +56,9 @@ export default async function IssuesPage({
     errors?: string
     detail?: string
     headings?: string
+    photo?: string
+    raised?: string
+    reason?: string
   }>
 }) {
   const sp = await searchParams
@@ -279,7 +283,11 @@ export default async function IssuesPage({
         <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>
           Raise a punch item
         </summary>
-        <form action={createIssue} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr', marginTop: 16 }}>
+        <form
+          action={createIssue}
+          encType="multipart/form-data"
+          style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr', marginTop: 16 }}
+        >
           <label className="field">
             Against *
             <select name="subject" required className="input" defaultValue="">
@@ -350,12 +358,42 @@ export default async function IssuesPage({
             Location
             <input name="location" placeholder="Where on site" className="input" />
           </label>
+          {/* Somebody raising a punch item is standing in front of the defect
+              with the photograph already on their phone. Asking them to save
+              the item, find it in the list, open it and scroll down is three
+              steps too many. */}
+          <label className="field">
+            Photo of the defect
+            <input type="file" name="photo" accept={ACCEPTED_TYPES.join(',')} className="input" />
+            <span className="text-secondary" style={{ fontSize: 11.5, marginTop: 3 }}>
+              Optional. JPEG, PNG or WebP, up to {MAX_BYTES / 1024 / 1024} MB. More can be added afterwards, including
+              the after-photo.
+            </span>
+          </label>
+          <label className="field">
+            What the photo shows
+            <input name="photo_caption" placeholder="e.g. Seep at the filter housing joint" className="input" />
+          </label>
           <div style={{ gridColumn: '1 / -1' }}>
             <button type="submit" className="btn btn-primary" disabled={pickable.length === 0}>
               Raise punch item
             </button>
           </div>
         </form>
+
+        {sp.photo === 'failed' && (
+          <div className="card" style={{ borderLeft: '4px solid var(--color-warning-solid, #d97706)', marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>
+              {sp.raised} was raised, but the photograph was not attached.
+            </p>
+            <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+              {sp.reason}
+            </p>
+            <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+              The punch item itself is fine — open it and attach the photo there once this is sorted.
+            </p>
+          </div>
+        )}
         {pickable.length === 0 && (
           <p className="text-secondary" style={{ fontSize: 13, marginTop: 10 }}>
             Add equipment or systems first — a punch item has to be against something.

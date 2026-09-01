@@ -7,6 +7,9 @@ import { LEVELS } from '@/lib/checklist'
 import { updateIssue } from '../../actions'
 import { SEVERITIES, CATEGORIES, ISSUE_STATUSES } from '@/lib/issues'
 import { CATEGORY_BLOCKS, daysOverdue, ageInDays, isOpen } from '@/lib/punchlist'
+import { IssuePhotos } from '@/components/IssuePhotos'
+import { loadIssuePhotos } from '@/data/photos'
+import { aiConfigured } from '@/lib/ai'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,8 +24,15 @@ function when(value: string | null): string {
   })
 }
 
-export default async function EditIssuePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditIssuePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ photo?: string; ai?: string; reason?: string; hint?: string }>
+}) {
   const { id } = await params
+  const sp = await searchParams
   const { data: issueRow } = await supabase.from('issues').select('*').eq('id', id).single()
 
   if (!issueRow) {
@@ -63,6 +73,8 @@ export default async function EditIssuePage({ params }: { params: Promise<{ id: 
   }
 
   const project = await getCurrentProject()
+  const photoLoad = await loadIssuePhotos(project?.id ?? null)
+  const photos = photoLoad.byIssue.get(id) ?? []
   const index = await loadSubjectIndex(project?.id ?? null)
   const subject =
     issue.subject_type && issue.subject_id
@@ -263,6 +275,14 @@ export default async function EditIssuePage({ params }: { params: Promise<{ id: 
           stamp that survived a reopen would say the item was accepted while it is sitting there open.
         </p>
       </div>
+
+      <IssuePhotos
+        issueId={id}
+        photos={photos}
+        schemaReady={photoLoad.schemaReady}
+        aiConfigured={aiConfigured()}
+        notice={{ photo: sp.photo, ai: sp.ai, reason: sp.reason, hint: sp.hint }}
+      />
     </div>
   )
 }

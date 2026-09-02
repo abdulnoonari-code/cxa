@@ -10,6 +10,9 @@ import { CATEGORY_BLOCKS, daysOverdue, ageInDays, isOpen } from '@/lib/punchlist
 import { IssuePhotos } from '@/components/IssuePhotos'
 import { loadIssuePhotos } from '@/data/photos'
 import { aiConfigured } from '@/lib/ai'
+import { reviewDefect } from '../../photo-actions'
+import { isConfidence, confidenceBadgeClass, CONFIDENCE_LABELS } from '@/lib/photo'
+import { defectCaveat, caveatTone, kindLabel, kindGoes } from '@/lib/defect-review'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +32,7 @@ export default async function EditIssuePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ photo?: string; ai?: string; reason?: string; hint?: string }>
+  searchParams: Promise<{ photo?: string; ai?: string; reason?: string; hint?: string; assess?: string }>
 }) {
   const { id } = await params
   const sp = await searchParams
@@ -66,6 +69,16 @@ export default async function EditIssuePage({
     verified_by: string | null
     created_at: string | null
     ai_comment: string | null
+    ai_model: string | null
+    ai_reviewed_at: string | null
+    ai_reviewed_by_name: string | null
+    ai_confidence: string | null
+    ai_problem: string | null
+    ai_likely_cause: string | null
+    ai_verification: string | null
+    ai_blocks: string | null
+    ai_kind: string | null
+    ai_recommendation: string | null
     equipment_id: string | null
     subject_type: string | null
     subject_id: string | null
@@ -135,11 +148,153 @@ export default async function EditIssuePage({
         </p>
       )}
 
+      {/* Two different things, deliberately kept apart and labelled.
+          "Automatic check" is a handful of rules that notice a missing
+          description — it has never looked at the defect. Letting it sit
+          unlabelled beside an AI assessment would let a rules stub borrow the
+          AI's authority, or the reverse. */}
       {issue.ai_comment && (
         <p className="alert alert-info" style={{ fontSize: 13, marginBottom: 16 }}>
-          <strong>Automatic check:</strong> {issue.ai_comment}
+          <strong>Automatic check (a rule, not AI):</strong> {issue.ai_comment}
         </p>
       )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2 className="section-title">AI assessment of this defect</h2>
+        <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
+          What a commissioning engineer would say if you read him this punch item over the phone: which of the four
+          kinds of defect it is, the likely failure mechanism, the measurement that would settle it, and what it blocks
+          downstream. <strong>The app has not seen the plant, and it never supplies an acceptance figure</strong> —
+          that comes from your specification. Everything below is somewhere to look, never a diagnosis, never a
+          decision, and never counted in any figure.
+        </p>
+
+        {sp.assess === 'thin' && (
+          <p className="badge badge-neutral" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Not enough in the item to assess — see below.
+          </p>
+        )}
+        {sp.assess === 'denied' && (
+          <p className="badge badge-danger" style={{ display: 'inline-block', marginBottom: 10 }}>
+            Your role cannot run an assessment.
+          </p>
+        )}
+        {sp.assess === 'unreadable' && (
+          <p className="badge badge-warning" style={{ display: 'inline-block', marginBottom: 10 }}>
+            The model replied, but not in a form this app could read. Nothing was saved.
+          </p>
+        )}
+        {sp.assess === 'failed' && (
+          <div className="card" style={{ borderLeft: '4px solid var(--color-danger-solid)', marginBottom: 10 }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>The assessment could not be done.</p>
+            <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 12.5 }}>{sp.reason}</p>
+          </div>
+        )}
+
+        {issue.ai_reviewed_at && isConfidence(issue.ai_confidence) ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              background: 'var(--color-neutral-bg)',
+              border: '1px dashed var(--color-border)',
+            }}
+          >
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+              <span className={confidenceBadgeClass(issue.ai_confidence)} style={{ fontSize: 10 }}>
+                {CONFIDENCE_LABELS[issue.ai_confidence]}
+              </span>
+              <span className="text-secondary mono" style={{ fontSize: 10.5 }}>
+                {issue.ai_model ?? 'the app itself'}
+                {issue.ai_reviewed_by_name ? ` · asked by ${issue.ai_reviewed_by_name}` : ''} ·{' '}
+                {when(issue.ai_reviewed_at)}
+              </span>
+            </div>
+            {/* The triage first. Which of the four this is decides who it
+                goes to, and an installation defect and a design problem look
+                identical on a punch list while being nothing alike — one is
+                rework, the other is a change and a cost. */}
+            {issue.ai_kind && (
+              <p style={{ fontSize: 13, margin: '0 0 7px' }}>
+                <strong>{kindLabel(issue.ai_kind)}.</strong>{' '}
+                <span className="text-secondary">{kindGoes(issue.ai_kind)}</span>
+              </p>
+            )}
+            {issue.ai_problem && (
+              <p style={{ fontSize: 13, margin: '0 0 7px' }}>
+                <strong>What this is:</strong> {issue.ai_problem}
+              </p>
+            )}
+            {issue.ai_likely_cause && (
+              <p style={{ fontSize: 13, margin: '0 0 7px' }}>
+                <strong>Likely mechanism:</strong> {issue.ai_likely_cause}
+              </p>
+            )}
+            {issue.ai_verification && (
+              <p style={{ fontSize: 13, margin: '0 0 7px' }}>
+                <strong>What would settle it:</strong> {issue.ai_verification}
+              </p>
+            )}
+            {issue.ai_blocks && (
+              <p style={{ fontSize: 13, margin: '0 0 7px' }}>
+                <strong>What it blocks:</strong> {issue.ai_blocks}
+              </p>
+            )}
+            {issue.ai_recommendation && (
+              <p style={{ fontSize: 13, margin: '0 0 7px' }}>
+                <strong>Next action:</strong> {issue.ai_recommendation}
+              </p>
+            )}
+            {(() => {
+              const reading = {
+                confidence: issue.ai_confidence as 'clear' | 'partial' | 'cannot_tell',
+                problem: issue.ai_problem ?? '',
+                recommendation: issue.ai_recommendation ?? '',
+                likelyCause: issue.ai_likely_cause ?? '',
+                verification: issue.ai_verification ?? '',
+                blocks: issue.ai_blocks ?? '',
+                kind: issue.ai_kind ?? 'unclear',
+              }
+              const tone = caveatTone(reading)
+              return (
+                <p
+                  style={{
+                    fontSize: 12,
+                    margin: 0,
+                    fontWeight: tone === 'danger' ? 600 : 400,
+                    color:
+                      tone === 'danger'
+                        ? 'var(--color-danger)'
+                        : tone === 'warning'
+                          ? 'var(--color-warning)'
+                          : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {defectCaveat(reading)}
+                </p>
+              )
+            })()}
+          </div>
+        ) : (
+          <p className="text-secondary" style={{ fontSize: 13, margin: '0 0 10px' }}>
+            Not assessed yet.
+          </p>
+        )}
+
+        {aiConfigured() ? (
+          <form action={reviewDefect} style={{ marginTop: 10 }}>
+            <input type="hidden" name="issue_id" value={id} />
+            <button type="submit" className="btn btn-secondary btn-sm">
+              {issue.ai_reviewed_at ? 'Assess again' : 'Ask the AI to assess this defect'}
+            </button>
+          </form>
+        ) : (
+          <p className="text-secondary" style={{ fontSize: 12.5, margin: '10px 0 0' }}>
+            No Anthropic API key is set on this deployment. Add <span className="mono">ANTHROPIC_API_KEY</span> in
+            Vercel → Settings → Environment Variables and redeploy.
+          </p>
+        )}
+      </div>
 
       <div className="card">
         <form action={updateIssue} style={{ display: 'grid', gap: 14, gridTemplateColumns: '1fr 1fr' }}>

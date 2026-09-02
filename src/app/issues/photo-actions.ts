@@ -5,7 +5,17 @@ import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { getActor, actorCan, recordAudit } from '@/lib/audit'
-import { askAboutImages } from '@/lib/ai'
+import { ask, askAboutImages } from '@/lib/ai'
+import { loadSubjectIndex } from '@/data/subjects'
+import {
+  DEFECT_SYSTEM,
+  defectPrompt,
+  readDefectReview,
+  tooThinToAssess,
+  unsafeAdvice,
+  suppliesALimit,
+  kindLabel,
+} from '@/lib/defect-review'
 import { loadPhoto } from '@/data/photos'
 import {
   checkFile,
@@ -339,4 +349,158 @@ export async function comparePhotos(formData: FormData) {
 
   refresh(issueId)
   redirect(back(issueId, 'ai=compared'))
+}
+
+// ── Assessing the defect itself ──────────────────────────────────────────
+
+/**
+ * Ask Claude what it makes of the punch item as described.
+ *
+ * Distinct from `issues.ai_comment`, which is a rules stub shown as
+ * "Automatic check" and only ever notices a missing description. Distinct
+ * again from the photo review, which needs a photograph most items do not
+ * have. This is the one that works on a punch item raised on a phone with one
+ * sentence in it — and if that sentence is too thin, it says so for free
+ * without spending a call.
+ */
+export async function reviewDefect(formData: FormData) {
+  const issueId = String(formData.get('issue_id') ?? '')
+  const project = await getCurrentProject()
+  if (!project) redirect('/issues?assess=noproject')
+  if (!(await actorCan('review', project.id))) redirect(back(issueId, 'assess=denied'))
+
+  const { data: row } = await supabase
+    .from('issues')
+    .select('ref, title, description, category, severity, level, discipline, location, equipment_id, subject_type, subject_id')
+    .eq('id', issueId)
+    .eq('project_id', project.id)
+    .single()
+
+  const issue = (row ?? {}) as {
+    ref?: string | null
+    title?: string
+    description?: string | null
+    category?: string | null
+    severity?: string | null
+    level?: string | null
+    discipline?: string | null
+    location?: string | null
+    equipment_id?: string | null
+  }
+  if (!issue.title) redirect(back(issueId, 'assess=gone'))
+
+  // Free and instant, and a better thing to put in front of somebody than a
+  // paid round trip that comes back saying the same.
+  const thin = tooThinToAssess({ title: issue.title, description: issue.description ?? null })
+  if (thin) {
+    await supabase
+      .from('issues')
+      .update({
+        ai_model: null,
+        ai_reviewed_at: new Date().toISOString(),
+        ai_reviewed_by_name: null,
+        ai_confidence: 'cannot_tell',
+        ai_kind: 'unclear',
+        ai_problem: thin,
+        ai_likely_cause: '',
+        ai_verification: '',
+        ai_blocks: '',
+        ai_recommendation: 'Add the detail above and ask again.',
+        ai_raw: null,
+      })
+      .eq('id', issueId)
+      .eq('project_id', project.id)
+    refresh(issueId)
+    redirect(back(issueId, 'assess=thin'))
+  }
+
+  // The tag it was raised against, in the words the model should see.
+  const index = await loadSubjectIndex(project.id)
+  const subject =
+    issue.equipment_id ? index.byKey.get(`equipment:${issue.equipment_id}`) : undefined
+  const tag = subject?.code ?? subject?.name ?? 'the equipment named on the item'
+
+  const outcome = await ask({
+    system: DEFECT_SYSTEM,
+    prompt: defectPrompt({
+      ref: issue.ref ?? null,
+      title: issue.title,
+      description: issue.description ?? null,
+      tag,
+      level: issue.level ?? null,
+      category: issue.category ?? null,
+      severity: issue.severity ?? null,
+      discipline: issue.discipline ?? null,
+      location: issue.location ?? null,
+    }),
+    maxTokens: 900,
+  })
+
+  if (!outcome.ok) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'defect assessment failed',
+      entity: 'issue',
+      entityId: issueId,
+      entityLabel: issue.ref ?? issueId,
+      comment: `${outcome.reason}${outcome.hint ? ` — ${outcome.hint}` : ''}`,
+    })
+    redirect(back(issueId, `assess=failed&reason=${encodeURIComponent(outcome.reason.slice(0, 200))}`))
+  }
+
+  const reading = readDefectReview(outcome.value)
+  if (!reading) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'defect assessment unreadable',
+      entity: 'issue',
+      entityId: issueId,
+      entityLabel: issue.ref ?? issueId,
+      comment: `The model replied but not in a form this app could read. First 200 characters: ${outcome.value.slice(0, 200)}`,
+    })
+    redirect(back(issueId, 'assess=unreadable'))
+  }
+
+  const actor = await getActor(project.id)
+  const unsafe = unsafeAdvice(reading)
+
+  await supabase
+    .from('issues')
+    .update({
+      ai_model: outcome.model,
+      ai_reviewed_at: new Date().toISOString(),
+      ai_reviewed_by_name: actor.name ?? actor.email ?? null,
+      ai_confidence: reading.confidence,
+      ai_kind: reading.kind,
+      ai_problem: reading.problem,
+      ai_likely_cause: reading.likelyCause,
+      ai_verification: reading.verification,
+      ai_blocks: reading.blocks,
+      ai_recommendation: reading.recommendation,
+      ai_raw: outcome.value.slice(0, 8000),
+    })
+    .eq('id', issueId)
+    .eq('project_id', project.id)
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'defect assessed by AI',
+    entity: 'issue',
+    entityId: issueId,
+    entityLabel: issue.ref ?? issueId,
+    newValue: reading.confidence,
+    oldValue: kindLabel(reading.kind),
+    comment:
+      `${outcome.model} [${kindLabel(reading.kind)}]: ${reading.problem}` +
+      (reading.likelyCause ? ` Mechanism: ${reading.likelyCause}` : '') +
+      (reading.verification ? ` Verify by: ${reading.verification}` : '') +
+      (reading.blocks ? ` Blocks: ${reading.blocks}` : '') +
+      ` Recommendation: ${reading.recommendation}` +
+      (suppliesALimit(reading) ? ' — FLAGGED: appears to supply an acceptance figure it cannot know.' : '') +
+      (unsafe ? ' — FLAGGED: this reading suggests live or unprotected working and was marked as such on screen.' : '') +
+      (overreaches(reading) ? ' — NOTE: this reading claims something only a person may decide.' : ''),
+  })
+
+  refresh(issueId)
+  redirect(back(issueId, unsafe ? 'assess=unsafe' : 'assess=ok'))
 }

@@ -211,9 +211,11 @@ export default async function ChecklistsPage({
         </p>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/checklists/template" className="btn btn-secondary btn-sm">
             Download blank template
           </a>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/checklists/export" className="btn btn-secondary btn-sm">
             Export whole project (Excel)
           </a>

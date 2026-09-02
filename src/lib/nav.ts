@@ -82,9 +82,15 @@ export const NAV: NavSection[] = [
         label: 'Checklists',
         icon: 'checklist',
         note: 'Every commissioning check at every level.',
+        // All five levels, not the two that happened to have hand-written
+        // pages. A commissioning programme is a ladder and a rail that shows
+        // only the top two rungs of it is telling the wrong story.
         children: [
-          { href: '/functional-tests', label: 'L4 — Functional Tests', icon: 'test', note: 'The same register, filtered to L4.' },
-          { href: '/integrated-tests', label: 'L5 — Integrated Tests', icon: 'integrated', note: 'The same register, filtered to L5.' },
+          { href: '/checklists/l1', label: 'L1 — Factory Acceptance', icon: 'checklist', note: 'The same register, filtered to L1 — what the vendor tested before delivery.' },
+          { href: '/checklists/l2', label: 'L2 — Installation Verification', icon: 'checklist', note: 'The same register, filtered to L2 — that what arrived was installed as designed.' },
+          { href: '/checklists/l3', label: 'L3 — Pre-functional', icon: 'checklist', note: 'The same register, filtered to L3 — the static checks that make it safe to energise.' },
+          { href: '/checklists/l4', label: 'L4 — Functional Tests', icon: 'test', note: 'The same register, filtered to L4 — that it works on its own.' },
+          { href: '/checklists/l5', label: 'L5 — Integrated Tests', icon: 'integrated', note: 'The same register, filtered to L5 — that the systems work together.' },
         ],
       },
       {
@@ -218,3 +224,14 @@ export function trailFor(pathname: string): NavItem[] {
 export function allHrefs(): string[] {
   return [...ALL_HREFS]
 }
+
+/**
+ * Pages that exist only to redirect somewhere the rail does list.
+ *
+ * `/functional-tests` and `/integrated-tests` were L4 and L5 before all five
+ * levels got one route. They are kept so an existing bookmark or an emailed
+ * link still lands somewhere useful, and they are deliberately NOT in the rail
+ * — listing a page twice under two names is the repetition this model exists
+ * to remove.
+ */
+export const REDIRECT_ONLY = ['/functional-tests', '/integrated-tests']

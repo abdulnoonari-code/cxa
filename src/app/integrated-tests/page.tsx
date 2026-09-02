@@ -1,13 +1,7 @@
-import { LevelChecklistView } from '@/components/LevelChecklistView'
+import { redirect } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
-
-export default function IntegratedFunctionalTestsPage() {
-  return (
-    <LevelChecklistView
-      level="L5_ist"
-      title="Integrated Functional Tests"
-      blurb="Every L5 — Integrated Systems Test item, across all equipment, in one list."
-    />
-  )
+// L5 now lives at /checklists/l5 with the other four levels. Kept so an
+// existing bookmark or an emailed link still lands somewhere useful.
+export default function IntegratedTestsPage() {
+  redirect('/checklists/l5')
 }

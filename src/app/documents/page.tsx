@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
@@ -123,9 +124,9 @@ export default async function DocumentsPage({
         ) : (
           <p className="text-secondary" style={{ fontSize: 14, marginBottom: 0 }}>
             Documents attach to a checklist item, and there aren&apos;t any yet. Open{' '}
-            <a href="/checklists" className="link">
+            <Link href="/checklists" className="link">
               Checklists
-            </a>{' '}
+            </Link>{' '}
             to add your first one, then come back here to upload evidence against it.
           </p>
         )}

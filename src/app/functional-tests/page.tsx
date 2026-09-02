@@ -1,13 +1,7 @@
-import { LevelChecklistView } from '@/components/LevelChecklistView'
+import { redirect } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
-
+// L4 now lives at /checklists/l4 with the other four levels. This page is kept
+// so an existing bookmark or an emailed link still lands somewhere useful.
 export default function FunctionalTestsPage() {
-  return (
-    <LevelChecklistView
-      level="L4_fpt"
-      title="Functional Tests"
-      blurb="Every L4 — Functional Performance Test item, across all equipment, in one list."
-    />
-  )
+  redirect('/checklists/l4')
 }

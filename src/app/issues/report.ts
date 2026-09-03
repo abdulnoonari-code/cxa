@@ -114,6 +114,7 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
           'Photographic evidence is not set up on this database yet — run week5-part21-photos.sql. No photographs are missing from this document; there are none to carry.',
       })
     } else {
+      const downscales = await canDownscale()
       const gallery = await prepareGallery(
         photoSources(forThisList, (row) => refOf.get(row.issue_id) ?? 'Punch item'),
         downloadPhotoBytes
@@ -134,7 +135,7 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
           // their original size, the byte budget fills after two or three,
           // and the document would otherwise look as though only two or
           // three had been uploaded.
-          canDownscale()
+          downscales
             ? null
             : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
         ]

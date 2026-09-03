@@ -345,6 +345,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
         ...mine.filter((ph) => !openIds.has(ph.issue_id)),
       ]
 
+      const downscales = await canDownscale()
       const gallery = await prepareGallery(photoSources(ordered, (row) => refOf.get(row.issue_id) ?? 'Punch item'), downloadPhotoBytes)
       galleries.push({
         title: '9. Photographic evidence',
@@ -362,7 +363,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
           // their original size, the byte budget fills after two or three,
           // and the document would otherwise look as though only two or
           // three had been uploaded.
-          canDownscale()
+          downscales
             ? null
             : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
         ]

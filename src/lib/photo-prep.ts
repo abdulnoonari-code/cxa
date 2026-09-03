@@ -1,5 +1,3 @@
-import { createRequire } from 'node:module'
-
 // Getting photographs into a document without producing a file nobody can send.
 //
 // A handover pack with a defect photo on it is exactly what a client asks for.
@@ -77,63 +75,60 @@ export const MAX_PHOTOS = 24
  */
 export const MAX_TOTAL_BYTES = 7 * 1024 * 1024
 
-/**
- * Load sharp, if this deployment happens to have it.
- *
- * The module name is assembled at runtime, and that is deliberate rather than
- * cute. A literal `import('sharp')` is resolved at BUILD time by two separate
- * things — TypeScript, which wants the type declarations, and the bundler,
- * which wants the module — and both fail when sharp is not installed. That is
- * exactly what it did: the Vercel build stopped with
- *
- *     Cannot find module 'sharp' or its corresponding type declarations
- *
- * even though every line of this function is written to work without it. A
- * guard that only protects the runtime is not a guard at all if the build
- * refuses to produce a runtime.
- *
- * sharp is not in package.json. It arrives with Next.js for image
- * optimisation and Vercel usually ships it, so this usually finds it. When it
- * does not, photographs go into documents at their original size and the byte
- * cap does the limiting instead — the document says so rather than pretending.
- */
+// ── Downscaling, and doing without it ────────────────────────────────────
+//
+// Photographs are shrunk with `sharp`, which is NOT a declared dependency of
+// this project — it arrives with Next.js for image optimisation. Everything
+// below is written so that its absence costs quality, never correctness:
+// without it, photographs go in at full size, the byte cap does the limiting,
+// and the document says so.
+//
+// Getting that wrong twice is why this is written the way it is. First a
+// literal `import('sharp')` was resolved at BUILD time by both TypeScript and
+// the bundler, and the Vercel deployment stopped with "Cannot find module
+// 'sharp'" — a guard that protects only the runtime is worthless if the build
+// refuses to produce a runtime. Then the replacement resolved from the wrong
+// directory, found nothing, and silently downscaled nothing at all, which was
+// invisible until a test measured the bytes.
+
 let cachedSharp: ((input: Buffer) => SharpLike) | null | undefined
 
-function loadSharp(): ((input: Buffer) => SharpLike) | null {
+/**
+ * Nothing here is written at the top of the file, and that is the point.
+ *
+ * `import { createRequire } from 'node:module'` and `import.meta.url` are both
+ * resolved when the application is BUILT, and both are only valid depending on
+ * how the file ends up being compiled. Neither belongs in a function whose
+ * entire job is to cope with something being absent. They are loaded inside
+ * the try instead, so the worst case is this returns null and photographs go
+ * in at full size — never a build that refuses to produce a runtime.
+ *
+ * `process.cwd()` is the resolution root because on a deployment that is the
+ * directory holding node_modules. An earlier version resolved from the
+ * bundled chunk's own location, found nothing, and silently downscaled
+ * nothing at all — which was invisible until a test measured the bytes.
+ */
+async function loadSharp(): Promise<((input: Buffer) => SharpLike) | null> {
   if (cachedSharp !== undefined) return cachedSharp
 
-  // The name is assembled so that no build tool can fold it back into a
-  // literal and start resolving it again.
-  const name = ['sh', 'arp'].join('')
-
-  // Two resolution roots, because one is not enough. `import.meta.url` inside
-  // a bundled server chunk points at the chunk, not at the application, and
-  // resolving from there finds nothing — which is exactly what happened: the
-  // build passed, the loader silently returned null, and every photograph
-  // went into documents at full size. A silent fallback that never fires
-  // correctly is worse than no fallback, because nothing looks wrong.
-  const roots = [`${process.cwd()}/index.js`, import.meta.url]
-
-  for (const root of roots) {
-    try {
-      const mod = createRequire(root)(name) as { default?: unknown } | unknown
-      const fn = (mod as { default?: unknown })?.default ?? mod
-      if (typeof fn === 'function') {
-        cachedSharp = fn as (input: Buffer) => SharpLike
-        return cachedSharp
-      }
-    } catch {
-      // Try the next root.
-    }
+  try {
+    const { createRequire } = await import('node:module')
+    // Assembled so no build tool can fold it back into a literal and start
+    // resolving it again.
+    const name = ['sh', 'arp'].join('')
+    const mod = createRequire(`${process.cwd()}/index.js`)(name) as { default?: unknown } | unknown
+    const fn = (mod as { default?: unknown })?.default ?? mod
+    cachedSharp = typeof fn === 'function' ? (fn as (input: Buffer) => SharpLike) : null
+  } catch {
+    cachedSharp = null
   }
 
-  cachedSharp = null
-  return null
+  return cachedSharp
 }
 
 /** Whether this deployment can downscale. Reported in documents, not guessed at. */
-export function canDownscale(): boolean {
-  return loadSharp() !== null
+export async function canDownscale(): Promise<boolean> {
+  return (await loadSharp()) !== null
 }
 
 type SharpLike = {
@@ -148,7 +143,7 @@ export async function shrink(bytes: ArrayBuffer, contentType: string): Promise<{
   if (original.byteLength < 180_000) return { bytes: original, contentType }
 
   try {
-    const sharp = loadSharp()
+    const sharp = await loadSharp()
     if (!sharp) return { bytes: original, contentType }
 
     const out = await sharp(original)

@@ -6,7 +6,7 @@
 // that made an uploaded photograph disappear.
 
 import { supabase } from '@/lib/supabase'
-import { PROJECT_TABLES, CHECK_REFERENCES, impactTotal, type Impact } from '@/lib/purge'
+import { PROJECT_TABLES, CHECK_REFERENCES, OBLIGATION_REFERENCES, impactTotal, type Impact } from '@/lib/purge'
 
 /**
  * How many rows match — or `null` when the question could not be answered.
@@ -178,4 +178,81 @@ export async function purgeProject(projectId: string): Promise<ProjectPurgeResul
 export async function projectCount(): Promise<number> {
   const { count, error } = await supabase.from('projects').select('id', { count: 'exact', head: true })
   return error ? 0 : (count ?? 0)
+}
+
+
+// ── Obligations ───────────────────────────────────────────────────────────
+
+/**
+ * Which obligations a bulk delete covers.
+ *
+ * Two scopes, mirroring the checklist. "One document" is the natural unit
+ * here: obligations are read out of a contract, so the thing somebody wants
+ * to undo is usually one document that turned out to be the wrong revision.
+ * Unlike `discardRead`, this takes edited and assigned rows too — that is the
+ * point of it, and why the project-wide version asks for a password.
+ */
+export type ObligationScope =
+  | { kind: 'source'; source: string; label: string }
+  | { kind: 'project'; label: string }
+
+async function obligationIdsIn(projectId: string, scope: ObligationScope): Promise<string[]> {
+  let q = supabase.from('obligations').select('id').eq('project_id', projectId)
+  if (scope.kind === 'source') q = q.eq('source_name', scope.source)
+  const { data, error } = await q
+  if (error) return []
+  return ((data ?? []) as { id: string }[]).map((r) => r.id)
+}
+
+/** What deleting these obligations removes, and what it leaves dangling. */
+export async function obligationImpact(projectId: string, scope: ObligationScope): Promise<Impact> {
+  const ids = await obligationIdsIn(projectId, scope)
+  const removes = [{ label: 'Obligations', count: ids.length }]
+
+  const breaks: Impact['breaks'] = []
+  for (const ref of OBLIGATION_REFERENCES) {
+    const count = await countIn(ref.table, ref.column, ids, ref.extra)
+    if (count && count > 0) breaks.push({ label: ref.label, count, consequence: ref.consequence })
+  }
+
+  return { removes, breaks, total: impactTotal(removes) }
+}
+
+/**
+ * Delete obligations in bulk.
+ *
+ * Signatures go with them, for the reason set out beside OBLIGATION_REFERENCES:
+ * an acceptance with no subject still reads as agreement. Notices are KEPT and
+ * unhooked — a notice was issued to somebody on a date, and that happened
+ * whether or not the obligation still exists.
+ */
+export async function deleteObligations(projectId: string, scope: ObligationScope): Promise<PurgeResult> {
+  const ids = await obligationIdsIn(projectId, scope)
+  if (ids.length === 0) return { ok: true, deleted: 0 }
+
+  await supabase.from('signatures').delete().in('entity_id', ids).eq('entity', 'obligation')
+  // A notice that was sent is a thing that happened. It survives.
+  await supabase.from('notifications').update({ entity_id: null }).in('entity_id', ids).eq('entity', 'obligation')
+
+  const { error } = await supabase.from('obligations').delete().in('id', ids)
+  if (error) return { ok: false, reason: error.message }
+
+  return { ok: true, deleted: ids.length }
+}
+
+/** The source documents obligations were read from, with counts. */
+export async function obligationSources(projectId: string): Promise<{ source: string; count: number }[]> {
+  const { data, error } = await supabase
+    .from('obligations')
+    .select('source_name')
+    .eq('project_id', projectId)
+    .not('source_name', 'is', null)
+  if (error) return []
+
+  const counts = new Map<string, number>()
+  for (const row of (data ?? []) as { source_name: string | null }[]) {
+    if (!row.source_name) continue
+    counts.set(row.source_name, (counts.get(row.source_name) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count)
 }

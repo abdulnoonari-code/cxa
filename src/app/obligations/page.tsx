@@ -3,6 +3,7 @@ import { aiConfigured } from '@/lib/ai'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadObligationPage, loadObligationTotals, loadDocumentChoices } from '@/data/obligations'
+import { obligationSources } from '@/data/purge'
 import { LEVELS } from '@/lib/checklist'
 import {
   PARTIES,
@@ -18,7 +19,7 @@ import {
   verdictBadgeClass,
   daysOverdue,
 } from '@/lib/obligations'
-import { readDocument, addObligation, updateObligation, deleteObligation, discardRead, importObligations } from './actions'
+import { readDocument, addObligation, updateObligation, deleteObligation, discardRead, importObligations, deleteObligationsAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,10 @@ export default async function ObligationsPage({
     warnings?: string
     errors?: string
     headings?: string
+    purge?: string
+    n?: string
+    what?: string
+    reason?: string
   }>
 }) {
   const sp = await searchParams
@@ -64,10 +69,14 @@ export default async function ObligationsPage({
     outstandingOnly: sp.open === '1',
   }
 
-  const [{ rows, total }, totals, documents] = await Promise.all([
+  const [{ rows, total }, totals, documents, sources] = await Promise.all([
     loadObligationPage(project?.id ?? null, filter, page, PER_PAGE),
     loadObligationTotals(project?.id ?? null),
     loadDocumentChoices(project?.id ?? null),
+    // The documents obligations were read from, with counts — so the bulk
+    // delete can offer "everything from this contract" as a scope rather than
+    // making somebody tick two hundred rows.
+    project ? obligationSources(project.id) : Promise.resolve([]),
   ])
 
   const summary = summarise(totals)
@@ -678,6 +687,22 @@ export default async function ObligationsPage({
         </div>
       )}
 
+      {sp.purge === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+          <strong>Deleted.</strong> {sp.n} obligation{sp.n === '1' ? '' : 's'} removed from {sp.what}.
+        </div>
+      )}
+      {sp.purge === 'badpassword' && (
+        <div className="alert alert-danger">
+          <strong>Nothing deleted.</strong> {sp.reason}
+        </div>
+      )}
+      {sp.purge === 'failed' && (
+        <div className="alert alert-danger">
+          <strong>Nothing deleted.</strong> {sp.reason}
+        </div>
+      )}
+
       {sp.read === 'ok' && rows.length > 0 && rows[0].source_name && (
         <form action={discardRead} style={{ marginTop: 16 }}>
           <input type="hidden" name="source_name" value={rows[0].source_name} />
@@ -689,6 +714,81 @@ export default async function ObligationsPage({
             kept.
           </p>
         </form>
+      )}
+
+      {/* ── Clearing the register ────────────────────────────────────────
+          Two scopes. Per document, because obligations are read out of a
+          contract and the thing somebody wants to undo is usually one
+          document that turned out to be the wrong revision. And the whole
+          register, which asks for the password — the same rule as deleting
+          every check on a project. */}
+      {total > 0 && (
+        <details className="card" style={{ marginTop: 20, borderLeft: '4px solid var(--color-danger)' }}>
+          <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>
+            Delete obligations in bulk
+          </summary>
+
+          <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 12, marginBottom: 14 }}>
+            This is not the same as &ldquo;undo this read&rdquo; above. That one deliberately spares any row you have
+            edited or assigned. These take everything in scope, including your work.
+          </p>
+
+          {sources.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Everything from one document</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {sources.map((s) => (
+                  <form
+                    key={s.source}
+                    action={deleteObligationsAction}
+                    style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    <input type="hidden" name="scope" value="source" />
+                    <input type="hidden" name="source_name" value={s.source} />
+                    <span className="mono" style={{ fontSize: 12.5 }}>
+                      {s.source}
+                    </span>
+                    <span className="text-secondary" style={{ fontSize: 12 }}>
+                      {s.count} obligation{s.count === 1 ? '' : 's'}
+                    </span>
+                    <button type="submit" className="btn btn-danger btn-sm" style={{ fontSize: 11 }}>
+                      Delete all {s.count}
+                    </button>
+                  </form>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <form action={deleteObligationsAction} style={{ maxWidth: 520 }}>
+            <input type="hidden" name="scope" value="project" />
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Every obligation on this project</div>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              This removes all <strong>{total}</strong> obligations, whatever document they came from and whoever
+              assigned them, together with any signatures accepting them. It cannot be undone.
+            </p>
+            <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
+              Notices already issued about them are kept — a notice sent to somebody on a date is a thing that
+              happened, whether or not the obligation still exists. They simply stop saying what they were about.
+            </p>
+            <label className="text-secondary" style={{ display: 'block', margin: '12px 0 4px', fontSize: 12 }}>
+              Your password
+            </label>
+            <input
+              type="password"
+              name="password"
+              className="input"
+              required
+              autoComplete="off"
+              data-lpignore="true"
+              placeholder="Type it — this box is not auto-filled"
+              style={{ fontSize: 13, maxWidth: 320 }}
+            />
+            <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 10 }}>
+              Delete all {total} obligations
+            </button>
+          </form>
+        </details>
       )}
 
       <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 18 }}>

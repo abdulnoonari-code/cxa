@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
+import { verifyPassword } from '@/lib/reauth'
+import { obligationImpact, deleteObligations, type ObligationScope } from '@/data/purge'
 import { getActor, actorCan, recordAudit } from '@/lib/audit'
 import { extractDocument } from '@/lib/doc-extract'
 import { readObligations, nextRef, refSeries, type Candidate } from '@/lib/obligations'
@@ -504,4 +506,57 @@ export async function importObligations(formData: FormData) {
     `/obligations?import=ok&added=${newRows.length}&updated=${updates.length}&removed=${removals.length}` +
       `&rows=${parsed.rows.length}&warnings=${parsed.warnings.length}`
   )
+}
+
+// ── Deleting obligations in bulk ─────────────────────────────────────────
+//
+// Two scopes, the same shape as the checklist delete, and the same rule:
+// anything that empties a whole register asks for the password.
+//
+// This is NOT `discardRead` above. That one deliberately spares any row
+// somebody has edited or assigned, because those represent work. This one
+// takes everything in scope — which is exactly why the project-wide version
+// is gated and the per-document one states its count first.
+export async function deleteObligationsAction(formData: FormData) {
+  const scopeKind = str(formData, 'scope')
+  const source = str(formData, 'source_name')
+
+  const project = await getCurrentProject()
+  if (!project) redirect('/obligations?purge=noproject')
+  if (!(await actorCan('manage', project.id))) redirect('/obligations?purge=denied')
+
+  if (scopeKind === 'project') {
+    const auth = await verifyPassword(str(formData, 'password'))
+    if (!auth.ok) redirect(`/obligations?purge=badpassword&reason=${encodeURIComponent(auth.reason)}`)
+  }
+
+  const scope: ObligationScope =
+    scopeKind === 'project'
+      ? { kind: 'project', label: project.name }
+      : { kind: 'source', source: source ?? '', label: source ?? 'this document' }
+
+  if (scope.kind === 'source' && !scope.source) redirect('/obligations?purge=notarget')
+
+  // Counted before, because afterwards there is nothing left to count and the
+  // confirmation would have to guess.
+  const impact = await obligationImpact(project.id, scope)
+  const result = await deleteObligations(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'obligations deleted' : 'obligation delete failed',
+    entity: 'obligation',
+    entityLabel: scope.label,
+    oldValue: `${impact.total} obligations`,
+    comment: result.ok
+      ? `Deleted ${result.deleted}. ${
+          impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'
+        }`
+      : result.reason,
+  })
+
+  refresh()
+
+  if (!result.ok) redirect(`/obligations?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  redirect(`/obligations?purge=ok&n=${result.deleted}&what=${encodeURIComponent(scope.label)}`)
 }

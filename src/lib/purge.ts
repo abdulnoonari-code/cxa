@@ -163,6 +163,33 @@ export const NEVER_PURGED = [
 ]
 
 /**
+ * What refers to an OBLIGATION without owning it.
+ *
+ * Fewer things than point at a check, but the one that matters is the same:
+ * a signature against an obligation nobody can look up is not evidence of
+ * anything. An obligation is signed when somebody accepts that it has been
+ * discharged, and that acceptance losing its subject is worse than losing
+ * both — the signature still looks like agreement to something.
+ */
+export const OBLIGATION_REFERENCES: CheckReference[] = [
+  {
+    table: 'signatures',
+    column: 'entity_id',
+    extra: { entity: 'obligation' },
+    label: 'signatures',
+    consequence:
+      'A signature accepting that an obligation was discharged would be left against nothing. It would still read as somebody agreeing to something, with no way to find out what.',
+  },
+  {
+    table: 'notifications',
+    column: 'entity_id',
+    extra: { entity: 'obligation' },
+    label: 'notices',
+    consequence: 'A notice issued about this obligation survives but stops saying what it was about.',
+  },
+]
+
+/**
  * What refers to a checklist item without owning it.
  *
  * Deleting a check leaves each of these pointing at an id that is no longer

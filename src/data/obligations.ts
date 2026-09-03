@@ -28,13 +28,54 @@ export type ObligationRow = {
   accepted_at: string | null
   accepted_by: string | null
   created_at: string | null
+  ai_model?: string | null
+  ai_reviewed_at?: string | null
+  ai_reviewed_by_name?: string | null
+  ai_confidence?: string | null
+  ai_discharge?: string | null
+  ai_standing?: string | null
+  ai_risk?: string | null
+  ai_disagreement?: string | null
+  ai_ask?: string | null
   created_by_name: string | null
 }
 
-const COLUMNS =
+const BASE_COLUMNS =
   'id, ref, project_id, document_id, revision_id, source_name, clause, statement, party, obligation_type, ' +
   'level, stage_key, status, owner, due_date, evidence, notes, subject_type, subject_id, origin, ' +
   'closed_at, closed_by, accepted_at, accepted_by, created_at, created_by_name'
+
+// Part 25. A reading of the clause, kept apart from every recorded field and
+// counted in no figure.
+const AI_COLUMNS =
+  ', ai_model, ai_reviewed_at, ai_reviewed_by_name, ai_confidence, ai_discharge, ai_standing, ' +
+  'ai_risk, ai_disagreement, ai_ask'
+
+/**
+ * Whether this database has had SQL part 25 run against it.
+ *
+ * Asking for a column that does not exist does not return an empty result —
+ * it fails the whole query, and the obligations register would go blank for
+ * anybody who has not run the script yet. So the answer is cached after one
+ * cheap probe and the column list is chosen accordingly.
+ *
+ * A new feature must never be able to take a working screen down with it.
+ */
+let aiColumnsPresent: boolean | null = null
+
+async function columnsFor(): Promise<string> {
+  if (aiColumnsPresent === null) {
+    const { error } = await supabase.from('obligations').select('ai_reviewed_at').limit(1)
+    aiColumnsPresent = !error
+  }
+  return aiColumnsPresent ? BASE_COLUMNS + AI_COLUMNS : BASE_COLUMNS
+}
+
+/** For the banner that tells somebody which script to run. */
+export async function obligationAiReady(): Promise<boolean> {
+  await columnsFor()
+  return aiColumnsPresent === true
+}
 
 export type ObligationFilter = {
   party?: string | null
@@ -68,7 +109,7 @@ export async function loadObligationPage(
   const from = (page - 1) * perPage
   let query = supabase
     .from('obligations')
-    .select(COLUMNS, { count: 'exact' })
+    .select(await columnsFor(), { count: 'exact' })
     .eq('project_id', projectId)
     .order('ref', { ascending: true })
     .range(from, from + perPage - 1)
@@ -100,7 +141,7 @@ export async function loadAllObligations(projectId: string | null): Promise<Obli
   if (!projectId) return []
   const { data } = await supabase
     .from('obligations')
-    .select(COLUMNS)
+    .select(await columnsFor())
     .eq('project_id', projectId)
     .order('ref', { ascending: true })
   return (data ?? []) as unknown as ObligationRow[]

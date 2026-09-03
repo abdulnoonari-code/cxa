@@ -339,3 +339,31 @@ export function extractJsonArray<T>(text: string): { items: T[] | null; raw: str
 
   return { items: null, raw: text }
 }
+
+
+/**
+ * Pull a JSON object out of a model reply.
+ *
+ * Models wrap JSON in ```json fences perhaps a third of the time whatever the
+ * prompt says, so the fence is stripped before anything else. Kept here, in
+ * one place, because three separate assessments parse replies and each one
+ * having its own idea of what a reply looks like is how they drift apart.
+ *
+ * It deliberately does NOT decide whether the object is useful — that depends
+ * on which assessment asked, and a parser that judges content is a parser
+ * that rejects a perfectly good clean result.
+ */
+export function readJsonObject(raw: string): Record<string, unknown> | null {
+  if (!raw || !raw.trim()) return null
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const body = fenced ? fenced[1] : raw
+  const start = body.indexOf('{')
+  const end = body.lastIndexOf('}')
+  if (start === -1 || end === -1 || end < start) return null
+  try {
+    const parsed = JSON.parse(body.slice(start, end + 1))
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}

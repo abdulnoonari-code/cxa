@@ -1,4 +1,6 @@
+import { Fragment } from 'react'
 import UploadResult from '@/components/UploadResult'
+import DocumentAssessment from '@/components/DocumentAssessment'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -6,6 +8,27 @@ import { LEVELS } from '@/lib/checklist'
 import { uploadDocument, deleteDocument } from './actions'
 
 export const dynamic = 'force-dynamic'
+
+type AttachmentRow = {
+  id: string
+  checklist_item_id: string | null
+  file_name: string | null
+  file_url: string
+  file_path: string | null
+  review_status: string | null
+  review_note: string | null
+  created_at: string | null
+  ai_model: string | null
+  ai_reviewed_at: string | null
+  ai_reviewed_by_name: string | null
+  ai_confidence: string | null
+  ai_appears_to_be: string | null
+  ai_matches_filing: string | null
+  ai_mismatch: string | null
+  ai_problem: string | null
+  ai_recommendation: string | null
+  ai_values: unknown
+}
 
 // Group rows by their equipment in one pass. The obvious nested filter is
 // equipment × rows, which is nothing on a demo project and twelve million
@@ -54,7 +77,11 @@ export default async function DocumentsPage({
 
   let attachmentsQuery = supabase
     .from('attachments')
-    .select('id, checklist_item_id, file_name, file_url, file_path, review_status, review_note, created_at')
+    .select(
+      'id, checklist_item_id, file_name, file_url, file_path, review_status, review_note, created_at, ' +
+        'ai_model, ai_reviewed_at, ai_reviewed_by_name, ai_confidence, ai_appears_to_be, ' +
+        'ai_matches_filing, ai_mismatch, ai_problem, ai_recommendation, ai_values'
+    )
     .order('created_at', { ascending: false })
 
   if (itemIds.length > 0) {
@@ -65,7 +92,10 @@ export default async function DocumentsPage({
   }
 
   const { data: attachmentsRaw } = itemIds.length > 0 ? await attachmentsQuery : { data: [] }
-  const attachments = attachmentsRaw ?? []
+  // Named explicitly. Supabase infers nothing useful from a select built by
+  // string concatenation, and an inferred `never` here silently turns every
+  // field access into a compile error twenty lines further down.
+  const attachments = (attachmentsRaw ?? []) as unknown as AttachmentRow[]
 
   const needsLookCount = attachments.filter((a) => a.review_status === 'warning').length
   const levelLabel = (value: string) => LEVELS.find((l) => l.value === value)?.label ?? value
@@ -164,7 +194,8 @@ export default async function DocumentsPage({
               attachments.map((a) => {
                 const item = itemById.get(a.checklist_item_id)
                 return (
-                  <tr key={a.id}>
+                  <Fragment key={a.id}>
+                  <tr>
                     <td style={{ fontWeight: 600 }}>
                       {item ? tagById.get(item.equipment_id) ?? '—' : '—'}
                     </td>
@@ -193,7 +224,7 @@ export default async function DocumentsPage({
                         )}
                         <form action={deleteDocument}>
                           <input type="hidden" name="id" value={a.id} />
-                          <input type="hidden" name="file_path" value={a.file_path} />
+                          <input type="hidden" name="file_path" value={a.file_path ?? ''} />
                           <button type="submit" className="btn-link">
                             Delete
                           </button>
@@ -201,6 +232,16 @@ export default async function DocumentsPage({
                       </div>
                     </td>
                   </tr>
+                  {/* The reading sits in its own full-width row under the
+                      document it is about, rather than squeezed into a cell.
+                      A table cell cannot hold a table of extracted values, and
+                      the mismatch warning needs room to be read. */}
+                  <tr key={`${a.id}-ai`}>
+                    <td colSpan={5} style={{ paddingTop: 0 }}>
+                      <DocumentAssessment row={a} />
+                    </td>
+                  </tr>
+                  </Fragment>
                 )
               })
             ) : (

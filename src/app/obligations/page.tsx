@@ -1,3 +1,4 @@
+import ObligationAssessment from '@/components/ObligationAssessment'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadObligationPage, loadObligationTotals, loadDocumentChoices } from '@/data/obligations'
@@ -559,7 +560,9 @@ export default async function ObligationsPage({
                 </p>
               )}
 
-              <details>
+              <ObligationAssessment row={row} />
+
+              <details style={{ marginTop: 10 }}>
                 <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Set the party and the state</summary>
                 <form
                   action={updateObligation}

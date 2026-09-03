@@ -136,7 +136,10 @@ export async function deleteProject(formData: FormData) {
     // Partial deletion is reported as partial. Saying "deleted" when four
     // tables refused would leave somebody believing a project is gone while
     // its records are still being counted by every rollup in the application.
-    const failed = result.problems.map((p) => p.table).join(', ').slice(0, 160)
+    // The database's own words, not just the table name. "Audit entries would
+    // not go" is not something anybody can act on; "violates foreign key
+    // constraint audit_log_project_id_fkey" is.
+    const failed = result.problems.map((p) => `${p.table}: ${p.message}`).join(' — ').slice(0, 400)
     redirect(`/projects?purge=partial&n=${result.deleted}&failed=${encodeURIComponent(failed)}`)
   }
 

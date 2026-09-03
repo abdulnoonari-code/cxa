@@ -130,11 +130,36 @@ export const PROJECT_TABLES: ScopedTable[] = [
   { table: 'areas', label: 'Areas', by: 'project' },
   { table: 'sites', label: 'Sites', by: 'project' },
 
-  // ── Last ───────────────────────────────────────────────────────────────
-  // The audit log goes last and deliberately. Until the moment the project
-  // row itself is removed, the audit trail is the only record that any of
-  // this existed.
-  { table: 'audit_log', label: 'Audit entries', by: 'project' },
+]
+
+// ── What is NOT in that list, and why ────────────────────────────────────
+//
+// `audit_log` was in it, and that was wrong. The database refused, correctly:
+//
+//     ERROR: audit_log is append-only: entries cannot be changed or deleted
+//
+// A trigger enforces it. And since audit_log also had ON DELETE CASCADE to
+// projects, deleting a project made the database try to delete its audit
+// entries, the trigger refused, and the whole delete was rolled back. No
+// project could be deleted at all — by this code or by the one-click button
+// that came before it.
+//
+// The list entry itself carried the argument against including it: "until the
+// moment the project row is removed, the audit trail is the only record that
+// any of this existed". If that is true — and it is — then the moment the
+// project row is removed is exactly when the trail becomes the ONLY record.
+// Deleting it then is the one thing that must never happen.
+//
+// So the audit trail is not project data that gets cleared with a project. It
+// is a record OF the project, and it outlives it. SQL part 24 removes the
+// ownership link in the database; this list stops the application asking.
+//
+// `profiles` is absent for a different reason: it holds people, not projects.
+
+/** Deliberately never deleted. Named so nobody quietly adds it back. */
+export const NEVER_PURGED = [
+  { table: 'audit_log', why: 'The audit trail is append-only and outlives the project it describes.' },
+  { table: 'profiles', why: 'Holds people rather than project records.' },
 ]
 
 /**

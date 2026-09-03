@@ -8,21 +8,37 @@
 import { supabase } from '@/lib/supabase'
 import { PROJECT_TABLES, CHECK_REFERENCES, impactTotal, type Impact } from '@/lib/purge'
 
-async function countWhere(table: string, column: string, value: string, extra?: Record<string, string>): Promise<number> {
+/**
+ * How many rows match — or `null` when the question could not be answered.
+ *
+ * The difference matters more than it looks. An earlier version returned 0 on
+ * error, and the purge then skipped the table because "there is nothing in
+ * it". A table whose count is blocked by a policy is not an empty table, and
+ * treating the two the same turns a failed delete into a silent no-op that
+ * reports success.
+ *
+ * `null` means "unknown": the caller attempts the delete anyway and lets the
+ * database be the judge.
+ */
+async function countWhere(table: string, column: string, value: string, extra?: Record<string, string>): Promise<number | null> {
   let q = supabase.from(table).select('id', { count: 'exact', head: true }).eq(column, value)
   for (const [k, v] of Object.entries(extra ?? {})) q = q.eq(k, v)
   const { count, error } = await q
-  // A table that is not there yet counts as empty, not as an error. Somebody
-  // who has not run every SQL script must still be able to delete a project.
-  return error ? 0 : (count ?? 0)
+  if (!error) return count ?? 0
+  // A table that does not exist yet is genuinely empty — somebody who has not
+  // run every SQL script must still be able to delete a project.
+  if (/relation .* does not exist|could not find the table/i.test(error.message)) return 0
+  return null
 }
 
-async function countIn(table: string, column: string, values: string[], extra?: Record<string, string>): Promise<number> {
+async function countIn(table: string, column: string, values: string[], extra?: Record<string, string>): Promise<number | null> {
   if (values.length === 0) return 0
   let q = supabase.from(table).select('id', { count: 'exact', head: true }).in(column, values)
   for (const [k, v] of Object.entries(extra ?? {})) q = q.eq(k, v)
   const { count, error } = await q
-  return error ? 0 : (count ?? 0)
+  if (!error) return count ?? 0
+  if (/relation .* does not exist|could not find the table/i.test(error.message)) return 0
+  return null
 }
 
 async function idsFor(table: string, projectId: string): Promise<string[]> {
@@ -53,7 +69,7 @@ export async function checklistImpact(projectId: string, scope: CheckScope): Pro
   const breaks: Impact['breaks'] = []
   for (const ref of CHECK_REFERENCES) {
     const count = await countIn(ref.table, ref.column, ids, ref.extra)
-    if (count > 0) breaks.push({ label: ref.label, count, consequence: ref.consequence })
+    if (count && count > 0) breaks.push({ label: ref.label, count, consequence: ref.consequence })
   }
 
   return { removes, breaks, total: impactTotal(removes) }
@@ -98,11 +114,11 @@ export async function projectImpact(projectId: string): Promise<Impact> {
   for (const t of PROJECT_TABLES) {
     if (t.by === 'project') {
       const count = await countWhere(t.table, 'project_id', projectId)
-      if (count > 0) removes.push({ label: t.label, count })
+      if (count && count > 0) removes.push({ label: t.label, count })
     } else if (t.parent) {
       const parentIds = await idsFor(t.parent.table, projectId)
       const count = await countIn(t.table, t.parent.column, parentIds)
-      if (count > 0) removes.push({ label: t.label, count })
+      if (count && count > 0) removes.push({ label: t.label, count })
     }
   }
 
@@ -132,10 +148,12 @@ export async function purgeProject(projectId: string): Promise<ProjectPurgeResul
   for (const t of PROJECT_TABLES) {
     if (t.by === 'project') {
       const count = await countWhere(t.table, 'project_id', projectId)
+      // Only a CONFIRMED zero is a reason to skip. An unknown count is a
+      // reason to try.
       if (count === 0) continue
       const { error } = await supabase.from(t.table).delete().eq('project_id', projectId)
       if (error) problems.push({ table: t.label, message: error.message })
-      else deleted += count
+      else deleted += count ?? 0
     } else if (t.parent) {
       const parentIds = await idsFor(t.parent.table, projectId)
       if (parentIds.length === 0) continue
@@ -143,10 +161,13 @@ export async function purgeProject(projectId: string): Promise<ProjectPurgeResul
       if (count === 0) continue
       const { error } = await supabase.from(t.table).delete().in(t.parent.column, parentIds)
       if (error) problems.push({ table: t.label, message: error.message })
-      else deleted += count
+      else deleted += count ?? 0
     }
   }
 
+  // The project row last. If something still references it the database will
+  // say so, and that message is the single most useful thing this function
+  // can return — it names the table that is holding it.
   const { error } = await supabase.from('projects').delete().eq('id', projectId)
   if (error) problems.push({ table: 'The project itself', message: error.message })
 

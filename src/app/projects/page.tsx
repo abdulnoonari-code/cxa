@@ -67,8 +67,27 @@ export default async function ProjectsPage({
           The project was only partly deleted.
         </p>
         <p style={{ margin: '5px 0 0', fontSize: 12.5 }}>
-          {one('n')} records were removed, but these would not go: {one('failed')}. Their rows are still in the
-          database and may still be counted somewhere. Try again, or clear them in Supabase.
+          {one('n')} records were removed. The database refused the rest, and this is exactly what it said:
+        </p>
+        <p
+          className="mono"
+          style={{
+            margin: '6px 0 0',
+            fontSize: 11.5,
+            background: 'var(--color-surface-2, #f1f5f9)',
+            padding: '8px 10px',
+            borderRadius: 4,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {one('failed')}
+        </p>
+        <p className="text-secondary" style={{ margin: '6px 0 0', fontSize: 12 }}>
+          If that mentions a <strong>foreign key constraint</strong>, something still points at this project and the
+          database will not let it go until that is cleared. If it mentions a <strong>policy</strong> or{' '}
+          <strong>row-level security</strong>, the table is protected against deletion — the audit trail often is,
+          deliberately. Send me the wording and I will tell you which.
         </p>
       </div>
     ) : purge === 'badpassword' ? (

@@ -1,4 +1,5 @@
 import ObligationAssessment from '@/components/ObligationAssessment'
+import { aiConfigured } from '@/lib/ai'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadObligationPage, loadObligationTotals, loadDocumentChoices } from '@/data/obligations'
@@ -51,6 +52,7 @@ export default async function ObligationsPage({
   }>
 }) {
   const sp = await searchParams
+  const aiOn = aiConfigured()
   const project = await getCurrentProject()
   const page = Math.max(1, Number(sp.page ?? '1') || 1)
 
@@ -560,7 +562,7 @@ export default async function ObligationsPage({
                 </p>
               )}
 
-              <ObligationAssessment row={row} />
+              <ObligationAssessment row={row} aiOn={aiOn} />
 
               <details style={{ marginTop: 10 }}>
                 <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Set the party and the state</summary>

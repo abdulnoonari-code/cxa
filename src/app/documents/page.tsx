@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import UploadResult from '@/components/UploadResult'
 import DocumentAssessment from '@/components/DocumentAssessment'
+import { aiConfigured } from '@/lib/ai'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -51,6 +52,7 @@ export default async function DocumentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const aiOn = aiConfigured()
   const sp = await searchParams
   const review = typeof sp.review === 'string' ? sp.review : undefined
 
@@ -238,7 +240,7 @@ export default async function DocumentsPage({
                       the mismatch warning needs room to be read. */}
                   <tr key={`${a.id}-ai`}>
                     <td colSpan={5} style={{ paddingTop: 0 }}>
-                      <DocumentAssessment row={a} />
+                      <DocumentAssessment row={a} aiOn={aiOn} />
                     </td>
                   </tr>
                   </Fragment>

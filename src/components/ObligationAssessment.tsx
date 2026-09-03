@@ -43,7 +43,13 @@ const TONE: Record<string, { border: string; label: string }> = {
  * same reason: it must not look like a field somebody filled in. A solid
  * bordered panel beside real recorded data reads as recorded data.
  */
-export default function ObligationAssessment({ row }: { row: ObligationAiFields }) {
+export default function ObligationAssessment({
+  row,
+  aiOn,
+}: {
+  row: ObligationAiFields
+  aiOn: boolean
+}) {
   const has = !!row.ai_reviewed_at
 
   const reading: ObligationReading | null = has
@@ -86,12 +92,18 @@ export default function ObligationAssessment({ row }: { row: ObligationAiFields 
               {row.ai_reviewed_by_name ? ` · asked by ${row.ai_reviewed_by_name}` : ''}
             </span>
           )}
-          <form action={assessObligation}>
-            <input type="hidden" name="id" value={row.id} />
-            <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>
-              {has ? 'Ask again' : 'Assess this obligation'}
-            </button>
-          </form>
+          {aiOn && (
+            <form action={assessObligation}>
+              <input type="hidden" name="id" value={row.id} />
+              <button
+                type="submit"
+                className={has ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm'}
+                style={{ fontSize: 11 }}
+              >
+                {has ? 'Ask again' : 'Assess this obligation'}
+              </button>
+            </form>
+          )}
           {has && (
             <form action={clearObligationAssessment}>
               <input type="hidden" name="id" value={row.id} />
@@ -103,12 +115,34 @@ export default function ObligationAssessment({ row }: { row: ObligationAiFields 
         </div>
       </div>
 
-      {!has && (
-        <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
-          Reads the clause and says three things: what evidence would discharge it, how the record stands against it,
-          and where the wording will cause an argument later. It never says an obligation has been met — that is a
-          contractual position and it belongs to the parties.
-        </p>
+      {/* The empty state must not read as the answer.
+          It used to be a paragraph of prose in the same box, in the same
+          place the reading appears, and it was identical on every obligation
+          — so it looked exactly like an AI that gives everyone the same
+          assessment. It now says plainly that nothing has been assessed, and
+          the explanation of what the button does is a short line under it,
+          visibly a caption rather than a finding. */}
+      {!has && aiOn && (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            Not assessed yet — press the button to read this clause.
+          </p>
+          <p className="text-secondary" style={{ margin: '3px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+            One reading per obligation, about this clause only. It costs a call each time.
+          </p>
+        </div>
+      )}
+
+      {!aiOn && (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-warning, #a35700)' }}>
+            AI is switched off on this deployment.
+          </p>
+          <p className="text-secondary" style={{ margin: '3px 0 0', fontSize: 12 }}>
+            Add <span className="mono">ANTHROPIC_API_KEY</span> in Vercel → Settings → Environment Variables, then
+            redeploy. Nothing else on this screen depends on it.
+          </p>
+        </div>
       )}
 
       {has && reading && (

@@ -40,7 +40,7 @@ function valuesOf(raw: unknown): ExtractedValue[] {
  * loudest. "This certificate is for a different tag" is the finding that
  * saves somebody at handover; everything else is supporting detail.
  */
-export default function DocumentAssessment({ row }: { row: AttachmentAiFields }) {
+export default function DocumentAssessment({ row, aiOn }: { row: AttachmentAiFields; aiOn: boolean }) {
   const has = !!row.ai_reviewed_at
   const values = valuesOf(row.ai_values)
   const mismatch = row.ai_matches_filing === 'no'
@@ -65,12 +65,18 @@ export default function DocumentAssessment({ row }: { row: AttachmentAiFields })
               {row.ai_model ?? 'not sent to a model'} · {(row.ai_reviewed_at ?? '').slice(0, 10)}
             </span>
           )}
-          <form action={assessAttachment}>
-            <input type="hidden" name="id" value={row.id} />
-            <button type="submit" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>
-              {has ? 'Read again' : 'Read this document'}
-            </button>
-          </form>
+          {aiOn && (
+            <form action={assessAttachment}>
+              <input type="hidden" name="id" value={row.id} />
+              <button
+                type="submit"
+                className={has ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm'}
+                style={{ fontSize: 11 }}
+              >
+                {has ? 'Read again' : 'Read this document'}
+              </button>
+            </form>
+          )}
           {has && (
             <form action={clearAttachmentAssessment}>
               <input type="hidden" name="id" value={row.id} />
@@ -82,12 +88,27 @@ export default function DocumentAssessment({ row }: { row: AttachmentAiFields })
         </div>
       </div>
 
-      {!has && (
-        <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
-          Opens the file, says what it appears to be from its content rather than its name, whether it is about the
-          thing it is filed against, and what is printed on it. It never says a document is acceptable — accepting
-          evidence is your signature.
-        </p>
+      {!has && aiOn && (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            Not read yet — press the button to open this file.
+          </p>
+          <p className="text-secondary" style={{ margin: '3px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+            One reading per document, about this file only. It costs a call each time.
+          </p>
+        </div>
+      )}
+
+      {!aiOn && (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--color-warning, #a35700)' }}>
+            AI is switched off on this deployment.
+          </p>
+          <p className="text-secondary" style={{ margin: '3px 0 0', fontSize: 12 }}>
+            Add <span className="mono">ANTHROPIC_API_KEY</span> in Vercel → Settings → Environment Variables, then
+            redeploy.
+          </p>
+        </div>
       )}
 
       {has && (

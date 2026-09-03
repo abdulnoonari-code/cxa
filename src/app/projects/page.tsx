@@ -4,7 +4,17 @@ import { createProject, selectProject, deleteProject } from './actions'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ProjectsPage() {
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
+  const one = (k: string): string | undefined => {
+    const v = sp[k]
+    return Array.isArray(v) ? v[0] : v
+  }
+  const purge = one('purge')
   const projects = await listProjects()
   const current = await getCurrentProject()
 
@@ -38,8 +48,46 @@ export default async function ProjectsPage() {
     }
   }
 
+  const purgeBanner =
+    purge === 'ok' ? (
+      <div className="card" style={{ borderLeft: '4px solid var(--color-success-solid, #16a34a)', marginBottom: 14 }} role="status">
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>
+          {one('what')} was deleted, along with {one('n')} record{one('n') === '1' ? '' : 's'}.
+        </p>
+        {one('fresh') && (
+          <p style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+            That was the last project, so a fresh empty one called <strong>{one('fresh')}</strong> was created and
+            opened. Nothing is in it — rename it in Project Details if you want it called something else.
+          </p>
+        )}
+      </div>
+    ) : purge === 'partial' ? (
+      <div className="card" style={{ borderLeft: '4px solid var(--color-danger)', marginBottom: 14 }} role="alert">
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--color-danger)' }}>
+          The project was only partly deleted.
+        </p>
+        <p style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+          {one('n')} records were removed, but these would not go: {one('failed')}. Their rows are still in the
+          database and may still be counted somewhere. Try again, or clear them in Supabase.
+        </p>
+      </div>
+    ) : purge === 'badpassword' ? (
+      <div className="card" style={{ borderLeft: '4px solid var(--color-danger)', marginBottom: 14 }} role="alert">
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--color-danger)' }}>Nothing was deleted.</p>
+        <p style={{ margin: '5px 0 0', fontSize: 12.5 }}>{one('why')}</p>
+      </div>
+    ) : purge === 'unconfirmed' ? (
+      <div className="card" style={{ borderLeft: '4px solid var(--color-warning-solid, #d97706)', marginBottom: 14 }} role="alert">
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>Nothing was deleted.</p>
+        <p style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+          The confirmation did not match. Type <span className="mono">{one('want')}</span> exactly.
+        </p>
+      </div>
+    ) : null
+
   return (
     <>
+      {purgeBanner}
       <h1 className="page-title">Projects</h1>
       <p className="page-subtitle">
         Every site you&apos;re commissioning. Open one and the whole app — equipment, checks, documents, punch
@@ -120,12 +168,60 @@ export default async function ProjectsPage() {
                         </button>
                       </form>
                     )}
-                    <form action={deleteProject}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <button type="submit" className="btn btn-danger-outline btn-sm">
+                    {/* A disclosure rather than a bare button. Deleting a
+                        project removes every record in it across thirty
+                        tables, and the old version of this did it on one
+                        click with no confirmation at all. */}
+                    <details>
+                      <summary className="btn btn-danger-outline btn-sm" style={{ cursor: 'pointer' }}>
                         Delete
-                      </button>
-                    </form>
+                      </summary>
+                      <form
+                        action={deleteProject}
+                        style={{
+                          marginTop: 10,
+                          padding: 12,
+                          border: '1px solid var(--color-border)',
+                          borderLeft: '4px solid var(--color-danger)',
+                          borderRadius: 6,
+                          maxWidth: 460,
+                        }}
+                      >
+                        <input type="hidden" name="id" value={p.id} />
+                        <p style={{ margin: 0, fontSize: 12.5 }}>
+                          This permanently deletes <strong>{p.name}</strong> and everything recorded in it — every
+                          tag, check, test, punch item, photograph, document and signature. It cannot be undone.
+                        </p>
+                        {projects.length <= 1 && (
+                          <p className="text-secondary" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
+                            This is your last project. Deleting it creates a fresh, empty one called{' '}
+                            <strong>My Site</strong> in its place, so you end up with a clean slate rather than an
+                            application with nothing to open.
+                          </p>
+                        )}
+                        <label
+                          className="text-secondary"
+                          style={{ display: 'block', margin: '10px 0 4px', fontSize: 12 }}
+                        >
+                          Your password
+                        </label>
+                        <input
+                          type="password"
+                          name="password"
+                          className="input"
+                          autoComplete="current-password"
+                          placeholder="The password you log in with"
+                          style={{ fontSize: 13 }}
+                        />
+                        <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 11.5 }}>
+                          The same password you sign in with. Being signed in is not authority to destroy a project —
+                          a session can be hours old on a laptop somebody else is now sitting at.
+                        </p>
+                        <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 10 }}>
+                          Delete this project permanently
+                        </button>
+                      </form>
+                    </details>
                   </div>
                 </div>
               </div>

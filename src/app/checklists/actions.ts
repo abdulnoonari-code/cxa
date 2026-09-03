@@ -3,6 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { outcomeParams } from '@/lib/uploads'
+import { verifyPassword } from '@/lib/reauth'
+import { checklistImpact, deleteChecklist, type CheckScope } from '@/data/purge'
+import { putFile, recordFile, safeStorageName } from '@/data/upload-file'
 import { parseChecklistWorkbook, type ParsedCheck, type CheckProblem } from '@/lib/checklist-io'
 import { generateAttachmentReview, generateCheckComment } from '@/lib/review'
 import { getCurrentProject } from '@/lib/project'
@@ -286,26 +290,89 @@ export async function attachEvidence(formData: FormData) {
 
   if (!checklist_item_id || !(file instanceof File) || file.size === 0) return
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `${checklist_item_id}/${Date.now()}-${safeName}`
+  const path = `${checklist_item_id}/${Date.now()}-${safeStorageName(file.name)}`
+  const put = await putFile(file, path)
+  if (!put.ok) {
+    refresh(equipment_id)
+    redirect(`/checklists?${outcomeParams(put.outcome)}`)
+  }
 
-  const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
-  if (uploadError) return
-
-  const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(path)
   const review = generateAttachmentReview(file.name, file.size, tag_id)
-
   const project = await getCurrentProject()
 
-  await supabase.from('attachments').insert({
-    project_id: project?.id ?? null,
-    checklist_item_id,
-    file_name: file.name,
-    file_path: path,
-    file_url: publicUrlData.publicUrl,
-    review_status: review.status,
-    review_note: review.note,
-  })
+  const outcome = await recordFile(
+    'attachments',
+    {
+      project_id: project?.id ?? null,
+      checklist_item_id,
+      file_name: file.name,
+      file_path: put.stored.path,
+      file_url: put.stored.url,
+      review_status: review.status,
+      review_note: review.note,
+    },
+    put.stored,
+    tag_id ?? undefined
+  )
 
   refresh(equipment_id)
+  redirect(`/checklists?${outcomeParams(outcome)}`)
+}
+
+// ── Deleting a whole checklist ────────────────────────────────────────────
+//
+// Two scopes, one action. Deleting one piece of equipment's checks is a
+// routine correction — the wrong template got imported against the wrong tag.
+// Deleting every check on the project is not routine, so it asks for the
+// project's name to be typed out.
+//
+// Neither is reversible and neither pretends otherwise.
+export async function deleteChecklistAction(formData: FormData) {
+  const scopeKind = str(formData, 'scope')
+  const equipmentId = str(formData, 'equipment_id')
+
+  const project = await getCurrentProject()
+  if (!project) redirect('/checklists?purge=noproject')
+
+  // The same rule as deleting a project: anything that empties a whole
+  // project asks for the password. Clearing one tag's checklist does not —
+  // it is scoped, and re-importing the file puts it back.
+  if (scopeKind === 'project') {
+    const auth = await verifyPassword(str(formData, 'password'))
+    if (!auth.ok) {
+      redirect(`/checklists?purge=badpassword&reason=${encodeURIComponent(auth.reason)}`)
+    }
+  }
+
+  const scope: CheckScope =
+    scopeKind === 'project'
+      ? { kind: 'project', label: project.name }
+      : { kind: 'equipment', equipmentId: equipmentId ?? '', label: str(formData, 'label') ?? 'this equipment' }
+
+  if (scope.kind === 'equipment' && !scope.equipmentId) redirect('/checklists?purge=notarget')
+
+  // Counted before the delete, because afterwards there is nothing left to
+  // count and the confirmation message would have to guess.
+  const impact = await checklistImpact(project.id, scope)
+  const result = await deleteChecklist(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'checklist deleted' : 'checklist delete failed',
+    entity: 'checklist_item',
+    entityLabel: scope.label,
+    oldValue: `${impact.total} checks`,
+    comment: result.ok
+      ? `Deleted ${result.deleted} checks. ${impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'}`
+      : result.reason,
+  })
+
+  refresh(equipmentId)
+  revalidatePath('/plan')
+  revalidatePath('/readiness')
+
+  if (!result.ok) {
+    redirect(`/checklists?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  }
+  redirect(`/checklists?purge=ok&n=${result.deleted}&what=${encodeURIComponent(scope.label)}`)
 }

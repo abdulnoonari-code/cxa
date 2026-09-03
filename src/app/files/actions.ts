@@ -1,7 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { outcomeParams } from '@/lib/uploads'
+import { putFile, recordFile, safeStorageName } from '@/data/upload-file'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -17,24 +20,29 @@ export async function uploadProjectFile(formData: FormData) {
   const file = formData.get('file')
   if (!project_id || !(file instanceof File) || file.size === 0) return
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `project/${project_id}/${Date.now()}-${safeName}`
+  const path = `project/${project_id}/${Date.now()}-${safeStorageName(file.name)}`
+  const put = await putFile(file, path)
+  if (!put.ok) {
+    revalidatePath('/files')
+    redirect(`/files?${outcomeParams(put.outcome)}`)
+  }
 
-  const { error } = await supabase.storage.from('documents').upload(path, file)
-  if (error) return
-
-  const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(path)
-
-  await supabase.from('project_files').insert({
-    project_id,
-    file_name: file.name,
-    file_path: path,
-    file_url: publicUrlData.publicUrl,
-    category: str(formData, 'category'),
-    description: str(formData, 'description'),
-  })
+  const outcome = await recordFile(
+    'project_files',
+    {
+      project_id,
+      file_name: file.name,
+      file_path: put.stored.path,
+      file_url: put.stored.url,
+      category: str(formData, 'category'),
+      description: str(formData, 'description'),
+    },
+    put.stored,
+    str(formData, 'category') ?? undefined
+  )
 
   revalidatePath('/files')
+  redirect(`/files?${outcomeParams(outcome)}`)
 }
 
 export async function deleteProjectFile(formData: FormData) {

@@ -1,3 +1,4 @@
+import UploadResult from '@/components/UploadResult'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { FILE_CATEGORIES, fileCategoryLabel } from '@/lib/tasks'
@@ -8,9 +9,10 @@ export const dynamic = 'force-dynamic'
 export default async function FilesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { category } = await searchParams
+  const sp = await searchParams
+  const category = typeof sp.category === 'string' ? sp.category : undefined
   const project = await getCurrentProject()
 
   let query = supabase
@@ -31,6 +33,7 @@ export default async function FilesPage({
 
   return (
     <>
+      <UploadResult searchParams={sp} />
       <h1 className="page-title">Files</h1>
       <p className="page-subtitle">
         {project ? project.name : 'No project selected'} — drawings, specifications, submittals and manuals for

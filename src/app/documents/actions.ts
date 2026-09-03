@@ -1,7 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { outcomeParams } from '@/lib/uploads'
+import { putFile, recordFile, safeStorageName } from '@/data/upload-file'
 import { generateAttachmentReview } from '@/lib/review'
 
 function str(formData: FormData, key: string): string | null {
@@ -33,26 +36,32 @@ export async function uploadDocument(formData: FormData) {
     .eq('id', item.equipment_id)
     .single()
 
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `${checklist_item_id}/${Date.now()}-${safeName}`
+  const path = `${checklist_item_id}/${Date.now()}-${safeStorageName(file.name)}`
+  const put = await putFile(file, path)
+  if (!put.ok) {
+    revalidatePath('/documents')
+    redirect(`/documents?${outcomeParams(put.outcome)}`)
+  }
 
-  const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
-  if (uploadError) return
-
-  const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(path)
   const review = generateAttachmentReview(file.name, file.size, equipment?.tag_id ?? null)
 
-  await supabase.from('attachments').insert({
-    checklist_item_id,
-    file_name: file.name,
-    file_path: path,
-    file_url: publicUrlData.publicUrl,
-    review_status: review.status,
-    review_note: review.note,
-  })
+  const outcome = await recordFile(
+    'attachments',
+    {
+      checklist_item_id,
+      file_name: file.name,
+      file_path: put.stored.path,
+      file_url: put.stored.url,
+      review_status: review.status,
+      review_note: review.note,
+    },
+    put.stored,
+    equipment?.tag_id ?? undefined
+  )
 
   revalidatePath('/documents')
   revalidatePath(`/equipment/${item.equipment_id}/checklist`)
+  redirect(`/documents?${outcomeParams(outcome)}`)
 }
 
 export async function deleteDocument(formData: FormData) {

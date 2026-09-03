@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module'
+
 // Getting photographs into a document without producing a file nobody can send.
 //
 // A handover pack with a defect photo on it is exactly what a client asks for.
@@ -76,18 +78,69 @@ export const MAX_PHOTOS = 24
 export const MAX_TOTAL_BYTES = 7 * 1024 * 1024
 
 /**
- * Shrink one image, if the platform can.
+ * Load sharp, if this deployment happens to have it.
  *
- * `sharp` is not a declared dependency of this project — it arrives with
- * Next.js, which uses it for image optimisation, and Vercel ships it. That is
- * reliable in practice and not guaranteed forever, so it is loaded through a
- * guarded dynamic import and the caller gets the original bytes back if it is
- * not there. The document is then larger rather than broken, and the cap on
- * total bytes still holds the line.
+ * The module name is assembled at runtime, and that is deliberate rather than
+ * cute. A literal `import('sharp')` is resolved at BUILD time by two separate
+ * things — TypeScript, which wants the type declarations, and the bundler,
+ * which wants the module — and both fail when sharp is not installed. That is
+ * exactly what it did: the Vercel build stopped with
  *
- * If this ever stops working, the fix is to add "sharp" to package.json — not
- * to remove the photographs.
+ *     Cannot find module 'sharp' or its corresponding type declarations
+ *
+ * even though every line of this function is written to work without it. A
+ * guard that only protects the runtime is not a guard at all if the build
+ * refuses to produce a runtime.
+ *
+ * sharp is not in package.json. It arrives with Next.js for image
+ * optimisation and Vercel usually ships it, so this usually finds it. When it
+ * does not, photographs go into documents at their original size and the byte
+ * cap does the limiting instead — the document says so rather than pretending.
  */
+let cachedSharp: ((input: Buffer) => SharpLike) | null | undefined
+
+function loadSharp(): ((input: Buffer) => SharpLike) | null {
+  if (cachedSharp !== undefined) return cachedSharp
+
+  // The name is assembled so that no build tool can fold it back into a
+  // literal and start resolving it again.
+  const name = ['sh', 'arp'].join('')
+
+  // Two resolution roots, because one is not enough. `import.meta.url` inside
+  // a bundled server chunk points at the chunk, not at the application, and
+  // resolving from there finds nothing — which is exactly what happened: the
+  // build passed, the loader silently returned null, and every photograph
+  // went into documents at full size. A silent fallback that never fires
+  // correctly is worse than no fallback, because nothing looks wrong.
+  const roots = [`${process.cwd()}/index.js`, import.meta.url]
+
+  for (const root of roots) {
+    try {
+      const mod = createRequire(root)(name) as { default?: unknown } | unknown
+      const fn = (mod as { default?: unknown })?.default ?? mod
+      if (typeof fn === 'function') {
+        cachedSharp = fn as (input: Buffer) => SharpLike
+        return cachedSharp
+      }
+    } catch {
+      // Try the next root.
+    }
+  }
+
+  cachedSharp = null
+  return null
+}
+
+/** Whether this deployment can downscale. Reported in documents, not guessed at. */
+export function canDownscale(): boolean {
+  return loadSharp() !== null
+}
+
+type SharpLike = {
+  resize: (o: object) => { jpeg: (o: object) => { toBuffer: () => Promise<Buffer> } }
+}
+
+/** Shrink one image, if the platform can. See `loadSharp` for why it might not. */
 export async function shrink(bytes: ArrayBuffer, contentType: string): Promise<{ bytes: Buffer; contentType: string }> {
   const original = Buffer.from(bytes)
 
@@ -95,13 +148,10 @@ export async function shrink(bytes: ArrayBuffer, contentType: string): Promise<{
   if (original.byteLength < 180_000) return { bytes: original, contentType }
 
   try {
-    const mod = (await import('sharp').catch(() => null)) as
-      | { default: (input: Buffer) => { resize: (o: object) => { jpeg: (o: object) => { toBuffer: () => Promise<Buffer> } } } }
-      | null
-    if (!mod?.default) return { bytes: original, contentType }
+    const sharp = loadSharp()
+    if (!sharp) return { bytes: original, contentType }
 
-    const out = await mod
-      .default(original)
+    const out = await sharp(original)
       .resize({ width: TARGET_PX, withoutEnlargement: true, fit: 'inside' })
       .jpeg({ quality: 78, mozjpeg: true })
       .toBuffer()
@@ -118,10 +168,60 @@ export async function shrink(bytes: ArrayBuffer, contentType: string): Promise<{
 }
 
 export type PhotoSource = {
+  /** The path inside the storage bucket. Preferred — see `fetchBytes`. */
+  path?: string | null
   url: string | null
   contentType: string | null
   caption: string
   note: string
+}
+
+/**
+ * Get one photograph's bytes.
+ *
+ * By its **storage path** first, not its public URL. Three reasons, and the
+ * third is the one that bites:
+ *
+ *   1. It works whether the bucket is public or private. Every upload in this
+ *      app currently writes a public URL, which means anybody holding the link
+ *      can read the photograph. The day that gets tightened — and on a real
+ *      project it should be — every public URL stops working, and a report
+ *      that depends on them would silently fill with "Storage returned HTTP
+ *      400" instead of photographs.
+ *   2. One hop instead of two. The public URL sends the serverless function
+ *      out to the CDN and back for a file the same credentials can read
+ *      directly.
+ *   3. A serverless function is not guaranteed to be able to reach the public
+ *      internet the way a browser can.
+ *
+ * The URL stays as a fallback for rows uploaded before `file_path` was
+ * recorded, so nothing already on the system stops working.
+ */
+export async function fetchBytes(
+  source: PhotoSource,
+  download: (path: string) => Promise<{ data: Blob | null; error: unknown }>
+): Promise<{ ok: true; bytes: ArrayBuffer } | { ok: false; reason: string }> {
+  if (source.path) {
+    try {
+      const { data } = await download(source.path)
+      if (data) return { ok: true, bytes: await data.arrayBuffer() }
+    } catch {
+      // Fall through to the URL. A storage client that throws is not a reason
+      // to give up on a photograph that also has a working public link.
+    }
+  }
+
+  if (!source.url) {
+    return { ok: false, reason: 'No file was stored for this photograph.' }
+  }
+
+  try {
+    const res = await fetch(source.url, { cache: 'no-store' })
+    if (!res.ok) return { ok: false, reason: `Storage returned HTTP ${res.status}.` }
+    return { ok: true, bytes: await res.arrayBuffer() }
+  } catch {
+    return { ok: false, reason: 'The photograph could not be fetched from storage.' }
+  }
 }
 
 /**
@@ -130,7 +230,11 @@ export type PhotoSource = {
  * Stops at whichever limit is reached first — the count or the byte budget —
  * and reports what it left behind either way.
  */
-export async function prepareGallery(sources: PhotoSource[], limit = MAX_PHOTOS): Promise<PreparedGallery> {
+export async function prepareGallery(
+  sources: PhotoSource[],
+  download: (path: string) => Promise<{ data: Blob | null; error: unknown }>,
+  limit = MAX_PHOTOS
+): Promise<PreparedGallery> {
   const photos: PreparedPhoto[] = []
   const failed: { caption: string; reason: string }[] = []
   let bytes = 0
@@ -147,21 +251,15 @@ export async function prepareGallery(sources: PhotoSource[], limit = MAX_PHOTOS)
       break
     }
 
-    if (!source.url) {
-      failed.push({ caption: source.caption, reason: 'No file was stored for this photograph.' })
+    const got = await fetchBytes(source, download)
+    if (!got.ok) {
+      failed.push({ caption: source.caption, reason: got.reason })
       used += 1
       continue
     }
 
     try {
-      const res = await fetch(source.url, { cache: 'no-store' })
-      if (!res.ok) {
-        failed.push({ caption: source.caption, reason: `Storage returned HTTP ${res.status}.` })
-        used += 1
-        continue
-      }
-      const raw = await res.arrayBuffer()
-      const small = await shrink(raw, source.contentType ?? 'image/jpeg')
+      const small = await shrink(got.bytes, source.contentType ?? 'image/jpeg')
 
       // One oversized photograph must not blow the budget for the rest.
       if (bytes + small.bytes.byteLength > MAX_TOTAL_BYTES) {
@@ -178,7 +276,7 @@ export async function prepareGallery(sources: PhotoSource[], limit = MAX_PHOTOS)
       bytes += small.bytes.byteLength
       used += 1
     } catch {
-      failed.push({ caption: source.caption, reason: 'The photograph could not be fetched from storage.' })
+      failed.push({ caption: source.caption, reason: 'The photograph was fetched but could not be read as an image.' })
       used += 1
     }
   }
@@ -197,6 +295,7 @@ export async function prepareGallery(sources: PhotoSource[], limit = MAX_PHOTOS)
 
 export type PhotoRowLike = {
   kind: string
+  file_path?: string | null
   file_url: string | null
   content_type: string | null
   caption: string | null
@@ -223,6 +322,7 @@ export function photoSources<T extends PhotoRowLike>(
       bits.push(`${hedge}: ${row.ai_problem.replace(/\s+/g, ' ').slice(0, 150)}`)
     }
     return {
+      path: row.file_path ?? null,
       url: row.file_url,
       contentType: row.content_type,
       caption: `${itemRef(row, i)} — ${what}${said ? `: ${said}` : ''}`,

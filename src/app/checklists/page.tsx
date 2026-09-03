@@ -3,7 +3,8 @@ import { getCurrentProject } from '@/lib/project'
 import { LevelBadge } from '@/components/LevelBadge'
 import { LEVELS, STATUSES, statusBadgeClass, reviewBadgeClass, reviewLabel } from '@/lib/checklist'
 import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
-import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence } from './actions'
+import UploadResult from '@/components/UploadResult'
+import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence, deleteChecklistAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,11 @@ export default async function ChecklistsPage({
     errors?: string
     detail?: string
     headings?: string
+    purge?: string
+    n?: string
+    what?: string
+    reason?: string
+    [key: string]: string | string[] | undefined
   }>
 }) {
   const {
@@ -57,7 +63,12 @@ export default async function ChecklistsPage({
     detail,
     headings,
     page: pageParam,
+    purge,
+    n: purgedCount,
+    what: purgedWhat,
+    reason: purgeReason,
   } = await searchParams
+  const allParams = await searchParams
 
   const project = await getCurrentProject()
 
@@ -150,6 +161,25 @@ export default async function ChecklistsPage({
         {failed > 0 && <span className="badge badge-danger">{failed} failed</span>}
         {pending > 0 && <span className="badge badge-warning">{pending} not started</span>}
       </p>
+
+      <UploadResult searchParams={allParams} />
+
+      {purge === 'ok' && (
+        <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
+          <strong>Deleted.</strong> {purgedCount} check{purgedCount === '1' ? '' : 's'} removed from{' '}
+          {purgedWhat}. The audit trail records what went and what it affected.
+        </div>
+      )}
+      {purge === 'badpassword' && (
+        <div className="alert alert-danger">
+          <strong>Nothing deleted.</strong> {purgeReason}
+        </div>
+      )}
+      {purge === 'failed' && (
+        <div className="alert alert-danger">
+          <strong>Nothing deleted.</strong> {purgeReason}
+        </div>
+      )}
 
       {importResult === 'ok' && (
         <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
@@ -355,6 +385,40 @@ export default async function ChecklistsPage({
         </form>
       </div>
 
+      {groups.length > 0 && totalChecks > 0 && (
+        <details className="card" style={{ marginTop: 20, borderLeft: '4px solid var(--color-danger)' }}>
+          <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>
+            Delete every check on this project
+          </summary>
+          <form action={deleteChecklistAction} style={{ marginTop: 12, maxWidth: 520 }}>
+            <input type="hidden" name="scope" value="project" />
+            <p style={{ margin: 0, fontSize: 13 }}>
+              This removes all <strong>{totalChecks}</strong> checks across every tag and every level — L1 through
+              L5 — together with their evidence files and sign-offs. Punch items raised from them survive but stop
+              saying which check found the defect. It cannot be undone.
+            </p>
+            <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
+              Use this to clear a checklist that was imported against the wrong project, then import the right one.
+              Everything else — tags, tests, punch items, documents — is untouched.
+            </p>
+            <label className="text-secondary" style={{ display: 'block', margin: '12px 0 4px', fontSize: 12 }}>
+              Your password
+            </label>
+            <input
+              type="password"
+              name="password"
+              className="input"
+              autoComplete="current-password"
+              placeholder="The password you log in with"
+              style={{ fontSize: 13, maxWidth: 320 }}
+            />
+            <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 10 }}>
+              Delete all {totalChecks} checks
+            </button>
+          </form>
+        </details>
+      )}
+
       {groups.length > 0 ? (
         groups.map((g) => (
           <div key={g.id} className="card" style={{ marginTop: 16 }}>
@@ -378,9 +442,39 @@ export default async function ChecklistsPage({
                   </span>
                 )}
               </div>
-              <span className="text-secondary" style={{ fontSize: 12 }}>
-                {g.items.length} check{g.items.length === 1 ? '' : 's'}
-              </span>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <span className="text-secondary" style={{ fontSize: 12 }}>
+                  {g.items.length} check{g.items.length === 1 ? '' : 's'}
+                </span>
+                <details>
+                  <summary className="btn-link" style={{ cursor: 'pointer', fontSize: 12 }}>
+                    Delete this checklist
+                  </summary>
+                  <form
+                    action={deleteChecklistAction}
+                    style={{
+                      marginTop: 8,
+                      padding: 10,
+                      border: '1px solid var(--color-border)',
+                      borderLeft: '3px solid var(--color-danger)',
+                      borderRadius: 6,
+                      maxWidth: 380,
+                    }}
+                  >
+                    <input type="hidden" name="scope" value="equipment" />
+                    <input type="hidden" name="equipment_id" value={g.id} />
+                    <input type="hidden" name="label" value={g.tag_id} />
+                    <p style={{ margin: 0, fontSize: 12 }}>
+                      Deletes all {g.items.length} check{g.items.length === 1 ? '' : 's'} on{' '}
+                      <span className="mono">{g.tag_id}</span>, with their evidence and sign-offs. Punch items raised
+                      from them are kept, but stop saying which check found the defect.
+                    </p>
+                    <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 8 }}>
+                      Delete {g.items.length} check{g.items.length === 1 ? '' : 's'}
+                    </button>
+                  </form>
+                </details>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gap: 12 }}>

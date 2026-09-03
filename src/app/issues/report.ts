@@ -20,8 +20,8 @@ import {
   severityLabel,
   categoryLabel,
 } from '@/lib/punchlist'
-import { loadIssuePhotos } from '@/data/photos'
-import { prepareGallery, photoSources, omissionNote, MAX_PHOTOS } from '@/lib/photo-prep'
+import { loadIssuePhotos, downloadPhotoBytes } from '@/data/photos'
+import { prepareGallery, photoSources, omissionNote, canDownscale, MAX_PHOTOS } from '@/lib/photo-prep'
 import type { Report, ReportGallery } from '@/lib/docgen'
 
 const SETTLED = new Set(['verified', 'closed'])
@@ -93,11 +93,17 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
   // photographs of items it does not list is a different document from the one
   // on screen, and the whole point of reading the filters off the URL is that
   // those two are the same thing.
+  //
+  // The photographs are counted even when they are not carried. A document
+  // that just says "photographs are not included" leaves somebody who has
+  // uploaded twelve of them wondering whether the upload worked. It should
+  // say twelve exist and which button carries them.
   const galleries: ReportGallery[] = []
+  const shown = new Set(rows.map((r) => r.id))
+  const store = await loadIssuePhotos(project.id)
+  const forThisList = store.all.filter((ph) => shown.has(ph.issue_id))
+
   if (withPhotos) {
-    const shown = new Set(rows.map((r) => r.id))
-    const store = await loadIssuePhotos(project.id)
-    const forThisList = store.all.filter((ph) => shown.has(ph.issue_id))
     const refOf = new Map(rows.map((r) => [r.id, r.ref ?? r.title]))
 
     if (!store.schemaReady) {
@@ -109,7 +115,8 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
       })
     } else {
       const gallery = await prepareGallery(
-        photoSources(forThisList, (row) => refOf.get(row.issue_id) ?? 'Punch item')
+        photoSources(forThisList, (row) => refOf.get(row.issue_id) ?? 'Punch item'),
+        downloadPhotoBytes
       )
       galleries.push({
         title: 'Photographic evidence',
@@ -120,11 +127,29 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
           note: ph.note || undefined,
         })),
         missing: gallery.failed,
-        note: omissionNote(gallery, 'the punch item in CxSentinel') ?? undefined,
+        note: [
+          omissionNote(gallery, 'the punch item in CxSentinel'),
+          // Said out loud rather than left to be inferred from a short
+          // gallery. Without the image library the photographs go in at
+          // their original size, the byte budget fills after two or three,
+          // and the document would otherwise look as though only two or
+          // three had been uploaded.
+          canDownscale()
+            ? null
+            : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
+        // Three states, not two. "No photographs" is a useless answer to
+        // somebody who has just uploaded one: it does not say whether the
+        // upload failed, or landed on a different item, or landed on an item
+        // this filtered list excludes. Each of those has a different fix.
         emptyNote:
-          forThisList.length === 0
-            ? 'No photographs have been uploaded against the items in this list.'
-            : undefined,
+          forThisList.length > 0
+            ? undefined
+            : store.all.length > 0
+              ? `No photographs are attached to the ${rows.length} item${rows.length === 1 ? '' : 's'} in this list. There ${store.all.length === 1 ? 'is 1 photograph' : `are ${store.all.length} photographs`} elsewhere in this project, attached to other punch items — if you expected one here, it is on a different item, or this list is filtered so as to exclude it.`
+              : 'No photographs have been uploaded anywhere in this project yet. If you did upload one and it is not here, the upload did not save — the punch list screen now shows a photograph count against every item, which is the quickest way to confirm it.',
       })
     }
   }
@@ -168,7 +193,9 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
     footnotes: [
       withPhotos
         ? `Photographs are evidence of what was seen, not of what was decided. A photograph carrying an AI reading is marked as such — that reading is a suggestion and closes nothing. At most ${MAX_PHOTOS} photographs are carried so the file stays small enough to send.`
-        : 'Photographs are not included. Add ?photos=1 to the address for a copy with the photographic evidence.',
+        : forThisList.length > 0
+          ? `${forThisList.length} photograph${forThisList.length === 1 ? ' has' : 's have'} been uploaded against the items in this list and ${forThisList.length === 1 ? 'is' : 'are'} NOT in this document. Use the “PDF with photographs” button on the punch list screen for a copy that carries them.`
+          : 'No photographs have been uploaded against the items in this list, so there are none this document could carry.',
       'This is a record of what is outstanding, not a clearance. Whether a system may proceed is decided by its readiness gate, which reads these categories as rules.',
       'An item with no category is counted as blocking until somebody assesses it — an item nobody has assessed cannot be assumed harmless.',
       `Severity and category are different things: severity is how bad the defect is (${severityLabel('critical')}, ${severityLabel('major')}, ${severityLabel('minor')}, ${severityLabel('observation')}); category is what it is allowed to stop.`,

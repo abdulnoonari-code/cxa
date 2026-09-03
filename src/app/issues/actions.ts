@@ -11,6 +11,7 @@ import { loadPunchRefs } from '@/data/punchlist'
 import { nextRef, refSeries } from '@/lib/punchlist'
 import { parsePunchWorkbook, type PunchProblem } from '@/lib/punchlist-io'
 import { storeIssuePhoto } from '@/data/photo-store'
+import { outcomeParams } from '@/lib/uploads'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -158,6 +159,8 @@ export async function createIssue(formData: FormData) {
   // photograph is evidence for it.
   const photo = formData.get('photo')
   let photoNote: string | null = null
+  const photoAttempted = photo instanceof File && photo.size > 0
+  const photoName = photo instanceof File ? photo.name : 'the photograph'
 
   if (newId && photo instanceof File && photo.size > 0) {
     const stored = await storeIssuePhoto({
@@ -194,7 +197,16 @@ export async function createIssue(formData: FormData) {
   refresh(equipment)
   if (checklist_item_id && equipment) revalidatePath(`/equipment/${equipment}/checklist`)
 
-  if (photoNote) redirect(`/issues?raised=${encodeURIComponent(ref)}&photo=failed&reason=${encodeURIComponent(photoNote.slice(0, 200))}`)
+  // Both outcomes are reported, not just the failure. A successful upload
+  // that says nothing is indistinguishable from one that silently failed —
+  // which is how a punch photograph came to be missing without anybody
+  // knowing until a report was generated weeks later.
+  if (photoAttempted) {
+    const outcome = photoNote
+      ? { ok: false, file: photoName, reason: photoNote, hint: 'The punch item itself was raised and is fine — open it and attach the photograph there once this is sorted.' }
+      : { ok: true, file: photoName, against: ref }
+    redirect(`/issues?raised=${encodeURIComponent(ref)}&${outcomeParams(outcome)}`)
+  }
 }
 
 export async function updateIssue(formData: FormData) {

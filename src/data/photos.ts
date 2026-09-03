@@ -85,3 +85,15 @@ export async function loadPhoto(id: string, projectId: string | null): Promise<I
   if (error) return null
   return (data as unknown as IssuePhoto) ?? null
 }
+
+/**
+ * Download one photograph's bytes straight out of the storage bucket.
+ *
+ * Passed into `prepareGallery` so `lib/photo-prep.ts` stays free of Supabase
+ * — the library is about shrinking and capping images, and it is asserted
+ * without a database anywhere near it.
+ */
+export async function downloadPhotoBytes(path: string): Promise<{ data: Blob | null; error: unknown }> {
+  const { data, error } = await supabase.storage.from('documents').download(path)
+  return { data: (data as Blob | null) ?? null, error }
+}

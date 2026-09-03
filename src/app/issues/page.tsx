@@ -1,6 +1,8 @@
+import UploadResult from '@/components/UploadResult'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
+import { loadIssuePhotos } from '@/data/photos'
 import { loadPunchPage, loadPunchTotals, partiesIn, type PunchRow } from '@/data/punchlist'
 import { refKey, subjectLabel, type Subject, type SubjectIndex } from '@/lib/subjects'
 import { LEVELS } from '@/lib/checklist'
@@ -74,11 +76,20 @@ export default async function IssuesPage({
     openOnly: sp.open === '1',
   }
 
-  const [index, { rows, total }, totals] = await Promise.all([
+  const [index, { rows, total }, totals, photoStore] = await Promise.all([
     loadSubjectIndex(project?.id ?? null),
     loadPunchPage(project?.id ?? null, filter, page, PER_PAGE),
     loadPunchTotals(project?.id ?? null),
+    loadIssuePhotos(project?.id ?? null),
   ])
+
+  // How many photographs each item carries, shown in the list itself.
+  //
+  // Added because there was no way to tell. You could upload a photograph,
+  // and then the only place it appeared was inside that one item's page — so
+  // an upload that silently failed looked exactly like an upload that worked.
+  // The count belongs on the register.
+  const photoCount = (id: string): number => photoStore.byIssue.get(id)?.length ?? 0
 
   const summary = summarise(totals)
   const reading = verdict(summary)
@@ -128,6 +139,7 @@ export default async function IssuesPage({
 
   return (
     <>
+      <UploadResult searchParams={sp} />
       <h1 className="page-title">Punch List</h1>
       <p className="page-subtitle" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
@@ -405,6 +417,21 @@ export default async function IssuesPage({
             </p>
           </div>
         )}
+        {/* Persistent, unlike the banner above it. The "photograph was not
+            attached" notice appears once on the redirect and is gone the
+            moment you navigate — which is exactly when somebody concludes the
+            upload worked. If the table is not there, say so every time. */}
+        {!photoStore.schemaReady && (
+          <div className="card" style={{ borderLeft: '4px solid var(--color-warning-solid, #d97706)', marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600 }}>
+              This database cannot store photographs yet, so no upload will save.
+            </p>
+            <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+              Run <span className="mono">week5-part21-photos.sql</span> in Supabase → SQL Editor. Everything else on
+              this screen works normally in the meantime.
+            </p>
+          </div>
+        )}
         {pickable.length === 0 && (
           <p className="text-secondary" style={{ fontSize: 13, marginTop: 10 }}>
             Add equipment or systems first — a punch item has to be against something.
@@ -500,13 +527,16 @@ export default async function IssuesPage({
               <th style={{ minWidth: 130 }}>Responsible</th>
               <th>Due</th>
               <th style={{ textAlign: 'right' }}>Age</th>
+              <th style={{ textAlign: 'center', width: 54 }} title="Photographs attached to this item">
+                Photos
+              </th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="empty-row">
+                <td colSpan={11} className="empty-row">
                   {summary.total === 0
                     ? 'No punch items on this project yet.'
                     : 'No punch items match this filter.'}
@@ -589,6 +619,22 @@ export default async function IssuesPage({
                     </td>
                     <td className="mono text-secondary" style={{ textAlign: 'right', fontSize: 12 }}>
                       {age === null ? '—' : `${age}d`}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {photoCount(row.id) > 0 ? (
+                        <Link
+                          href={`/issues/${row.id}/edit#photos`}
+                          className="link mono"
+                          style={{ fontSize: 12, fontWeight: 600 }}
+                          title={`${photoCount(row.id)} photograph${photoCount(row.id) === 1 ? '' : 's'} attached`}
+                        >
+                          {photoCount(row.id)}
+                        </Link>
+                      ) : (
+                        <span className="text-secondary" style={{ fontSize: 12 }} title="No photograph attached">
+                          —
+                        </span>
+                      )}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

@@ -24,8 +24,8 @@ import {
   type RequirementStatus,
 } from '@/lib/requirements'
 import { gateVerdict } from '@/lib/gates'
-import { loadIssuePhotos } from '@/data/photos'
-import { prepareGallery, photoSources, omissionNote, MAX_PHOTOS } from '@/lib/photo-prep'
+import { loadIssuePhotos, downloadPhotoBytes } from '@/data/photos'
+import { prepareGallery, photoSources, omissionNote, canDownscale, MAX_PHOTOS } from '@/lib/photo-prep'
 import type { Report, ReportTable, ReportGallery } from '@/lib/docgen'
 
 export type BuiltDossier = {
@@ -322,8 +322,12 @@ export async function buildDossier(url: string, type: string, id: string): Promi
   // Only photographs of punch items inside this pack's scope. A pack for one
   // substation must not carry a photograph from another.
   const galleries: ReportGallery[] = []
+  const inScopeIds = new Set(pack.rollup.issues.map((i) => i.id))
+  const photoStore = await loadIssuePhotos(project.id)
+  const photosInScope = photoStore.all.filter((ph) => inScopeIds.has(ph.issue_id))
+
   if (withPhotos) {
-    const store = await loadIssuePhotos(project.id)
+    const store = photoStore
     if (!store.schemaReady) {
       galleries.push({
         title: '9. Photographic evidence',
@@ -332,7 +336,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
           'Photographic evidence is not set up on this database yet — run week5-part21-photos.sql. Nothing is missing from this pack; there are no photographs to carry.',
       })
     } else {
-      const inScope = new Set(pack.rollup.issues.map((i) => i.id))
+      const inScope = inScopeIds
       const refOf = new Map(pack.rollup.issues.map((i) => [i.id, i.ref ?? i.title]))
       const openIds = new Set(open.map((i) => i.id))
       const mine = store.all.filter((ph) => inScope.has(ph.issue_id))
@@ -341,7 +345,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
         ...mine.filter((ph) => !openIds.has(ph.issue_id)),
       ]
 
-      const gallery = await prepareGallery(photoSources(ordered, (row) => refOf.get(row.issue_id) ?? 'Punch item'))
+      const gallery = await prepareGallery(photoSources(ordered, (row) => refOf.get(row.issue_id) ?? 'Punch item'), downloadPhotoBytes)
       galleries.push({
         title: '9. Photographic evidence',
         images: gallery.photos.map((ph) => ({
@@ -351,11 +355,25 @@ export async function buildDossier(url: string, type: string, id: string): Promi
           note: ph.note || undefined,
         })),
         missing: gallery.failed,
-        note: omissionNote(gallery, 'the punch list in CxSentinel') ?? undefined,
+        note: [
+          omissionNote(gallery, 'the punch list in CxSentinel'),
+          // Said out loud rather than left to be inferred from a short
+          // gallery. Without the image library the photographs go in at
+          // their original size, the byte budget fills after two or three,
+          // and the document would otherwise look as though only two or
+          // three had been uploaded.
+          canDownscale()
+            ? null
+            : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
         emptyNote:
-          ordered.length === 0
-            ? 'No photographs have been uploaded against the punch items in this pack. That is not evidence that no defect was photographed — it is evidence that none was uploaded here.'
-            : undefined,
+          ordered.length > 0
+            ? undefined
+            : store.all.length > 0
+              ? `No photographs are attached to the punch items in this pack. There ${store.all.length === 1 ? 'is 1 photograph' : `are ${store.all.length} photographs`} elsewhere in this project, on items outside this pack's scope. That is not evidence that no defect was photographed here — only that none was uploaded against these items.`
+              : 'No photographs have been uploaded anywhere in this project. That is not evidence that no defect was photographed — it is evidence that none reached CxSentinel.',
       })
     }
   }
@@ -381,7 +399,9 @@ export async function buildDossier(url: string, type: string, id: string): Promi
       `Asset path: ${pack.path}.`,
       withPhotos
         ? `Photographs show what was seen on site. A photograph carrying an AI reading is marked as such; that reading is a suggestion, it closed nothing and nobody signed it. At most ${MAX_PHOTOS} are carried so the pack stays small enough to send, and any left out are counted under the block.`
-        : 'Photographs are not included. Add ?photos=1 to the address for a pack with the photographic evidence.',
+        : photosInScope.length > 0
+          ? `${photosInScope.length} photograph${photosInScope.length === 1 ? ' has' : 's have'} been uploaded against the punch items in this pack and ${photosInScope.length === 1 ? 'is' : 'are'} NOT in this document. Use the “Full pack, with photographs” button for a copy that carries them.`
+          : 'No photographs have been uploaded against the punch items in this pack, so there are none this document could carry.',
       'This pack is assembled from the records in CxSentinel at the moment it was generated. Nothing in it is stored — regenerate it and it will reflect whatever has changed since.',
       'It does not certify anything. It states what the record shows, and provides the blocks for the people entitled to decide. Handover is agreed by the signatures above, not by this document.',
       'Every section appears whether or not it has records in it. An empty section says so, and says what that absence means — a pack that omits an empty register lies by omission.',

@@ -1,3 +1,4 @@
+import UploadResult from '@/components/UploadResult'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -25,9 +26,10 @@ function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ review?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { review } = await searchParams
+  const sp = await searchParams
+  const review = typeof sp.review === 'string' ? sp.review : undefined
 
   const project = await getCurrentProject()
 
@@ -77,6 +79,7 @@ export default async function DocumentsPage({
 
   return (
     <>
+      <UploadResult searchParams={sp} />
       <h1 className="page-title">Document Review</h1>
       <p className="page-subtitle" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>

@@ -205,12 +205,23 @@ export default async function ProjectsPage({
                         >
                           Your password
                         </label>
+                        {/* `required` so the browser refuses an empty submit
+                            itself, and `autoComplete="off"` so it does not
+                            fill this in for you. Both are deliberate: the
+                            question this field asks is "are you here, right
+                            now, and did you mean this", and a password the
+                            browser remembered answers none of that. It also
+                            filled every delete box on the page at once, which
+                            made it impossible to tell whether the one you
+                            pressed had anything in it. */}
                         <input
                           type="password"
                           name="password"
                           className="input"
-                          autoComplete="current-password"
-                          placeholder="The password you log in with"
+                          required
+                          autoComplete="off"
+                          data-lpignore="true"
+                          placeholder="Type it — this box is not auto-filled"
                           style={{ fontSize: 13 }}
                         />
                         <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 11.5 }}>

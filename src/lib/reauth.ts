@@ -31,7 +31,16 @@ export type ReauthResult =
  */
 export async function verifyPassword(password: string | null | undefined): Promise<ReauthResult> {
   if (!password || password.trim() === '') {
-    return { ok: false, reason: 'Enter your password to confirm.' }
+    // The form marks this field `required`, so the browser should never let an
+    // empty one through. Reaching here means the box was genuinely empty when
+    // the button was pressed — most often because a password manager showed a
+    // preview it had not actually filled in. Say that, rather than repeating
+    // "enter your password" at somebody who is looking at a box full of dots.
+    return {
+      ok: false,
+      reason:
+        'The password box was empty when you pressed the button. If it looked filled in, that was your browser offering to fill it rather than having done so — click into the box, type it yourself, and press the button again.',
+    }
   }
 
   const sb = await createClient()

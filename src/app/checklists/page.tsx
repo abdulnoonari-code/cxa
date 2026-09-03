@@ -408,8 +408,10 @@ export default async function ChecklistsPage({
               type="password"
               name="password"
               className="input"
-              autoComplete="current-password"
-              placeholder="The password you log in with"
+              required
+              autoComplete="off"
+              data-lpignore="true"
+              placeholder="Type it — this box is not auto-filled"
               style={{ fontSize: 13, maxWidth: 320 }}
             />
             <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 10 }}>

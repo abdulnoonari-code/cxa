@@ -11,7 +11,7 @@
 // and renders it two ways. Every register in the app can then offer Word and
 // PDF without either format's mechanics leaking into the page that builds it.
 
-import { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx'
+import { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, ImageRun } from 'docx'
 import PDFDocument from 'pdfkit'
 
 export type ReportTable = {
@@ -27,6 +27,32 @@ export type ReportTable = {
 
 export type ReportFigure = { label: string; value: string | number; note?: string }
 
+export type ReportImage = {
+  bytes: Buffer
+  contentType: string
+  caption: string
+  /** A line under the caption — who took it, when, what the AI made of it. */
+  note?: string
+}
+
+/**
+ * A block of photographs.
+ *
+ * `missing` is not decoration: a photograph that exists but could not be
+ * fetched is printed by name, because a blank space in a handover pack is
+ * indistinguishable from an item that never had one.
+ */
+export type ReportGallery = {
+  title?: string
+  images: ReportImage[]
+  /** Photographs that exist but could not be shown, named rather than dropped. */
+  missing?: { caption: string; reason: string }[]
+  /** What was left out and why. Printed under the block. */
+  note?: string
+  /** What to say when there is nothing at all. */
+  emptyNote?: string
+}
+
 export type Report = {
   title: string
   subtitle?: string
@@ -35,6 +61,8 @@ export type Report = {
   standfirst?: string
   figures?: ReportFigure[]
   tables?: ReportTable[]
+  /** photographs, printed after the tables */
+  galleries?: ReportGallery[]
   /** small print at the end: what this document is and is not */
   footnotes?: string[]
   generatedAt?: Date
@@ -52,6 +80,9 @@ function cell(value: string | number | null | undefined): string {
 // ── Word ─────────────────────────────────────────────────────────────────
 
 const HEADER_FILL = 'EAF1FF'
+
+/** Printed width of a photograph in Word, in DXA-ish points docx expects. */
+const WORD_IMAGE_W = 340
 
 function docxTable(table: ReportTable): (Paragraph | Table)[] {
   const widths = table.widths ?? table.columns.map(() => 1)
@@ -138,6 +169,68 @@ export async function toWord(report: Report): Promise<Buffer> {
 
   for (const table of report.tables ?? []) children.push(...docxTable(table))
 
+  for (const gallery of report.galleries ?? []) {
+    if (gallery.title) {
+      children.push(
+        new Paragraph({ text: gallery.title, heading: HeadingLevel.HEADING_2, spacing: { before: 320, after: 120 } })
+      )
+    }
+    if (gallery.images.length === 0 && (gallery.missing ?? []).length === 0) {
+      children.push(
+        new Paragraph({
+          spacing: { after: 160 },
+          children: [new TextRun({ text: gallery.emptyNote ?? 'No photographs.', size: 18, color: '5B6B85' })],
+        })
+      )
+    }
+    for (const image of gallery.images) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 200, after: 60 },
+          children: [
+            new ImageRun({
+              data: image.bytes,
+              transformation: { width: WORD_IMAGE_W, height: Math.round(WORD_IMAGE_W * 0.75) },
+              type: image.contentType === 'image/png' ? 'png' : 'jpg',
+            }),
+          ],
+        })
+      )
+      children.push(
+        new Paragraph({ children: [new TextRun({ text: image.caption, bold: true, size: 18 })] })
+      )
+      if (image.note) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 120 },
+            children: [new TextRun({ text: image.note, size: 17, color: '5B6B85' })],
+          })
+        )
+      }
+    }
+    // Named, never silently dropped — a blank space looks identical to an item
+    // that never had a photograph.
+    for (const missing of gallery.missing ?? []) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 120 },
+          children: [
+            new TextRun({ text: `${missing.caption} — not shown. `, bold: true, size: 18, color: 'B42318' }),
+            new TextRun({ text: missing.reason, size: 18, color: '5B6B85' }),
+          ],
+        })
+      )
+    }
+    if (gallery.note) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 160 },
+          children: [new TextRun({ text: gallery.note, size: 17, color: '5B6B85', italics: true })],
+        })
+      )
+    }
+  }
+
   for (const note of report.footnotes ?? []) {
     children.push(
       new Paragraph({
@@ -164,6 +257,9 @@ const INK = '#1a2233'
 const MUTED = '#5b6b85'
 const RULE = '#d5deef'
 const DANGER = '#b42318'
+
+/** Widest a photograph is drawn in the PDF, in points. Two fit a row on A4. */
+const PDF_IMAGE_W = 250
 
 export async function toPdf(report: Report): Promise<Buffer> {
   const at = report.generatedAt ?? new Date()
@@ -324,6 +420,92 @@ export async function toPdf(report: Report): Promise<Buffer> {
           .restore()
       })
       doc.moveDown(0.5)
+    }
+
+    // ── Photographs ───────────────────────────────────────────────────
+    //
+    // Two to a row, so a pack of twenty does not run to twenty pages. The
+    // height is reserved BEFORE the image is drawn, because pdfkit will
+    // happily place an image past the bottom margin and the footer then
+    // overlaps it.
+    for (const gallery of report.galleries ?? []) {
+      const images = gallery.images
+      const missing = gallery.missing ?? []
+
+      ensure(46)
+      doc.moveDown(0.8)
+      if (gallery.title) {
+        doc.fillColor(INK).fontSize(12).font('Helvetica-Bold').text(gallery.title, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.4)
+      }
+
+      if (images.length === 0 && missing.length === 0) {
+        doc
+          .fillColor(MUTED)
+          .fontSize(9)
+          .font('Helvetica')
+          .text(gallery.emptyNote ?? 'No photographs.', PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.4)
+      }
+
+      const gap = 16
+      const cellW = (width - gap) / 2
+      const imgW = Math.min(cellW, PDF_IMAGE_W)
+      // Reserve a 4:3 frame plus two lines of caption. Photographs come in
+      // every shape and pdfkit reports the drawn height only after the fact,
+      // so the row advances by a fixed amount and the image is fitted inside.
+      const frameH = Math.round(imgW * 0.75)
+      const rowH = frameH + 34
+
+      for (let i = 0; i < images.length; i += 2) {
+        ensure(rowH + 6)
+        const top = doc.y
+        const pair = images.slice(i, i + 2)
+
+        pair.forEach((image, n) => {
+          const x = PAGE_MARGIN + n * (cellW + gap)
+          try {
+            doc.image(image.bytes, x, top, { fit: [imgW, frameH], align: 'center', valign: 'center' })
+          } catch {
+            // A file the renderer cannot decode must not take the document
+            // down with it.
+            doc.save().fillColor(MUTED).fontSize(8).font('Helvetica-Oblique')
+              .text('This image could not be rendered.', x, top + frameH / 2, { width: imgW, align: 'center' })
+              .restore()
+          }
+          doc.save()
+          doc.fillColor(INK).fontSize(8.5).font('Helvetica-Bold')
+            .text(image.caption, x, top + frameH + 5, { width: imgW, height: 11, ellipsis: true })
+          if (image.note) {
+            doc.fillColor(MUTED).fontSize(7.5).font('Helvetica')
+              .text(image.note, x, top + frameH + 17, { width: imgW, height: 14, ellipsis: true })
+          }
+          doc.restore()
+        })
+
+        doc.y = top + rowH
+      }
+
+      // A gap before the first one. Without it the red line lands directly
+      // under the last caption and reads as a note about THAT photograph
+      // rather than about one that is absent.
+      if (missing.length > 0) doc.moveDown(0.7)
+
+      for (const gone of missing) {
+        ensure(24)
+        doc.save()
+        doc.fillColor(DANGER).fontSize(8.5).font('Helvetica-Bold')
+          .text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y, { width, continued: true })
+        doc.fillColor(MUTED).font('Helvetica').text(` ${gone.reason}`)
+        doc.restore()
+        doc.moveDown(0.2)
+      }
+
+      if (gallery.note) {
+        ensure(26)
+        doc.moveDown(0.3)
+        doc.fillColor(MUTED).fontSize(8).font('Helvetica-Oblique').text(gallery.note, PAGE_MARGIN, doc.y, { width })
+      }
     }
 
     // ── Small print ───────────────────────────────────────────────────

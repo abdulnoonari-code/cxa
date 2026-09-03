@@ -258,10 +258,21 @@ export default async function IssuesPage({
           <a href={`/issues/export${exportSuffix}`} className="btn btn-secondary btn-sm">
             Excel
           </a>
+          <a
+            href={`/issues/pdf${exportSuffix ? `${exportSuffix}&photos=1` : '?photos=1'}`}
+            className="btn btn-secondary btn-sm"
+          >
+            PDF with photographs
+          </a>
           <a href="/issues/template" className="btn btn-secondary btn-sm">
             Blank template
           </a>
         </div>
+        <p className="text-secondary" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 14 }}>
+          The photograph version carries the pictures uploaded against the items in this list, each with who took it
+          and what an AI made of it. It is a separate button because photographs make the file large and slow to
+          produce, and nobody walking the site with a printed list wants them.
+        </p>
         <p className="text-secondary" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 14 }}>
           Whatever the filters below are set to is what goes into the file, so one contractor&apos;s items can be
           issued to that contractor and nothing else. <strong>PDF and Word</strong> are documents to issue and file;{' '}

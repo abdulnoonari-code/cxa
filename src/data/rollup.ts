@@ -52,6 +52,8 @@ export type TestRecord = {
 
 export type IssueRecord = {
   id: string
+  /** The punch reference, so a pack can be read beside the punch list itself. */
+  ref: string | null
   title: string
   category: string | null
   severity: string
@@ -152,7 +154,7 @@ export async function loadProjectRollup(
       .eq('project_id', projectId),
     supabase
       .from('issues')
-      .select('id, title, category, severity, status, subject_type, subject_id, equipment_id')
+      .select('id, ref, title, category, severity, status, subject_type, subject_id, equipment_id')
       .eq('project_id', projectId),
     supabase.from('instruments').select('id, calibration_expiry').eq('project_id', projectId),
     supabase.from('signatures').select('entity, entity_id, decision, created_at').eq('project_id', projectId),
@@ -249,6 +251,7 @@ export async function loadProjectRollup(
 
   const issues: IssueRecord[] = ((issueRes.data ?? []) as {
     id: string
+    ref: string | null
     title: string
     category: string | null
     severity: string
@@ -259,6 +262,7 @@ export async function loadProjectRollup(
   }[])
     .map((i) => ({
       id: i.id,
+      ref: i.ref,
       title: i.title,
       category: i.category,
       severity: i.severity,

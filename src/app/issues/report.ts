@@ -20,7 +20,9 @@ import {
   severityLabel,
   categoryLabel,
 } from '@/lib/punchlist'
-import type { Report } from '@/lib/docgen'
+import { loadIssuePhotos } from '@/data/photos'
+import { prepareGallery, photoSources, omissionNote, MAX_PHOTOS } from '@/lib/photo-prep'
+import type { Report, ReportGallery } from '@/lib/docgen'
 
 const SETTLED = new Set(['verified', 'closed'])
 
@@ -39,6 +41,10 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
     party: p.get('party'),
     openOnly: p.get('open') === '1',
   }
+  // Photographs are opt-in. They make the file an order of magnitude larger
+  // and the request several seconds slower, and somebody printing a punch list
+  // to walk the site with usually does not want them.
+  const withPhotos = p.get('photos') === '1'
 
   const [index, all] = await Promise.all([loadSubjectIndex(project.id), loadAllPunch(project.id)])
 
@@ -81,6 +87,48 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
     if (daysOverdue(r) !== null) late.add(i)
   })
 
+  // ── Photographs ─────────────────────────────────────────────────────────
+  //
+  // Only for the items in this document. A filtered punch list that carries
+  // photographs of items it does not list is a different document from the one
+  // on screen, and the whole point of reading the filters off the URL is that
+  // those two are the same thing.
+  const galleries: ReportGallery[] = []
+  if (withPhotos) {
+    const shown = new Set(rows.map((r) => r.id))
+    const store = await loadIssuePhotos(project.id)
+    const forThisList = store.all.filter((ph) => shown.has(ph.issue_id))
+    const refOf = new Map(rows.map((r) => [r.id, r.ref ?? r.title]))
+
+    if (!store.schemaReady) {
+      galleries.push({
+        title: 'Photographs',
+        images: [],
+        emptyNote:
+          'Photographic evidence is not set up on this database yet — run week5-part21-photos.sql. No photographs are missing from this document; there are none to carry.',
+      })
+    } else {
+      const gallery = await prepareGallery(
+        photoSources(forThisList, (row) => refOf.get(row.issue_id) ?? 'Punch item')
+      )
+      galleries.push({
+        title: 'Photographic evidence',
+        images: gallery.photos.map((ph) => ({
+          bytes: ph.bytes,
+          contentType: ph.contentType,
+          caption: ph.caption,
+          note: ph.note || undefined,
+        })),
+        missing: gallery.failed,
+        note: omissionNote(gallery, 'the punch item in CxSentinel') ?? undefined,
+        emptyNote:
+          forThisList.length === 0
+            ? 'No photographs have been uploaded against the items in this list.'
+            : undefined,
+      })
+    }
+  }
+
   const report: Report = {
     title: 'Punch List',
     subtitle: narrowed.length > 0 ? `Filtered to ${narrowed.join(', ')}` : 'All punch items on record',
@@ -116,7 +164,11 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
         rows: CATEGORIES.map((c) => [categoryLabel(c.value), CATEGORY_BLOCKS[c.value]]),
       },
     ],
+    galleries: galleries.length > 0 ? galleries : undefined,
     footnotes: [
+      withPhotos
+        ? `Photographs are evidence of what was seen, not of what was decided. A photograph carrying an AI reading is marked as such — that reading is a suggestion and closes nothing. At most ${MAX_PHOTOS} photographs are carried so the file stays small enough to send.`
+        : 'Photographs are not included. Add ?photos=1 to the address for a copy with the photographic evidence.',
       'This is a record of what is outstanding, not a clearance. Whether a system may proceed is decided by its readiness gate, which reads these categories as rules.',
       'An item with no category is counted as blocking until somebody assesses it — an item nobody has assessed cannot be assumed harmless.',
       `Severity and category are different things: severity is how bad the defect is (${severityLabel('critical')}, ${severityLabel('major')}, ${severityLabel('minor')}, ${severityLabel('observation')}); category is what it is allowed to stop.`,

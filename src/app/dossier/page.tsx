@@ -192,6 +192,12 @@ export default async function DossierPage() {
               <a href={`/dossier/${subject.type}/${subject.id}/pdf?full=1`} className="btn btn-secondary btn-sm">
                 Full pack, with closed punch items
               </a>
+              <a
+                href={`/dossier/${subject.type}/${subject.id}/pdf?full=1&photos=1`}
+                className="btn btn-secondary btn-sm"
+              >
+                Full pack, with photographs
+              </a>
               <Link href={`/assets/${subject.type}/${subject.id}`} className="btn btn-secondary btn-sm">
                 Open the asset
               </Link>

@@ -42,6 +42,7 @@ export const NAV: NavSection[] = [
     label: 'Project',
     items: [
       { href: '/project', label: 'Project Details', icon: 'settings', note: 'Name, client, dates and the settings every other screen is scoped by.' },
+      { href: '/setup', label: 'Setup', icon: 'settings', note: 'Which SQL steps are actually in place, who can reach the data, and whether AI is on.' },
       { href: '/projects', label: 'All Projects', icon: 'projects', note: 'Every project you can open, and where you create a new one.' },
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', note: 'What needs attention today, across the whole project.' },
       {

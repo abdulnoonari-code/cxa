@@ -1,6 +1,8 @@
 import { Fragment } from 'react'
 import UploadResult from '@/components/UploadResult'
 import DocumentAssessment from '@/components/DocumentAssessment'
+import RulesCheck from '@/components/RulesCheck'
+import { runRulesOnAll } from './rules-actions'
 import { aiConfigured } from '@/lib/ai'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -29,6 +31,12 @@ type AttachmentRow = {
   ai_problem: string | null
   ai_recommendation: string | null
   ai_values: unknown
+  rules_run_at: string | null
+  rules_verdict: string | null
+  rules_findings: unknown
+  rules_measurements: unknown
+  rules_citations: unknown
+  rules_tag_found: boolean | null
 }
 
 // Group rows by their equipment in one pass. The obvious nested filter is
@@ -82,7 +90,8 @@ export default async function DocumentsPage({
     .select(
       'id, checklist_item_id, file_name, file_url, file_path, review_status, review_note, created_at, ' +
         'ai_model, ai_reviewed_at, ai_reviewed_by_name, ai_confidence, ai_appears_to_be, ' +
-        'ai_matches_filing, ai_mismatch, ai_problem, ai_recommendation, ai_values'
+        'ai_matches_filing, ai_mismatch, ai_problem, ai_recommendation, ai_values, ' +
+        'rules_run_at, rules_verdict, rules_findings, rules_measurements, rules_citations, rules_tag_found'
     )
     .order('created_at', { ascending: false })
 
@@ -112,6 +121,28 @@ export default async function DocumentsPage({
   return (
     <>
       <UploadResult searchParams={sp} />
+
+      {typeof sp.rules === 'string' && sp.rules === 'batch' && (
+        <div
+          className="alert"
+          style={
+            Number(sp.blocking ?? 0) > 0
+              ? undefined
+              : { background: 'var(--color-success-bg)', color: 'var(--color-success)' }
+          }
+        >
+          <strong>Checked {sp.n} document{sp.n === '1' ? '' : 's'}.</strong>{' '}
+          {Number(sp.blocking ?? 0) > 0
+            ? `${sp.blocking} do not mention the tag they are filed against — those are the ones to look at.`
+            : 'None of them failed the tag check.'}
+        </div>
+      )}
+      {typeof sp.rules === 'string' && sp.rules === 'nofile' && (
+        <div className="alert alert-danger">
+          <strong>Could not read the file.</strong> It is recorded here but the bytes could not be fetched from
+          storage.
+        </div>
+      )}
       <h1 className="page-title">Document Review</h1>
       <p className="page-subtitle" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>
@@ -180,6 +211,27 @@ export default async function DocumentsPage({
         </form>
       </div>
 
+      <form
+        action={runRulesOnAll}
+        className="card"
+        style={{ marginBottom: 16, borderLeft: '4px solid var(--color-primary)' }}
+      >
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>Check every document against the rules</div>
+        <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 12.5 }}>
+          Free, no AI, no key. It reads each file and reports whether it mentions the tag it is filed against, whether
+          it carries a date and a signature block, and which standards it cites. Runs on up to 40 unchecked documents
+          at a time — press it again for the next batch.
+        </p>
+        <p className="text-secondary" style={{ margin: '5px 0 0', fontSize: 12 }}>
+          A certificate filed against the wrong tag makes a record look complete while proving nothing, and this is
+          the check that finds it. There is no reason to ration something that costs nothing.
+        </p>
+        <input type="hidden" name="limit" value="40" />
+        <button type="submit" className="btn btn-primary btn-sm" style={{ marginTop: 10 }}>
+          Check documents now
+        </button>
+      </form>
+
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -240,6 +292,11 @@ export default async function DocumentsPage({
                       the mismatch warning needs room to be read. */}
                   <tr key={`${a.id}-ai`}>
                     <td colSpan={5} style={{ paddingTop: 0 }}>
+                      {/* The free checks come FIRST, and the paid reading
+                          second. That order is the recommendation: run the
+                          rules on everything, and spend a call only where a
+                          rule cannot answer the question. */}
+                      <RulesCheck row={a} />
                       <DocumentAssessment row={a} aiOn={aiOn} />
                     </td>
                   </tr>

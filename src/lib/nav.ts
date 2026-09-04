@@ -92,6 +92,7 @@ export const NAV: NavSection[] = [
           { href: '/checklists/l3', label: 'L3 — Pre-functional', icon: 'checklist', note: 'The same register, filtered to L3 — the static checks that make it safe to energise.' },
           { href: '/checklists/l4', label: 'L4 — Functional Tests', icon: 'test', note: 'The same register, filtered to L4 — that it works on its own.' },
           { href: '/checklists/l5', label: 'L5 — Integrated Tests', icon: 'integrated', note: 'The same register, filtered to L5 — that the systems work together.' },
+          { href: '/scripts', label: 'Test Scripts', icon: 'test', note: 'The same register again, as the procedures it came from — in order, in sections, ready to work down.' },
         ],
       },
       {

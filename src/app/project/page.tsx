@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { updateProject } from './actions'
+import DatabaseAccess from '@/components/DatabaseAccess'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +94,10 @@ export default async function ProjectPage() {
           {equipmentCount} equipment tag{equipmentCount === 1 ? '' : 's'}. Everything in CxSentinel — checks,
           documents, punch list items and milestones — belongs to this project.
         </p>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <DatabaseAccess projectExists />
       </div>
     </>
   )

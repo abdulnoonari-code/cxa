@@ -134,6 +134,7 @@ export const NAV: NavSection[] = [
         ],
       },
       { href: '/issues', label: 'Punch List', icon: 'issue', note: 'Defects by category and level, and what each one blocks.' },
+      { href: '/rules', label: 'Rule Checks', icon: 'validity', note: 'Free checks over the punch list, the photographs and the dates. No AI, nothing stored.' },
       { href: '/validity', label: 'Validity Review', icon: 'validity', note: 'Where the records contradict themselves or do not support what they claim.' },
       { href: '/review', label: 'Review & Approvals', icon: 'review', note: 'What is waiting on somebody to accept it.' },
       { href: '/dossier', label: 'Handover Packs', icon: 'dossier', note: 'The pack that proves a system was commissioned rather than merely built.' },

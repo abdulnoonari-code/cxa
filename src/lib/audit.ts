@@ -26,7 +26,18 @@ export async function getActor(projectId?: string | null): Promise<Actor> {
   let name = email
 
   if (user) {
-    const { data: profile } = await sb.from('profiles').select('full_name').eq('id', user.id).single()
+    // Read through the server client, not the session client.
+    //
+    // `profiles` has Row Level Security switched on with no policies on it,
+    // so this read as the logged-in user has been returning nothing since the
+    // day it was written — which is why names have been appearing as email
+    // addresses throughout the application and in every export. It never
+    // errored; RLS refuses by returning an empty list.
+    //
+    // The row is still scoped to this person by `user.id` on the line below,
+    // which came from a verified session a moment ago. Nothing wider is
+    // readable through this path than was intended by the original.
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single()
     if (profile?.full_name) name = profile.full_name
   }
 

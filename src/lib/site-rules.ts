@@ -27,7 +27,7 @@
 export type RuleLevel = 'blocking' | 'warning' | 'note'
 
 export type SiteFinding = {
-  area: 'punch' | 'photos' | 'schedule'
+  area: 'punch' | 'photos' | 'schedule' | 'checks'
   level: RuleLevel
   /** Stable identifier, printed under each finding so it can be quoted. */
   rule: string

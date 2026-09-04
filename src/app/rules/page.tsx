@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadRuleInputs } from '@/data/site-rules'
+import { loadCheckLinkInputs } from '@/data/check-links'
+import { checkLinkFindings } from '@/lib/check-links'
 import {
   punchFindings,
   scheduleFindings,
@@ -19,6 +21,7 @@ const TONE: Record<string, { color: string; label: string }> = {
 }
 
 const AREA: Record<string, string> = {
+  checks: 'Checks and what they depend on',
   photos: 'Photographs',
   punch: 'Punch list',
   schedule: 'Dates and progress',
@@ -69,7 +72,10 @@ function Finding({ f }: { f: SiteFinding }) {
 
 export default async function RulesPage() {
   const project = await getCurrentProject()
-  const inputs = await loadRuleInputs(project?.id ?? null, project ?? null)
+  const [inputs, checkInputs] = await Promise.all([
+    loadRuleInputs(project?.id ?? null, project ?? null),
+    loadCheckLinkInputs(project?.id ?? null),
+  ])
   const today = new Date()
 
   const findings = [
@@ -85,11 +91,29 @@ export default async function RulesPage() {
       },
       today
     ),
+    // The link findings come from a different shape — they are about pairs of
+    // checks rather than about one register — so they are widened here rather
+    // than bending either model to fit the other. Written out in full because
+    // the first version padded the examples list with empty strings to make
+    // the count come out right, which is the kind of thing that renders as a
+    // row of blank bullet points six months later.
+    ...checkLinkFindings(checkInputs).map(
+      (f): SiteFinding => ({
+        area: 'checks',
+        level: f.level,
+        rule: f.rule,
+        title: f.title,
+        detail: f.detail,
+        count: f.count,
+        examples: f.examples,
+        href: '/checklists',
+      })
+    ),
   ]
 
   const n = countBy(findings)
   const order: SiteFinding['level'][] = ['blocking', 'warning', 'note']
-  const areas: SiteFinding['area'][] = ['photos', 'punch', 'schedule']
+  const areas: SiteFinding['area'][] = ['checks', 'photos', 'punch', 'schedule']
 
   return (
     <>

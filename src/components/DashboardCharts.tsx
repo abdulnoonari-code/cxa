@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { loadRuleInputs } from '@/data/site-rules'
+import { loadCheckLinkInputs } from '@/data/check-links'
+import { checkLinkFindings } from '@/lib/check-links'
 import { levelProgress, punchByCategory, punchTrend, trendReading } from '@/lib/dashboard-charts'
 import { StackedBars, TrendChart, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
@@ -26,7 +28,10 @@ export default async function DashboardCharts({
   projectId: string | null
   project: { name: string | null; target_date: string | null } | null
 }) {
-  const inputs = await loadRuleInputs(projectId, project)
+  const [inputs, checkInputs] = await Promise.all([
+    loadRuleInputs(projectId, project),
+    loadCheckLinkInputs(projectId),
+  ])
   const today = new Date()
 
   const findings = [
@@ -42,6 +47,16 @@ export default async function DashboardCharts({
       },
       today
     ),
+    ...checkLinkFindings(checkInputs).map((f) => ({
+      area: 'checks' as const,
+      level: f.level,
+      rule: f.rule,
+      title: f.title,
+      detail: f.detail,
+      count: f.count,
+      examples: f.examples,
+      href: '/checklists',
+    })),
   ]
   const n = countBy(findings)
   const trend = punchTrend(inputs.punch, today)

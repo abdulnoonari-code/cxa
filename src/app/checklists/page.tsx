@@ -6,6 +6,8 @@ import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
 import UploadResult from '@/components/UploadResult'
 import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence, deleteChecklistAction } from './actions'
 import ScriptImport from '@/components/ScriptImport'
+import CheckDetail from '@/components/CheckDetail'
+import { loadProjectLinkContext, contextFor } from '@/data/check-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -101,9 +103,12 @@ export default async function ChecklistsPage({
 
   let query = supabase
     .from('checklist_items')
-    .select('id, level, item, status, notes, ai_comment, review_state, equipment_id')
+    .select('id, level, item, status, notes, ai_comment, review_state, equipment_id, serial_no, section_path, evidence_ref, links_to, source_ref')
     .order('level', { ascending: true })
     .in('equipment_id', pageIds)
+
+  // Everything the Links to column might point at, once for the whole page.
+  const linkCtx = await loadProjectLinkContext(project?.id ?? null)
 
   if (level) query = query.eq('level', level)
 
@@ -486,6 +491,10 @@ export default async function ChecklistsPage({
               {g.items.map((it) => (
                 <div
                   key={it.id}
+                  // The anchor a "line 12" link jumps to. Without it the link
+                  // lands at the top of a page of two hundred checks, which is
+                  // the same as not being a link.
+                  id={`check-${it.id}`}
                   style={{
                     border: '1px solid var(--color-border)',
                     borderRadius: 10,
@@ -553,6 +562,8 @@ export default async function ChecklistsPage({
                       </button>
                     </div>
                   </form>
+
+                  <CheckDetail check={it} ctx={contextFor(linkCtx, it.source_ref)} />
 
                   {it.ai_comment && (
                     <p className="alert alert-info" style={{ marginTop: 12, marginBottom: 0, fontSize: 12.5 }}>

@@ -19,6 +19,7 @@ import {
   URGENCY_LABELS,
   type Urgency,
 } from '@/lib/next-actions'
+import DashboardCharts from '@/components/DashboardCharts'
 
 export const dynamic = 'force-dynamic'
 
@@ -242,6 +243,8 @@ export default async function CommandCenter() {
           )}
         </div>
       </section>
+
+      <DashboardCharts projectId={project?.id ?? null} project={project ?? null} />
 
       {/* ── What to do today ─────────────────────────────────────── */}
       <h2 className="section-title" style={{ marginTop: 30 }}>

@@ -21,6 +21,7 @@ import {
 } from '@/lib/punchlist'
 import { ACCEPTED_TYPES, MAX_BYTES } from '@/lib/photo'
 import { createIssue, deleteIssue, importPunchList } from './actions'
+import RaiseFromChecks from '@/components/RaiseFromChecks'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,6 +141,8 @@ export default async function IssuesPage({
   return (
     <>
       <UploadResult searchParams={sp} />
+
+      <RaiseFromChecks projectId={project?.id ?? null} params={sp} />
       <h1 className="page-title">Punch List</h1>
       <p className="page-subtitle" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <span>

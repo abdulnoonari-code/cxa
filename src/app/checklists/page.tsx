@@ -5,7 +5,7 @@ import { LEVELS, STATUSES, statusBadgeClass, reviewBadgeClass, reviewLabel } fro
 import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
 import UploadResult from '@/components/UploadResult'
 import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence, deleteChecklistAction } from './actions'
-import FptImport from '@/components/FptImport'
+import ScriptImport from '@/components/ScriptImport'
 
 export const dynamic = 'force-dynamic'
 
@@ -318,7 +318,7 @@ export default async function ChecklistsPage({
         )}
       </div>
 
-      <FptImport params={allParams} />
+      <ScriptImport params={allParams} />
 
       <details className="card" style={{ marginTop: 16 }}>
         <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>

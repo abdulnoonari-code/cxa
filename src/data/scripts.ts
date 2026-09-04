@@ -18,7 +18,7 @@ export async function loadScripts(projectId: string | null): Promise<Script[]> {
     supabase
       .from('checklist_items')
       .select(
-        'id, serial_no, section_path, item, status, notes, answer_type, evidence_ref, links_to, level, source_ref, subject_type, subject_id, equipment_id'
+        'id, serial_no, source_line, section_path, item, status, notes, answer_type, evidence_ref, links_to, level, source_ref, subject_type, subject_id, equipment_id'
       )
       .eq('project_id', projectId)
       .not('source_ref', 'is', null),
@@ -35,6 +35,7 @@ export async function loadScripts(projectId: string | null): Promise<Script[]> {
   const typed = (rows ?? []) as {
     id: string
     serial_no: string | null
+    source_line: number | null
     section_path: string | null
     item: string | null
     status: string | null
@@ -51,7 +52,14 @@ export async function loadScripts(projectId: string | null): Promise<Script[]> {
 
   const checks: ScriptCheck[] = typed.map((r) => ({
     id: r.id,
-    serial: r.serial_no,
+    // Fall back to the imported line number.
+    //
+    // Checks brought in before update 49 have a source_line and no serial_no,
+    // because serial_no did not exist yet. Without this every one of those
+    // lines shows a dash for its number and they all sort together at the
+    // bottom — which on a 232-line procedure means the screen is in database
+    // order, not procedure order, and is useless for the one job it has.
+    serial: r.serial_no ?? (r.source_line !== null ? String(r.source_line) : null),
     section: r.section_path,
     item: r.item,
     status: r.status,

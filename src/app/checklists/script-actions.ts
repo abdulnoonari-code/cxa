@@ -85,6 +85,22 @@ export async function importTestScript(formData: FormData) {
   const index = await loadSubjectIndex(project.id)
   const text = buildTextIndex(index)
 
+  // What this project actually has, for the error message.
+  //
+  // "Not a tag on this project" is true and useless: it leaves somebody
+  // guessing at the spelling of a code they cannot see from the upload
+  // screen. Naming a few of the real ones turns a round trip into a
+  // correction, and if the list is empty it says THAT, which is a different
+  // problem with a different fix.
+  const codes = [...index.byKey.values()]
+    .filter((s) => s.type !== 'project' && s.code)
+    .map((s) => s.code as string)
+    .sort((a, b) => a.localeCompare(b))
+  const whatExists =
+    codes.length === 0
+      ? ' This project has no tags or systems on it yet — add the equipment on Equipment & Tags first.'
+      : ` This project has ${codes.length}: ${codes.slice(0, 8).join(', ')}${codes.length > 8 ? ', …' : ''}.`
+
   // What the project already has, so a link can be checked rather than
   // assumed. Two small queries; both registers are short.
   const [{ data: reqRows }, { data: oblRows }] = await Promise.all([
@@ -128,7 +144,7 @@ export async function importTestScript(formData: FormData) {
                   .slice(0, 3)
                   .map((c) => subjectLabel(c.type))
                   .join(', ')}). Use the exact tag or system code.`
-              : 'Not a tag, system or area on this project. Add it on Equipment & Tags first — a test script cannot create the thing it tests.',
+              : `Not a tag, system or area on this project.${whatExists} Add it on Equipment & Tags, or change the name on the sheet to match one of these — a test script cannot create the thing it tests.`,
         })
         continue
       }
@@ -201,7 +217,25 @@ export async function importTestScript(formData: FormData) {
       newValue: `${errors.length} problems, nothing imported`,
       comment: errors.slice(0, 12).map(describeScriptProblem).join(' | '),
     })
-    reject('problems', errors.slice(0, 3).map(describeScriptProblem).join(' · '))
+    // One example of each DISTINCT problem, not the first three rows.
+    //
+    // A script whose equipment name is wrong produces the identical error two
+    // hundred and three times, and showing rows 5, 6 and 7 of it fills the
+    // banner with the same sentence three times over while hiding whatever
+    // else is wrong with the file.
+    const seen = new Set<string>()
+    const distinct = errors.filter((e) => {
+      const key = `${e.column}|${e.message}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    const more = errors.length - distinct.length
+    reject(
+      'problems',
+      distinct.slice(0, 3).map(describeScriptProblem).join(' · ') +
+        (more > 0 ? ` · and ${more} more row${more === 1 ? '' : 's'} with the same problems.` : '')
+    )
   }
 
   if (planned.length === 0) {

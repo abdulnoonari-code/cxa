@@ -14,6 +14,8 @@ import { levelProgress, punchByCategory, punchTrend, trendReading } from '@/lib/
 import { StackedBars, TrendChart, ChartFrame, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
 import { punchSummary, punchHeadline, PUNCH_DEFINITIONS } from '@/lib/punch-summary'
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
+import { loadHierarchy } from '@/data/hierarchy'
+import ProjectSummary from '@/components/ProjectSummary'
 
 /** One of the four punch figures, with the word that stops it being misread. */
 function Figure({
@@ -69,13 +71,14 @@ export default async function DashboardCharts({
   projectId: string | null
   project: { name: string | null; target_date: string | null } | null
 }) {
-  const [inputs, checkInputs, failed, scoped, lib, cov] = await Promise.all([
+  const [inputs, checkInputs, failed, scoped, lib, cov, hierarchy] = await Promise.all([
     loadRuleInputs(projectId, project),
     loadCheckLinkInputs(projectId),
     loadFailedChecks(projectId),
     loadScopedChecks(projectId),
     loadLibrary(projectId),
     loadCoverage(projectId),
+    loadHierarchy(projectId),
   ])
   const today = new Date()
 
@@ -137,6 +140,12 @@ export default async function DashboardCharts({
 
   return (
     <>
+      {/* The project first, the defects second. A dashboard that opens on a
+          punch list answers "what went wrong" before "how far through are
+          we", and the second question is the one asked first in every
+          progress meeting. */}
+      <ProjectSummary nodes={hierarchy} />
+
       {/* ── The punch list, defined ──────────────────────────────────────
           Four figures, each with the sentence that stops it being read two
           ways, and the categories underneath so "priority" is a number

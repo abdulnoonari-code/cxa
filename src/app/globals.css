@@ -103,17 +103,28 @@ a {
 /* ---------- Layout ---------- */
 
 .app-layout {
-  display: flex;
-  align-items: stretch;
   min-height: 100vh;
   width: 100%;
 }
 
+/* The rail is FIXED, not sticky.
+ *
+ * Sticky gave it `height: 100vh` inside a flex row that is usually far
+ * taller, so it pinned correctly and then simply ran out — scroll down a long
+ * dashboard and the rail stopped, leaving a column of page background beside
+ * the content where the navigation should be. It also produced two
+ * scrollbars, one for the rail and one for the page, and the wheel did
+ * whichever the pointer happened to be over.
+ *
+ * Fixed to the viewport gives one scrollbar, a rail that is always the full
+ * height of the window, and no exposed column at any scroll position. The
+ * shell is moved over by exactly the rail's width rather than sitting in a
+ * flex row beside it. */
 .app-shell {
-  flex: 1;
   min-width: 0;
   width: 100%;
   padding: 30px 36px 72px;
+  margin-left: 244px;
 }
 
 .app-shell-inner {
@@ -147,9 +158,11 @@ a {
 .sidebar {
   width: 244px;
   flex-shrink: 0;
-  position: sticky;
+  position: fixed;
   top: 0;
-  height: 100vh;
+  left: 0;
+  bottom: 0;
+  z-index: 30;
   overflow-y: auto;
   background: linear-gradient(180deg, var(--rail-bg) 0%, var(--rail-bg-2) 100%);
   border-right: 1px solid var(--rail-border);
@@ -1171,15 +1184,19 @@ textarea.input {
 }
 
 @media (max-width: 720px) {
-  .app-layout {
-    flex-direction: column;
-  }
+  /* On a phone the rail stacks above the content, so the fixed positioning
+     and the matching left margin both have to come off — a fixed rail on a
+     narrow screen covers the page it is meant to navigate. */
   .sidebar {
     position: static;
     height: auto;
+    inset: auto;
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--rail-border);
+  }
+  .app-shell {
+    margin-left: 0;
   }
 }
 

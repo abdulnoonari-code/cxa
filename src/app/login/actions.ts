@@ -18,7 +18,11 @@ export async function login(formData: FormData) {
     redirect('/login?error=' + encodeURIComponent(error.message))
   }
 
-  redirect('/dashboard')
+  // The project list, not a project. Going straight to /dashboard opens
+  // whichever project was last in a cookie — possibly somebody else's,
+  // possibly one this person no longer has access to — and the first thing
+  // they see is a choice that was made for them without being shown.
+  redirect('/projects')
 }
 
 export async function signup(formData: FormData) {

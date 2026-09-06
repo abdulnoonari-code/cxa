@@ -2,6 +2,8 @@ import { getCurrentProject } from '@/lib/project'
 import { loadRuleInputs } from '@/data/site-rules'
 import { levelProgress, punchTrend } from '@/lib/dashboard-charts'
 import { punchSummary, PUNCH_DEFINITIONS } from '@/lib/punch-summary'
+import { loadHierarchy } from '@/data/hierarchy'
+import { devicePercent, systemPercent, sumCells, HIERARCHY_NOTE } from '@/lib/hierarchy'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +78,56 @@ export async function GET(request: Request) {
       ['Passed or N/A', 'A check recorded as pass, or marked not applicable. Both are settled.'],
       ['Failed', 'Recorded as fail. Still counts as recorded work.'],
       ['Not started', 'The check exists on the plan and has no answer against it.'],
+    ])
+  }
+
+  if (chart === 'hierarchy') {
+    const nodes = await loadHierarchy(project.id)
+    return file(`${safeName}-project-summary-${stamp()}.csv`, [
+      ['Project', project.name],
+      ['Exported', new Date().toISOString()],
+      [],
+      [
+        'Level in tree',
+        'Kind',
+        'Code',
+        'Name',
+        'Tags',
+        'Device checks recorded (L1-L3)',
+        'Device passed',
+        'Device failed',
+        'Device %',
+        'System checks recorded (L4-L5)',
+        'System passed',
+        'System failed',
+        'System %',
+        'Open defects',
+        'Blocking (Category A open)',
+      ],
+      ...nodes.map((n) => {
+        const d = sumCells(n.deviceCells)
+        const y = sumCells(n.systemCells)
+        return [
+          n.depth,
+          n.type,
+          n.code,
+          n.name,
+          n.devices,
+          d.total,
+          d.done,
+          d.failed,
+          devicePercent(n) ?? '',
+          y.total,
+          y.done,
+          y.failed,
+          systemPercent(n) ?? '',
+          n.punchOpen,
+          n.punchBlocking,
+        ]
+      }),
+      [],
+      [HIERARCHY_NOTE],
+      ['An empty percentage means nothing is recorded at that level. It is not nought per cent.'],
     ])
   }
 

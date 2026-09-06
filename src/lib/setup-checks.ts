@@ -94,6 +94,22 @@ export const SETUP_STEPS: SetupStep[] = [
       'One definition applied to many tags. Without it the Check Library screen says it is not installed, and nothing else is affected.',
     probe: { table: 'check_templates', columns: ['id', 'title', 'level'] },
   },
+  {
+    id: 'part31',
+    source: 'week5-part31-floors.sql',
+    title: 'Which floor equipment is on',
+    matters:
+      'The storey a tag sits on — B, G, L1, L10, R. Without it the Floor column in an equipment spreadsheet is read and then thrown away.',
+    probe: { table: 'equipment', columns: ['floor'] },
+  },
+  {
+    id: 'part32',
+    source: 'week5-part32-building-critical-disciplines.sql',
+    title: 'Building, criticality and disciplines',
+    matters:
+      'Which building a tag is in, whether it is critical, and the wider discipline list — Civil, Architectural, Plumbing, ELV. Without it those columns are read from your spreadsheet and thrown away, and Civil or ELV are refused by the database.',
+    probe: { table: 'equipment', columns: ['building', 'critical'] },
+  },
 ]
 
 export type StepResult = {

@@ -14,13 +14,16 @@ export async function GET() {
     { header: 'Tag', key: 'tag', width: 22 },
     { header: 'Description', key: 'description', width: 46 },
     { header: 'Category', key: 'category', width: 22 },
+    { header: 'Building', key: 'building', width: 16 },
     { header: 'Area', key: 'area', width: 20 },
+    { header: 'Floor', key: 'floor', width: 12 },
     { header: 'System', key: 'system', width: 24 },
     { header: 'Subsystem', key: 'subsystem', width: 20 },
     { header: 'Location', key: 'location', width: 26 },
     { header: 'Manufacturer', key: 'manufacturer', width: 22 },
     { header: 'Model', key: 'model', width: 20 },
     { header: 'Serial number', key: 'serial', width: 20 },
+    { header: 'Critical', key: 'critical', width: 11 },
     { header: 'Status', key: 'status', width: 16 },
     { header: 'Remove', key: 'remove', width: 9 },
   ]
@@ -29,19 +32,24 @@ export async function GET() {
     tag: 'GIS-115-CB-01',
     description: '115 kV Circuit Breaker',
     category: 'Electrical',
+    building: 'Building 1',
     area: 'Substation A',
+    floor: 'G',
     system: '115kV GIS',
     subsystem: 'Line Bay 01',
     location: 'Switchyard',
     manufacturer: 'Siemens Energy',
     model: '8DN9',
+    critical: 'Yes',
     status: 'Installed',
   })
   sheet.addRow({
     tag: 'TX-01',
     description: 'Main power transformer 115/22 kV',
     category: 'Electrical',
+    building: 'Building 1',
     area: 'Substation A',
+    floor: 'B1',
     system: 'Transformer',
     location: 'Transformer bay',
     status: 'Received',
@@ -50,7 +58,9 @@ export async function GET() {
     tag: 'GEN-01',
     description: 'Standby diesel generator',
     category: 'Mechanical',
+    building: 'Building 2',
     area: 'Plant Room',
+    floor: 'R',
     system: 'Standby Power',
     status: 'Not Delivered',
   })
@@ -66,11 +76,38 @@ export async function GET() {
   guide.addRow({ col: 'CXA ID', meaning: 'Leave blank on a new list. It only appears when you export tags that already exist.' })
   guide.addRow({ col: 'Tag', meaning: 'The only column that is required. Must be unique on the project.' })
   guide.addRow({ col: 'Description', meaning: 'What the item is.' })
-  guide.addRow({ col: 'Category', meaning: `One of: ${CATEGORIES.map((c) => c.label).join(', ')}.` })
-  guide.addRow({ col: 'Area', meaning: 'Created if it does not exist. Optional.' })
+  guide.addRow({
+    col: 'Category',
+    meaning: `The discipline. One of: ${CATEGORIES.map((c) => c.label).join(', ')}. A heading of Discipline, Trade, Type or Class is read as this column. Anything not on this list is left blank and reported — the database refuses values it does not know, and it refuses the whole row.`,
+  })
+  guide.addRow({
+    col: 'Building',
+    meaning:
+      'Which building on the campus — Building 2, Tower A, Block C. Kept separate from Area on purpose: the building is the structure, the area is a room or zone inside it. Headings of Bldg, Block, Tower or Building number are read as this column.',
+  })
+  guide.addRow({ col: 'Area', meaning: 'A room or zone — MV switchroom, Plant room. Created if it does not exist. Optional.' })
+  guide.addRow({
+    col: 'Critical',
+    meaning:
+      'Yes or No. Leave it BLANK if nobody has decided — blank is kept as undecided and is deliberately not the same as No, because "we decided this is not critical" and "nobody has looked at it" are different facts. Y, N, TRUE, FALSE, 1, 0 and Critical / Non-critical are all read.',
+  })
+  guide.addRow({
+    col: 'Floor',
+    meaning:
+      'The storey: B2, B, LG, G, M, L1, L2, L10, R. Written as you write it — L3, Level 3, 3F and 3 all mean the third floor, and what you type is what is stored. NOT the commissioning level: L1 to L5 elsewhere in CxSentinel mean factory acceptance through to integrated testing. A heading of Level, Storey or Floor level is read as this column.',
+  })
   guide.addRow({ col: 'System', meaning: 'Created if it does not exist, filed under the Area on the same row. This is how the asset tree gets built.' })
   guide.addRow({ col: 'Subsystem', meaning: 'Created if it does not exist, filed under the System on the same row. A bay, a panel, a train.' })
-  guide.addRow({ col: 'Location, Manufacturer, Model, Serial number', meaning: 'Free text. All optional.' })
+  guide.addRow({
+    col: 'Manufacturer',
+    meaning: 'The OEM. A heading of OEM, Vendor, Supplier, Maker, Make or Brand is read as this column.',
+  })
+  guide.addRow({ col: 'Location, Model, Serial number', meaning: 'Free text. All optional.' })
+  guide.addRow({
+    col: 'Project',
+    meaning:
+      'Optional, and it is a CHECK rather than a destination. Equipment always goes into the project you have open. If this column names a different project, nothing is imported at all — which is what stops one site\u2019s tag list being loaded into another.',
+  })
   guide.addRow({ col: 'Status', meaning: `One of: ${INSTALL_STATUSES.map((s) => s.label).join(', ')}. Blank counts as Not Delivered.` })
   guide.addRow({ col: 'Remove', meaning: 'Y deletes that tag on import. Leave blank on a new list.' })
   guide.addRow({ col: '', meaning: '' })

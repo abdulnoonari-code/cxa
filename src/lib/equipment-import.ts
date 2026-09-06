@@ -31,10 +31,37 @@ const TAG_ALIASES = [
   'reference',
 ]
 const DESC_ALIASES = ['description', 'equipment', 'equipment description', 'name', 'item', 'service', 'title', 'desc']
-const CATEGORY_ALIASES = ['category', 'discipline', 'type', 'equipment type', 'class']
+const CATEGORY_ALIASES = ['category', 'discipline', 'type', 'equipment type', 'class', 'trade']
 const SYSTEM_ALIASES = ['system', 'system id', 'system code', 'sys']
+// "Level" is accepted here on purpose, and it is the ONLY place in the
+// application where that word means a storey. There is no commissioning-level
+// column in this file, so the two cannot collide — and a register that
+// refused a column headed "Level" would refuse most real equipment lists.
+/**
+ * Whether a cell means "this is critical".
+ *
+ * Three answers, not two. A blank cell is not "no" — it is nobody having
+ * decided, and on a data centre the difference between "we have decided this
+ * is not critical" and "nobody has looked at it yet" is the whole point of
+ * the column. Writing blanks in as false would quietly assert a decision
+ * that was never made, on every row somebody left empty.
+ */
+function readCritical(raw: string): boolean | null {
+  const v = raw.trim().toLowerCase()
+  if (v === '') return null
+  if (['y', 'yes', 'true', '1', 'critical', 'c', 'x', '✓', 'mission critical'].includes(v)) return true
+  if (['n', 'no', 'false', '0', 'non-critical', 'non critical', 'nc', 'not critical'].includes(v)) return false
+  // A word nobody planned for is not silently read as "no". It is left
+  // undecided and reported as a warning, like any other unreadable cell.
+  return null
+}
+
+const BUILDING_ALIASES = ['building', 'building no', 'building number', 'bldg', 'block', 'tower', 'unit']
+const CRITICAL_ALIASES = ['critical', 'criticality', 'is critical', 'critical?', 'mission critical']
+const PROJECT_ALIASES = ['project', 'project name', 'project no', 'job', 'job number']
+const FLOOR_ALIASES = ['floor', 'level', 'storey', 'story', 'floor level', 'fl', 'lvl']
 const SUBSYSTEM_ALIASES = ['subsystem', 'sub system', 'sub-system', 'bay', 'subsystem code']
-const AREA_ALIASES = ['area', 'zone', 'building', 'area code']
+const AREA_ALIASES = ['area', 'zone', 'area code', 'room block']
 const LOCATION_ALIASES = ['location', 'room', 'position', 'place', 'installed at']
 const MANUFACTURER_ALIASES = ['manufacturer', 'maker', 'vendor', 'oem', 'supplier', 'make', 'brand']
 const MODEL_ALIASES = ['model', 'model no', 'model number', 'type no', 'part number']
@@ -79,6 +106,10 @@ type Mapping = {
   tag: number
   description: number | null
   category: number | null
+  building: number | null
+  critical: number | null
+  project: number | null
+  floor: number | null
   system: number | null
   subsystem: number | null
   area: number | null
@@ -115,6 +146,10 @@ function findMapping(sheet: ExcelJS.Worksheet): { mapping: Mapping | null; headi
         tag,
         description: find(DESC_ALIASES),
         category: find(CATEGORY_ALIASES),
+        building: find(BUILDING_ALIASES),
+        critical: find(CRITICAL_ALIASES),
+        project: find(PROJECT_ALIASES),
+        floor: find(FLOOR_ALIASES),
         system: find(SYSTEM_ALIASES),
         subsystem: find(SUBSYSTEM_ALIASES),
         area: find(AREA_ALIASES),
@@ -138,6 +173,10 @@ export type ParsedEquipment = {
   tag_id: string
   description: string | null
   category: string | null
+  building: string | null
+  critical: boolean | null
+  project: string | null
+  floor: string | null
   system: string | null
   subsystem: string | null
   area: string | null
@@ -239,6 +278,10 @@ export async function parseEquipmentWorkbook(
         tag_id: tag,
         description: at(mapping.description) || null,
         category,
+        building: at(mapping.building) || null,
+        critical: readCritical(at(mapping.critical)),
+        project: at(mapping.project) || null,
+        floor: at(mapping.floor) || null,
         system: at(mapping.system) || null,
         subsystem: at(mapping.subsystem) || null,
         area: at(mapping.area) || null,
@@ -259,6 +302,9 @@ export async function parseEquipmentWorkbook(
       add(mapping.id, 'CXA ID')
       add(mapping.description, 'Description')
       add(mapping.category, 'Category')
+      add(mapping.building, 'Building')
+      add(mapping.critical, 'Critical')
+      add(mapping.floor, 'Floor')
       add(mapping.system, 'System')
       add(mapping.subsystem, 'Subsystem')
       add(mapping.area, 'Area')

@@ -17,9 +17,23 @@ const PAGE_SIZE = 100
 export default async function EquipmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; page?: string }>
+  searchParams: Promise<{
+    q?: string
+    category?: string
+    page?: string
+    import?: string
+    named?: string
+    open?: string
+  }>
 }) {
-  const { q, category, page: pageParam } = await searchParams
+  const {
+    q,
+    category,
+    page: pageParam,
+    import: importResult,
+    named: namedProject,
+    open: openProject,
+  } = await searchParams
   const page = Math.max(1, Number(pageParam ?? '1') || 1)
   const from = (page - 1) * PAGE_SIZE
 
@@ -31,21 +45,67 @@ export default async function EquipmentPage({
 
   // Ask the database for the page, and for the total, rather than pulling
   // every row and slicing in memory.
-  let query = supabase
-    .from('equipment')
-    .select('id, tag_id, description, category, manufacturer, model, location, install_status', { count: 'exact' })
-    .order('tag_id', { ascending: true })
-    .range(from, from + PAGE_SIZE - 1)
+  //
+  // `floor` arrives with SQL part 31. Selecting a column that does not exist
+  // fails the WHOLE query, so on a database without part 31 this page would
+  // show an empty equipment register on a project full of equipment — which
+  // is the worst way for a missing column to present itself. So it asks for
+  // floor, and asks again without it if the database says no.
+  const scope = <T extends { eq: (a: string, b: unknown) => T; or: (a: string) => T }>(qb: T): T => {
+    let out = qb
+    if (project) out = out.eq('project_id', project.id)
+    if (q) out = out.or(`tag_id.ilike.%${q}%,description.ilike.%${q}%`)
+    if (category) out = out.eq('category', category)
+    return out
+  }
 
-  if (project) query = query.eq('project_id', project.id)
-  if (q) query = query.or(`tag_id.ilike.%${q}%,description.ilike.%${q}%`)
-  if (category) query = query.eq('category', category)
+  // Written out twice rather than built from a string: the client's types
+  // read the column list literally, and a computed one is not checked at all.
+  const withFloor = () =>
+    scope(
+      supabase
+        .from('equipment')
+        .select('id, tag_id, description, category, manufacturer, model, location, install_status, floor, building, critical', {
+          count: 'exact',
+        })
+        .order('tag_id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+    )
 
-  const { data: equipment, error, count } = project ? await query : { data: [], error: null, count: 0 }
+  const withoutFloor = () =>
+    scope(
+      supabase
+        .from('equipment')
+        .select('id, tag_id, description, category, manufacturer, model, location, install_status', {
+          count: 'exact',
+        })
+        .order('tag_id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+    )
+
+  const first = project ? await withFloor() : { data: null, error: null, count: 0 }
+  const fallback = first.error && project ? await withoutFloor() : null
+  const rows = (fallback ?? first).data as
+    | {
+        id: string
+        tag_id: string
+        description: string | null
+        category: string | null
+        manufacturer: string | null
+        model: string | null
+        location: string | null
+        install_status: string | null
+        floor?: string | null
+        building?: string | null
+        critical?: boolean | null
+      }[]
+    | null
+  const error = fallback ? fallback.error : first.error
+  const count = (fallback ?? first).count
 
   const total = count ?? 0
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const shown = equipment ?? []
+  const shown = rows ?? []
 
   const categoryLabel = (value: string) => CATEGORIES.find((c) => c.value === value)?.label ?? value
   const installLabel = (value: string) => INSTALL_STATUSES.find((s) => s.value === value)?.label ?? value
@@ -201,6 +261,14 @@ export default async function EquipmentPage({
         )}
       </form>
 
+      {importResult === 'wrongproject' && (
+        <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+          <strong>Nothing was imported — that file is for a different project.</strong> Its Project column says{' '}
+          <strong>{namedProject}</strong> and the project you have open is <strong>{openProject}</strong>. Open the
+          right project and upload it again, or delete the Project column from the file if it is wrong.
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -208,6 +276,8 @@ export default async function EquipmentPage({
               <th>Tag</th>
               <th>Description</th>
               <th>Category</th>
+              <th>Building</th>
+              <th>Floor</th>
               <th>Location</th>
               <th>Status</th>
               <th style={{ minWidth: 200 }}></th>
@@ -220,6 +290,17 @@ export default async function EquipmentPage({
                   <td className="mono tag-id">{item.tag_id}</td>
                   <td style={{ fontSize: 13.5 }}>{item.description ?? '—'}</td>
                   <td style={{ fontSize: 13 }}>{item.category ? categoryLabel(item.category) : '—'}</td>
+                  <td style={{ fontSize: 13 }}>
+                    {item.building || <span className="text-secondary">—</span>}
+                  </td>
+                  <td className="mono" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                    {item.floor || <span className="text-secondary">—</span>}
+                    {item.critical === true && (
+                      <span className="badge badge-danger" style={{ marginLeft: 6, fontSize: 10 }}>
+                        Critical
+                      </span>
+                    )}
+                  </td>
                   <td style={{ fontSize: 13 }}>{item.location ?? '—'}</td>
                   <td>
                     <span className={installBadgeClass(item.install_status ?? '')}>

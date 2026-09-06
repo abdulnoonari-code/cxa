@@ -201,6 +201,36 @@ export async function importEquipment(formData: FormData) {
     if (s.code) subsystemKey.set(`${s.system_id}|${s.code.toLowerCase()}`, s.id)
   }
 
+  // Ask once, before the loop, whether this database has the floor column.
+  // Once, not per row: a per-row retry turns a 400-tag import into 800
+  // requests, and the answer cannot change halfway through.
+  const floorProbe = await supabase.from('equipment').select('floor, building, critical').limit(1)
+  const hasFloor = !floorProbe.error
+
+  // A Project column in the file is a GUARD, not a destination.
+  //
+  // Equipment always goes into the project that is open — the file cannot
+  // send it somewhere else, and pretending otherwise would be worse than not
+  // reading the column at all. But a file that names a different project is
+  // almost certainly the wrong file, and importing four hundred of BKK-05's
+  // tags into BKK-03 is not something anybody unpicks by hand afterwards.
+  //
+  // So: if the column is there and disagrees, nothing is imported.
+  const named = parsed.rows.map((r) => (r.project ?? '').trim()).filter((p) => p !== '')
+  const mismatched = [...new Set(named.filter((p) => p.toLowerCase() !== project.name.trim().toLowerCase()))]
+  if (mismatched.length > 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'equipment import refused — wrong project',
+      entity: 'equipment',
+      entityLabel: file.name,
+      comment: `The file names ${mismatched.map((m) => `"${m}"`).join(', ')} in its Project column and the open project is "${project.name}". Nothing was imported. Open the right project, or remove the Project column.`,
+    })
+    redirect(
+      `/equipment?import=wrongproject&named=${encodeURIComponent(mismatched.slice(0, 3).join(', '))}&open=${encodeURIComponent(project.name)}`
+    )
+  }
+
   let areasCreated = 0
   let systemsCreated = 0
   let subsystemsCreated = 0
@@ -276,6 +306,11 @@ export async function importEquipment(formData: FormData) {
 
     const values = {
       tag_id: row.tag_id,
+      // Only when the column exists. Sending a column the database has never
+      // heard of does not fail that field — it fails the WHOLE row, so one
+      // spreadsheet with a Floor heading, uploaded before SQL part 31, would
+      // import nothing at all and say nothing useful about why.
+      ...(hasFloor ? { floor: row.floor, building: row.building, critical: row.critical } : {}),
       description: row.description,
       category: row.category,
       location: row.location,
@@ -303,14 +338,22 @@ export async function importEquipment(formData: FormData) {
   if (systemsCreated) created.push(`${systemsCreated} system${systemsCreated === 1 ? '' : 's'}`)
   if (subsystemsCreated) created.push(`${subsystemsCreated} subsystem${subsystemsCreated === 1 ? '' : 's'}`)
 
+  // A column that was in the file and could not be stored has to be said out
+  // loud. Silently dropping it is how somebody spends a morning filling in
+  // floors and never finds out they were thrown away.
+  const floorIgnored = !hasFloor && parsed.rows.some((r) => r.floor || r.building || r.critical !== null)
+
   await recordAudit({
     projectId: project.id,
     action: 'imported equipment',
     entity: 'equipment',
     entityLabel: file.name,
-    newValue: `${inserted} added, ${updated} updated, ${removed} removed${created.length ? `, plus ${created.join(', ')}` : ''}`,
+    newValue: `${inserted} added, ${updated} updated, ${removed} removed${created.length ? `, plus ${created.join(', ')}` : ''}${floorIgnored ? ' — Floor column IGNORED' : ''}`,
     comment:
       `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
+      (floorIgnored
+        ? ' The file has Floor, Building or Critical values and this database has nowhere to put them. Run SQL part 32 and import again — nothing else was affected.'
+        : '') +
       (parsed.warnings.length > 0
         ? ` ${parsed.warnings.length} warnings: ${parsed.warnings
             .slice(0, 6)

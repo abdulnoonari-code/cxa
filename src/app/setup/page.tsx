@@ -100,6 +100,19 @@ export default async function SetupPage() {
         <p className="text-secondary" style={{ margin: '4px 0 0', fontSize: 13 }}>
           {access.detail}
         </p>
+        {/* Always printed, whatever the probe found. Somebody who has just put
+            the key into Vercel comes to this panel to check it took, and until
+            now the only sentence here was about the other key entirely. */}
+        <p
+          style={{
+            margin: '10px 0 0',
+            fontSize: 13,
+            fontWeight: 600,
+            color: USING_SERVICE_ROLE ? 'var(--color-success)' : 'var(--color-danger)',
+          }}
+        >
+          {access.serverKey}
+        </p>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

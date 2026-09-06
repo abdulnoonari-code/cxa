@@ -122,7 +122,6 @@ a {
  * flex row beside it. */
 .app-shell {
   min-width: 0;
-  width: 100%;
   padding: 30px 36px 72px;
   margin-left: 244px;
 }

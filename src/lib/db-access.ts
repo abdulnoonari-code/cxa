@@ -101,13 +101,34 @@ export async function probeAnonAccess(knownToHaveRows: boolean): Promise<AnonPro
 export function accessVerdict(
   usingServiceRole: boolean,
   probe: AnonProbe
-): { level: 'ok' | 'danger' | 'unknown'; title: string; detail: string } {
+): { level: 'ok' | 'danger' | 'unknown'; title: string; detail: string; serverKey: string } {
+  // The two questions are separate and this panel used to answer only one.
+  //
+  //   1. Can the browser key read the data?   ← what the probe measures
+  //   2. Is a server key configured?          ← what makes it safe to close
+  //
+  // Somebody who has just put the server key into Vercel comes here to check
+  // it took, reads "anyone can read this database" — which is about the OTHER
+  // key and is correctly still true — and concludes the key did not work. So
+  // the server-key answer is now always printed, in its own sentence, whatever
+  // the probe found.
+  const serverKey = usingServiceRole
+    ? 'A server key IS set. This application reads with a key the browser never receives, so it will keep working when the database is closed.'
+    : 'No server key is set. Until SUPABASE_SERVICE_ROLE_KEY is in Vercel, closing the database would empty every screen.'
+
   if (probe.canRead) {
     return {
       level: 'danger',
       title: 'Anyone with the site address can read this database',
       detail:
-        'The key compiled into every visitor\'s browser was just able to read project records directly, without logging in. It can read every table Row Level Security is switched off on, and write to them. Run SQL part 27 to close this.',
+        "The key compiled into every visitor's browser was just able to read project records directly, without logging in. It can read every table Row Level Security is switched off on, and write to them." +
+        // SQL part 27 is named in BOTH branches. The message that says the
+        // database is open must always say what closes it — an assertion
+        // enforces that, and it caught this sentence losing it.
+        (usingServiceRole
+          ? ' Run SQL part 27 to close it. The screens will keep working, because a server key is set.'
+          : ' SQL part 27 closes it — but set SUPABASE_SERVICE_ROLE_KEY in Vercel FIRST, or closing it would empty every screen.'),
+      serverKey,
     }
   }
   if (probe.blocked) {
@@ -115,13 +136,15 @@ export function accessVerdict(
       level: 'ok',
       title: 'The browser key cannot reach the data',
       detail: usingServiceRole
-        ? 'Reading as an anonymous visitor was refused. This application reads with a server key that is never sent to the browser.'
-        : 'Reading as an anonymous visitor was refused — but this application has no server key configured either, so screens may be empty. Set SUPABASE_SERVICE_ROLE_KEY in Vercel.',
+        ? 'Reading as an anonymous visitor was refused. This is the state you want.'
+        : 'Reading as an anonymous visitor was refused — and this application has no server key either, so screens may be empty. Set SUPABASE_SERVICE_ROLE_KEY in Vercel.',
+      serverKey,
     }
   }
   return {
     level: 'unknown',
     title: 'The check could not give a clear answer',
     detail: probe.detail ?? 'The check could not be run.',
+    serverKey,
   }
 }

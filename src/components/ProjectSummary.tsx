@@ -19,6 +19,19 @@ const TYPE_WORD: Record<string, string> = {
   subsystem: 'Subsystem',
 }
 
+/**
+ * Where a row leads.
+ *
+ * The id is carried in the node key as `type:id`, which is how the subject
+ * tree addresses everything — so the link is built from the same value the
+ * roll-up used, not from a second lookup that could drift out of step with
+ * it.
+ */
+function hrefFor(n: HierarchyNode): string {
+  const [type, id] = n.key.split(':')
+  return `/assets/${type}/${id}`
+}
+
 function Bar({ percent }: { percent: number | null }) {
   if (percent === null) {
     return (
@@ -118,10 +131,13 @@ export default function ProjectSummary({ nodes }: { nodes: HierarchyNode[] }) {
               return (
                 <tr key={n.key}>
                   <td style={{ paddingLeft: 8 + n.depth * 18 }}>
-                    <span style={{ fontWeight: n.depth === 0 ? 700 : 600 }}>{n.code}</span>
-                    {n.name && n.name !== n.code && (
-                      <span className="text-secondary"> — {n.name}</span>
-                    )}
+                    {/* Every row goes somewhere. A summary that names the
+                        branch holding the project up and then makes you go
+                        and find it by hand has done half a job. */}
+                    <Link href={hrefFor(n)} style={{ color: 'inherit', textDecoration: 'none' }}>
+                      <span style={{ fontWeight: n.depth === 0 ? 700 : 600 }}>{n.code}</span>
+                      {n.name && n.name !== n.code && <span className="text-secondary"> — {n.name}</span>}
+                    </Link>
                     <div className="text-secondary" style={{ fontSize: 10.5, letterSpacing: '0.04em' }}>
                       {TYPE_WORD[n.type] ?? n.type}
                     </div>

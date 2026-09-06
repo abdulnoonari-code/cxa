@@ -8,6 +8,8 @@ import { loadScopedChecks } from '@/data/scope'
 import { scopeFindings, duplicateFindings } from '@/lib/scope'
 import { loadLibrary } from '@/data/templates'
 import { driftFindings } from '@/lib/templates'
+import { loadCoverage } from '@/data/coverage'
+import { leftOutFindings, untestedSystemFindings, partialApplicationFindings } from '@/lib/coverage'
 import { levelProgress, punchByCategory, punchTrend, trendReading } from '@/lib/dashboard-charts'
 import { StackedBars, TrendChart, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
@@ -34,12 +36,13 @@ export default async function DashboardCharts({
   projectId: string | null
   project: { name: string | null; target_date: string | null } | null
 }) {
-  const [inputs, checkInputs, failed, scoped, lib] = await Promise.all([
+  const [inputs, checkInputs, failed, scoped, lib, cov] = await Promise.all([
     loadRuleInputs(projectId, project),
     loadCheckLinkInputs(projectId),
     loadFailedChecks(projectId),
     loadScopedChecks(projectId),
     loadLibrary(projectId),
+    loadCoverage(projectId),
   ])
   const today = new Date()
 
@@ -60,6 +63,9 @@ export default async function DashboardCharts({
       ...scopeFindings(scoped.checks, scoped.codeOf),
       ...duplicateFindings(scoped.checks, scoped.codeOf),
       ...driftFindings(lib.templates, lib.records, lib.codeOf),
+      ...leftOutFindings(cov.subjects, cov.checks),
+      ...untestedSystemFindings(cov.subjects, cov.checks),
+      ...partialApplicationFindings(cov.subjects, cov.checks, cov.titleOf),
     ].map((f) => ({
       area: 'checks' as const,
       level: f.level,

@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers'
 import { runSetupProbes } from '@/data/setup-checks'
 import { countStates, setupHeadline } from '@/lib/setup-checks'
 import { USING_SERVICE_ROLE } from '@/lib/supabase'
@@ -5,8 +6,16 @@ import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { aiConfigured } from '@/lib/ai'
 import { createWorkedExample } from '@/app/setup/example-actions'
 import { EXAMPLE_FAULTS, EXAMPLE_PROJECT } from '@/lib/example-plan'
+import { EXAMPLE_REPORT_COOKIE, decodeReport, reportVerdict } from '@/lib/example-report'
+import { outcomeSentence } from '@/lib/pg-columns'
 
 export const dynamic = 'force-dynamic'
+
+const REPORT_TONE: Record<string, string> = {
+  good: 'var(--color-success)',
+  partial: 'var(--color-warning, #a35700)',
+  bad: 'var(--color-danger)',
+}
 
 const STATE: Record<string, { color: string; word: string }> = {
   'in place': { color: 'var(--color-success)', word: 'In place' },
@@ -15,10 +24,12 @@ const STATE: Record<string, { color: string; word: string }> = {
 }
 
 export default async function SetupPage() {
-  const [results, anon] = await Promise.all([runSetupProbes(), probeAnonAccess(false)])
+  const [results, anon, store] = await Promise.all([runSetupProbes(), probeAnonAccess(false), cookies()])
   const n = countStates(results)
   const access = accessVerdict(USING_SERVICE_ROLE, anon)
   const aiOn = aiConfigured()
+  const report = decodeReport(store.get(EXAMPLE_REPORT_COOKIE)?.value)
+  const verdict = reportVerdict(report)
 
   return (
     <>
@@ -138,6 +149,58 @@ export default async function SetupPage() {
             Create the worked example
           </button>
         </form>
+
+        {report.length > 0 && (
+          <div
+            style={{
+              marginTop: 14,
+              border: '1px solid var(--color-border)',
+              borderLeft: `4px solid ${REPORT_TONE[verdict.level]}`,
+              borderRadius: 8,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: REPORT_TONE[verdict.level] }}>{verdict.title}</div>
+            <p style={{ margin: '4px 0 10px', fontSize: 13 }}>{verdict.detail}</p>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table" style={{ fontSize: 12.5 }}>
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 130 }}>Table</th>
+                    <th style={{ minWidth: 70 }}>Written</th>
+                    <th>What happened</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.map((o) => (
+                    <tr key={o.table}>
+                      <td className="mono" style={{ fontSize: 11.5 }}>
+                        {o.table}
+                      </td>
+                      <td
+                        style={{
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap',
+                          color: o.error ? 'var(--color-danger)' : o.dropped.length > 0 ? 'var(--color-warning, #a35700)' : 'inherit',
+                        }}
+                      >
+                        {o.wrote} / {o.of}
+                      </td>
+                      <td className="text-secondary">{outcomeSentence(o)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+              This is the last press of the button in this browser, and it disappears on its own after fifteen
+              minutes. A row refused here is not a fault in the example — it is this database missing something the
+              example expects, and the message is the database&rsquo;s own words.
+            </p>
+          </div>
+        )}
         <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
           Delete it whole from All Projects when you are done — the password-confirmed project delete removes
           every record with it. Press the button twice and you get two example projects, not a doubled one.

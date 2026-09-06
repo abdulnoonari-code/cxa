@@ -1,24 +1,8 @@
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
-import { loadRuleInputs } from '@/data/site-rules'
-import { loadCheckLinkInputs } from '@/data/check-links'
-import { checkLinkFindings } from '@/lib/check-links'
-import { loadFailedChecks } from '@/data/failed-checks'
-import { failedCheckFindings } from '@/lib/failed-checks'
-import { loadScopedChecks } from '@/data/scope'
-import { scopeFindings, duplicateFindings } from '@/lib/scope'
-import { loadLibrary } from '@/data/templates'
-import { driftFindings } from '@/lib/templates'
-import { loadCoverage } from '@/data/coverage'
-import { leftOutFindings, untestedSystemFindings, partialApplicationFindings } from '@/lib/coverage'
-import {
-  punchFindings,
-  scheduleFindings,
-  countBy,
-  headline,
-  SITE_RULES_NOTE,
-  type SiteFinding,
-} from '@/lib/site-rules'
+import { loadAllFindings } from '@/data/all-findings'
+import RuleSummary from '@/components/RuleSummary'
+import { SITE_RULES_NOTE, type SiteFinding } from '@/lib/site-rules'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,81 +64,8 @@ function Finding({ f }: { f: SiteFinding }) {
 
 export default async function RulesPage() {
   const project = await getCurrentProject()
-  const [inputs, checkInputs, failed, scoped, lib, cov] = await Promise.all([
-    loadRuleInputs(project?.id ?? null, project ?? null),
-    loadCheckLinkInputs(project?.id ?? null),
-    loadFailedChecks(project?.id ?? null),
-    loadScopedChecks(project?.id ?? null),
-    loadLibrary(project?.id ?? null),
-    loadCoverage(project?.id ?? null),
-  ])
-  const today = new Date()
+  const { findings, counts, photosReady } = await loadAllFindings(project)
 
-  const findings = [
-    ...punchFindings(inputs.punch, inputs.checks, today),
-    ...scheduleFindings(
-      {
-        project: inputs.project,
-        milestones: inputs.milestones,
-        tasks: inputs.tasks,
-        obligations: inputs.obligations,
-        checks: inputs.checks,
-        openPunch: inputs.punch.filter((p) => p.status !== 'closed' && p.status !== 'verified').length,
-      },
-      today
-    ),
-    // The link findings come from a different shape — they are about pairs of
-    // checks rather than about one register — so they are widened here rather
-    // than bending either model to fit the other. Written out in full because
-    // the first version padded the examples list with empty strings to make
-    // the count come out right, which is the kind of thing that renders as a
-    // row of blank bullet points six months later.
-    ...[
-      ...scopeFindings(scoped.checks, scoped.codeOf),
-      ...duplicateFindings(scoped.checks, scoped.codeOf),
-      ...driftFindings(lib.templates, lib.records, lib.codeOf),
-      ...leftOutFindings(cov.subjects, cov.checks),
-      ...untestedSystemFindings(cov.subjects, cov.checks),
-      ...partialApplicationFindings(cov.subjects, cov.checks, cov.titleOf),
-    ].map(
-      (f): SiteFinding => ({
-        area: 'checks',
-        level: f.level,
-        rule: f.rule,
-        title: f.title,
-        detail: f.detail,
-        count: f.count,
-        examples: f.examples,
-        href: '/checklists',
-      })
-    ),
-    ...failedCheckFindings(failed.checks, failed.raisedFor).map(
-      (f): SiteFinding => ({
-        area: 'checks',
-        level: f.level,
-        rule: f.rule,
-        title: f.title,
-        detail: f.detail,
-        count: f.count,
-        examples: f.examples,
-        href: '/issues',
-      })
-    ),
-    ...checkLinkFindings(checkInputs).map(
-      (f): SiteFinding => ({
-        area: 'checks',
-        level: f.level,
-        rule: f.rule,
-        title: f.title,
-        detail: f.detail,
-        count: f.count,
-        examples: f.examples,
-        href: '/checklists',
-      })
-    ),
-  ]
-
-  const n = countBy(findings)
   const order: SiteFinding['level'][] = ['blocking', 'warning', 'note']
   const areas: SiteFinding['area'][] = ['checks', 'photos', 'punch', 'schedule']
 
@@ -166,39 +77,9 @@ export default async function RulesPage() {
         the answer is worked out from the records each time you open it, so it is never out of date.
       </p>
 
-      <div className="card">
-        <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'baseline' }}>
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: n.blocking > 0 ? 'var(--color-danger)' : 'inherit' }}>
-              {n.blocking}
-            </div>
-            <div className="text-secondary" style={{ fontSize: 11.5 }}>
-              would not stand up at handover
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 700 }}>{n.warning}</div>
-            <div className="text-secondary" style={{ fontSize: 11.5 }}>
-              worth a look
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 700 }}>{n.note}</div>
-            <div className="text-secondary" style={{ fontSize: 11.5 }}>
-              noted
-            </div>
-          </div>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600 }}>{headline(findings)}</div>
-            <div className="text-secondary" style={{ fontSize: 11.5 }}>
-              across {inputs.punch.length} punch items, {inputs.checks.length} checks and{' '}
-              {inputs.milestones.length + inputs.tasks.length + inputs.obligations.length} dated commitments
-            </div>
-          </div>
-        </div>
-      </div>
+      <RuleSummary findings={findings} counts={counts} />
 
-      {!inputs.photosReady && (
+      {!photosReady && (
         <div className="alert alert-danger" style={{ marginTop: 16 }}>
           <strong>Photograph checks could not run.</strong> The photographs table is not there yet — run SQL
           part 21. Everything else on this page is unaffected.

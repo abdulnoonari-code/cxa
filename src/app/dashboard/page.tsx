@@ -20,6 +20,8 @@ import {
   type Urgency,
 } from '@/lib/next-actions'
 import DashboardCharts from '@/components/DashboardCharts'
+import RuleSummary from '@/components/RuleSummary'
+import { loadAllFindings } from '@/data/all-findings'
 
 export const dynamic = 'force-dynamic'
 
@@ -192,6 +194,11 @@ export default async function CommandCenter() {
 
   const firstName = (actor.name || actor.email).split(/[\s@]/)[0]
 
+  // The free rules, on the screen people actually open. Loaded here rather
+  // than inside the component because a component that fetches its own data
+  // cannot be rendered by a test without a database.
+  const rules = await loadAllFindings(project ?? null)
+
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────── */}
@@ -245,6 +252,16 @@ export default async function CommandCenter() {
       </section>
 
       <DashboardCharts projectId={project?.id ?? null} project={project ?? null} />
+
+      {/* ── What the rules found ─────────────────────────────────── */}
+      <h2 className="section-title" style={{ marginTop: 30 }}>
+        What the checks found
+      </h2>
+      <p className="text-secondary" style={{ fontSize: 13, marginTop: -6, marginBottom: 12 }}>
+        Rules run over the records every time this page opens. They say what could not be verified by somebody who
+        was not there — not that the work was done badly.
+      </p>
+      <RuleSummary findings={rules.findings} counts={rules.counts} linked />
 
       {/* ── What to do today ─────────────────────────────────────── */}
       <h2 className="section-title" style={{ marginTop: 30 }}>

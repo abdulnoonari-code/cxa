@@ -125,7 +125,14 @@ export default async function SystemsPage() {
                     {s.discipline ? ` · ${s.discipline}` : ''}
                     {s.responsible ? ` · ${s.responsible}` : ''}
                   </div>
-                  <div style={{ fontWeight: 600, fontSize: 16 }}>{s.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 16 }}>
+                    {/* The card summarises; the system's own page shows the
+                        two scopes — its equipment's L1–L3 and its own L4/L5 —
+                        which is the thing this card cannot fit. */}
+                    <a href={`/assets/system/${s.id}`} style={{ color: 'inherit' }}>
+                      {s.name}
+                    </a>
+                  </div>
                   {s.description && (
                     <div className="text-secondary" style={{ fontSize: 13, marginTop: 3 }}>
                       {s.description}

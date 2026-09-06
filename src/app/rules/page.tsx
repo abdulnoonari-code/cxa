@@ -5,6 +5,8 @@ import { loadCheckLinkInputs } from '@/data/check-links'
 import { checkLinkFindings } from '@/lib/check-links'
 import { loadFailedChecks } from '@/data/failed-checks'
 import { failedCheckFindings } from '@/lib/failed-checks'
+import { loadScopedChecks } from '@/data/scope'
+import { scopeFindings, duplicateFindings } from '@/lib/scope'
 import {
   punchFindings,
   scheduleFindings,
@@ -74,10 +76,11 @@ function Finding({ f }: { f: SiteFinding }) {
 
 export default async function RulesPage() {
   const project = await getCurrentProject()
-  const [inputs, checkInputs, failed] = await Promise.all([
+  const [inputs, checkInputs, failed, scoped] = await Promise.all([
     loadRuleInputs(project?.id ?? null, project ?? null),
     loadCheckLinkInputs(project?.id ?? null),
     loadFailedChecks(project?.id ?? null),
+    loadScopedChecks(project?.id ?? null),
   ])
   const today = new Date()
 
@@ -100,6 +103,21 @@ export default async function RulesPage() {
     // the first version padded the examples list with empty strings to make
     // the count come out right, which is the kind of thing that renders as a
     // row of blank bullet points six months later.
+    ...[
+      ...scopeFindings(scoped.checks, scoped.codeOf),
+      ...duplicateFindings(scoped.checks, scoped.codeOf),
+    ].map(
+      (f): SiteFinding => ({
+        area: 'checks',
+        level: f.level,
+        rule: f.rule,
+        title: f.title,
+        detail: f.detail,
+        count: f.count,
+        examples: f.examples,
+        href: '/checklists',
+      })
+    ),
     ...failedCheckFindings(failed.checks, failed.raisedFor).map(
       (f): SiteFinding => ({
         area: 'checks',

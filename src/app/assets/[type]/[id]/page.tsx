@@ -14,6 +14,9 @@ import {
   type SubjectType,
 } from '@/lib/subjects'
 import { SubjectMeter, VerdictBadge } from '@/components/SubjectMeter'
+import SystemLevels from '@/components/SystemLevels'
+import { loadSystemView } from '@/data/scope'
+import { scopeOfSubject } from '@/lib/scope'
 import { statusBadgeClass, reviewBadgeClass, reviewLabel, LEVELS } from '@/lib/checklist'
 import { resultBadgeClass } from '@/lib/tests'
 import { severityBadgeClass, categoryBadgeClass, issueStatusBadgeClass } from '@/lib/issues'
@@ -58,6 +61,12 @@ export default async function SubjectPage({
 
   const ref = known ? { type: type as SubjectType, id } : null
   const subject = getSubject(index, ref)
+
+  // A system's work sits at two scopes and has to be shown at both. Loaded
+  // only for a system or subsystem — on a single tag there is no second scope
+  // and the panel would be an empty table with an explanation nobody needs.
+  const systemView =
+    ref && scopeOfSubject(ref.type) === 'system' ? await loadSystemView(project?.id ?? null, ref) : null
 
   if (!subject || !ref) {
     return (
@@ -210,6 +219,7 @@ export default async function SubjectPage({
       {/* ── OVERVIEW ───────────────────────────────────────────────── */}
       {lens === 'overview' && (
         <>
+          {systemView && <SystemLevels view={systemView} />}
           {critical.length === 0 && warnings.length === 0 && r.readiness.requirementsTotal === 0 && (
             <div className="alert alert-info">
               Nothing has been recorded against this yet, or anything beneath it. That is not the same as being

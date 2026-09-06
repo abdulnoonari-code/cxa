@@ -4,6 +4,8 @@ import { loadCheckLinkInputs } from '@/data/check-links'
 import { checkLinkFindings } from '@/lib/check-links'
 import { loadFailedChecks } from '@/data/failed-checks'
 import { failedCheckFindings } from '@/lib/failed-checks'
+import { loadScopedChecks } from '@/data/scope'
+import { scopeFindings, duplicateFindings } from '@/lib/scope'
 import { levelProgress, punchByCategory, punchTrend, trendReading } from '@/lib/dashboard-charts'
 import { StackedBars, TrendChart, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
@@ -30,10 +32,11 @@ export default async function DashboardCharts({
   projectId: string | null
   project: { name: string | null; target_date: string | null } | null
 }) {
-  const [inputs, checkInputs, failed] = await Promise.all([
+  const [inputs, checkInputs, failed, scoped] = await Promise.all([
     loadRuleInputs(projectId, project),
     loadCheckLinkInputs(projectId),
     loadFailedChecks(projectId),
+    loadScopedChecks(projectId),
   ])
   const today = new Date()
 
@@ -50,6 +53,19 @@ export default async function DashboardCharts({
       },
       today
     ),
+    ...[
+      ...scopeFindings(scoped.checks, scoped.codeOf),
+      ...duplicateFindings(scoped.checks, scoped.codeOf),
+    ].map((f) => ({
+      area: 'checks' as const,
+      level: f.level,
+      rule: f.rule,
+      title: f.title,
+      detail: f.detail,
+      count: f.count,
+      examples: f.examples,
+      href: '/checklists',
+    })),
     ...failedCheckFindings(failed.checks, failed.raisedFor).map((f) => ({
       area: 'checks' as const,
       level: f.level,

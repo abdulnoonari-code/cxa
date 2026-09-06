@@ -106,6 +106,7 @@ export const PROJECT_TABLES: ScopedTable[] = [
   // ── The registers ──────────────────────────────────────────────────────
   { table: 'issues', label: 'Punch items', by: 'project' },
   { table: 'checklist_items', label: 'Checks', by: 'project' },
+  { table: 'check_templates', label: 'Library checks', by: 'project' },
   { table: 'test_records', label: 'Test records', by: 'project' },
   { table: 'requirements', label: 'Requirements', by: 'project' },
   { table: 'controlled_documents', label: 'Controlled documents', by: 'project' },

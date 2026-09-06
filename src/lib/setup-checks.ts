@@ -86,6 +86,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'The serial number, the Attachment column and the Links to column. Without it the script importer refuses the file and the checklist screen cannot show what a check is connected to.',
     probe: { table: 'checklist_items', columns: ['serial_no', 'evidence_ref', 'links_to'] },
   },
+  {
+    id: 'part30',
+    source: 'week5-part30-check-library.sql',
+    title: 'Check library',
+    matters:
+      'One definition applied to many tags. Without it the Check Library screen says it is not installed, and nothing else is affected.',
+    probe: { table: 'check_templates', columns: ['id', 'title', 'level'] },
+  },
 ]
 
 export type StepResult = {

@@ -7,6 +7,8 @@ import { loadFailedChecks } from '@/data/failed-checks'
 import { failedCheckFindings } from '@/lib/failed-checks'
 import { loadScopedChecks } from '@/data/scope'
 import { scopeFindings, duplicateFindings } from '@/lib/scope'
+import { loadLibrary } from '@/data/templates'
+import { driftFindings } from '@/lib/templates'
 import {
   punchFindings,
   scheduleFindings,
@@ -76,11 +78,12 @@ function Finding({ f }: { f: SiteFinding }) {
 
 export default async function RulesPage() {
   const project = await getCurrentProject()
-  const [inputs, checkInputs, failed, scoped] = await Promise.all([
+  const [inputs, checkInputs, failed, scoped, lib] = await Promise.all([
     loadRuleInputs(project?.id ?? null, project ?? null),
     loadCheckLinkInputs(project?.id ?? null),
     loadFailedChecks(project?.id ?? null),
     loadScopedChecks(project?.id ?? null),
+    loadLibrary(project?.id ?? null),
   ])
   const today = new Date()
 
@@ -106,6 +109,7 @@ export default async function RulesPage() {
     ...[
       ...scopeFindings(scoped.checks, scoped.codeOf),
       ...duplicateFindings(scoped.checks, scoped.codeOf),
+      ...driftFindings(lib.templates, lib.records, lib.codeOf),
     ].map(
       (f): SiteFinding => ({
         area: 'checks',

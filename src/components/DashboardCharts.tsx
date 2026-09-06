@@ -6,6 +6,8 @@ import { loadFailedChecks } from '@/data/failed-checks'
 import { failedCheckFindings } from '@/lib/failed-checks'
 import { loadScopedChecks } from '@/data/scope'
 import { scopeFindings, duplicateFindings } from '@/lib/scope'
+import { loadLibrary } from '@/data/templates'
+import { driftFindings } from '@/lib/templates'
 import { levelProgress, punchByCategory, punchTrend, trendReading } from '@/lib/dashboard-charts'
 import { StackedBars, TrendChart, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
@@ -32,11 +34,12 @@ export default async function DashboardCharts({
   projectId: string | null
   project: { name: string | null; target_date: string | null } | null
 }) {
-  const [inputs, checkInputs, failed, scoped] = await Promise.all([
+  const [inputs, checkInputs, failed, scoped, lib] = await Promise.all([
     loadRuleInputs(projectId, project),
     loadCheckLinkInputs(projectId),
     loadFailedChecks(projectId),
     loadScopedChecks(projectId),
+    loadLibrary(projectId),
   ])
   const today = new Date()
 
@@ -56,6 +59,7 @@ export default async function DashboardCharts({
     ...[
       ...scopeFindings(scoped.checks, scoped.codeOf),
       ...duplicateFindings(scoped.checks, scoped.codeOf),
+      ...driftFindings(lib.templates, lib.records, lib.codeOf),
     ].map((f) => ({
       area: 'checks' as const,
       level: f.level,

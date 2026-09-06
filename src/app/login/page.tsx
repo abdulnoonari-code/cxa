@@ -58,6 +58,23 @@ export default async function LoginPage({
           </a>
         </p>
       </div>
+
+      {/* The general pages, reachable without an account. Somebody who has been
+          sent an invitation should be able to find out what they have been
+          invited to before typing a password into it. */}
+      <div style={{ marginTop: 20, textAlign: 'center', fontSize: 13 }}>
+        <a href="/about#what" className="link">
+          What CxSentinel is
+        </a>{' '}
+        ·{' '}
+        <a href="/about#manual" className="link">
+          Manual
+        </a>{' '}
+        ·{' '}
+        <a href="/about#contact" className="link">
+          Contact
+        </a>
+      </div>
     </main>
   )
 }

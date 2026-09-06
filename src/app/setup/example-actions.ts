@@ -5,10 +5,10 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
 import { recordAudit, getActor } from '@/lib/audit'
-import { PROJECT_COOKIE } from '@/lib/project'
+import { getCurrentProject } from '@/lib/project'
 import { insertWithFallback, type InsertOutcome } from '@/lib/pg-columns'
 import { EXAMPLE_REPORT_COOKIE, EXAMPLE_REPORT_MAX_AGE, encodeReport } from '@/lib/example-report'
-import { EXAMPLE_PROJECT, EXAMPLE_TAGS, EXAMPLE_TAGS_B, EXAMPLE_VOCAB, buildExampleChecks } from '@/lib/example-plan'
+import { EXAMPLE_TAGS, EXAMPLE_TAGS_B, EXAMPLE_VOCAB, EXAMPLE_MARK, buildExampleChecks } from '@/lib/example-plan'
 
 function daysAgo(n: number): string {
   const d = new Date()
@@ -23,13 +23,12 @@ function chunk<T>(list: T[], size: number): T[][] {
 }
 
 /**
- * The project's rows, written through the shared fallback in lib/pg-columns.
+ * The example's rows, written through the shared fallback in lib/pg-columns.
  *
  * Chunked at 400 because a single insert of every checklist row is a request
  * big enough to be refused for its size, and a size refusal names no column,
  * so the fallback would report it as "the database refused it" and be right
- * but useless. Each chunk is a separate attempt at the same set of columns —
- * a column dropped for one chunk is dropped for the rest by re-running.
+ * but useless.
  */
 async function insertRows(
   table: string,
@@ -52,88 +51,60 @@ async function insertRows(
   )
 }
 
-async function insertOne(
-  table: string,
-  row: Record<string, unknown>,
-  outcomes: InsertOutcome[]
-): Promise<string | null> {
-  const written = await insertRows(table, [row], outcomes)
-  return (written[0] as { id?: string } | undefined)?.id ?? null
-}
-
 /**
- * Build the worked example, in its own project.
+ * Add the worked example INSIDE the project that is open.
  *
- * Its own project, always — never into whatever is open. Seed data mixed into
- * somebody's real records is not removable afterwards: every screen would show
- * a plausible mixture of what happened on site and what a computer invented,
- * and there would be no way to tell which was which. A separate project is
- * deleted whole, by the button that already exists.
+ * It used to create a project of its own. That was wrong, and pressing the
+ * button four times proved it — four identical projects called "Worked
+ * example" sitting in the list beside real sites, each one looking exactly
+ * like a job somebody is running.
  *
- * Everything here is written with the ordinary tables and the ordinary
- * columns. Nothing is special-cased, which is the point — if this runs, the
- * chain works. And when part of it does not run, the report says which part.
+ * An example is not a project. It is two switchboards and a test script, and
+ * a real project is where switchboards live. So it goes into the open one.
+ *
+ * The whole risk of that is telling the example apart from the work
+ * afterwards, and it is handled in one way and one way only: every system and
+ * every tag it creates is prefixed with EXAMPLE_MARK, and Remove deletes
+ * exactly the rows carrying that prefix and nothing else. No date window, no
+ * "created recently", no guessing — a prefix is the only thing that still
+ * identifies these rows correctly six months from now, after somebody has
+ * edited half of them.
  */
-export async function createWorkedExample() {
+export async function addWorkedExample() {
+  const project = await getCurrentProject()
+  if (!project) redirect('/projects')
+
   const outcomes: InsertOutcome[] = []
   const store = await cookies()
+  const projectId = project.id
 
-  const stop = async (): Promise<never> => {
+  const finish = async (): Promise<never> => {
     store.set(EXAMPLE_REPORT_COOKIE, encodeReport(outcomes), {
       path: '/',
       maxAge: EXAMPLE_REPORT_MAX_AGE,
       sameSite: 'lax',
     })
     revalidatePath('/', 'layout')
-    redirect('/setup?example=partial')
+    redirect('/setup?example=done')
   }
-
-  const projectId = await insertOne(
-    'projects',
-    {
-      name: EXAMPLE_PROJECT.name,
-      client: EXAMPLE_PROJECT.client,
-      location: EXAMPLE_PROJECT.location,
-      start_date: daysAgo(120),
-      // FAULT: past its completion date, with defects still open.
-      target_date: daysAgo(9),
-    },
-    outcomes
-  )
-  if (!projectId) await stop()
-
-  // Opened now rather than at the end. If a later insert fails, the report
-  // has to be readable with the example project open, otherwise the person is
-  // told something is missing from a project they cannot see.
-  store.set(PROJECT_COOKIE, projectId!, { path: '/', maxAge: 60 * 60 * 24 * 365 })
-
-  // ── The asset tree ────────────────────────────────────────────────────
-  const siteId = await insertOne('sites', { project_id: projectId, name: 'BKK1 substation', code: 'BKK1' }, outcomes)
-  const areaId = await insertOne(
-    'areas',
-    { project_id: projectId, name: 'MV switchroom', code: 'MV-01', site_id: siteId },
-    outcomes
-  )
 
   const systems = await insertRows(
     'systems',
     [
       {
         project_id: projectId,
-        system_id: 'SWGR-A1',
-        name: '11kV switchboard A1',
+        system_id: `${EXAMPLE_MARK}SWGR-A1`,
+        name: 'Worked example — 11kV switchboard A1',
         discipline: 'Electrical',
         boundary: 'Incomer, four breakers, bus tie, PQM',
         stage: EXAMPLE_VOCAB.stageA,
-        area_id: areaId,
       },
       {
         project_id: projectId,
-        system_id: 'SWGR-B1',
-        name: '11kV switchboard B1',
+        system_id: `${EXAMPLE_MARK}SWGR-B1`,
+        name: 'Worked example — 11kV switchboard B1',
         discipline: 'Electrical',
         stage: EXAMPLE_VOCAB.stageB,
-        area_id: areaId,
       },
     ],
     outcomes
@@ -141,9 +112,9 @@ export async function createWorkedExample() {
   const byCode = new Map(
     systems.map((s) => [String((s as { system_id?: string }).system_id ?? ''), String((s as { id: string }).id)])
   )
-  const systemA = byCode.get('SWGR-A1') ?? null
-  const systemB = byCode.get('SWGR-B1') ?? null
-  if (!systemA || !systemB) await stop()
+  const systemA = byCode.get(`${EXAMPLE_MARK}SWGR-A1`) ?? null
+  const systemB = byCode.get(`${EXAMPLE_MARK}SWGR-B1`) ?? null
+  if (!systemA || !systemB) await finish()
 
   const tagRows = [
     ...EXAMPLE_TAGS.map((t) => ({ ...t, system: systemA })),
@@ -153,7 +124,7 @@ export async function createWorkedExample() {
     'equipment',
     tagRows.map((t) => ({
       project_id: projectId,
-      tag_id: t.tag,
+      tag_id: `${EXAMPLE_MARK}${t.tag}`,
       description: t.description,
       category: EXAMPLE_VOCAB.equipmentCategory,
       install_status: EXAMPLE_VOCAB.installStatus,
@@ -163,15 +134,13 @@ export async function createWorkedExample() {
     outcomes
   )
   const tagIds = new Map(
-    tags.map((r) => [String((r as { tag_id?: string }).tag_id ?? ''), String((r as { id: string }).id)])
+    tags.map((r) => [
+      String((r as { tag_id?: string }).tag_id ?? '').slice(EXAMPLE_MARK.length),
+      String((r as { id: string }).id),
+    ])
   )
-  if (tagIds.size === 0) await stop()
+  if (tagIds.size === 0) await finish()
 
-  // ── The rows, decided in lib/example-plan.ts ─────────────────────────
-  //
-  // Built there and inserted here, so the promise on the screen — fourteen
-  // faults, one per rule — can be fed straight into the rule functions by the
-  // assertions. A claim like that is worth nothing unless something proves it.
   const q1 = tagIds.get('SUDB-A1-Q1')
   const checks = buildExampleChecks((tag) => tagIds.get(tag), systemA!).map((r) => ({
     project_id: projectId,
@@ -193,22 +162,7 @@ export async function createWorkedExample() {
   }))
   await insertRows('checklist_items', checks, outcomes)
 
-  // ── Requirements, so a script link resolves ───────────────────────────
-  await insertRows(
-    'requirements',
-    [
-      {
-        project_id: projectId,
-        ref: 'REQ-014',
-        title: 'Protection discrimination per the approved study',
-        description: 'Breaker settings shall be loaded and verified against the approved discrimination study.',
-      },
-    ],
-    outcomes
-  )
-
-  // ── Punch items ───────────────────────────────────────────────────────
-  const actor = await getActor(projectId!)
+  const actor = await getActor(projectId)
   const who = actor.name || actor.email || 'Example'
   await insertRows(
     'issues',
@@ -216,7 +170,7 @@ export async function createWorkedExample() {
       {
         // FAULT: Category A, past its date, no photograph.
         project_id: projectId,
-        ref: 'P-0001',
+        ref: `${EXAMPLE_MARK}P-0001`,
         subject_type: 'system',
         subject_id: systemA,
         title: 'Bus tie interlock does not hold with the Kirk key removed',
@@ -231,7 +185,7 @@ export async function createWorkedExample() {
       {
         // FAULT: closed with no photograph at all.
         project_id: projectId,
-        ref: 'P-0002',
+        ref: `${EXAMPLE_MARK}P-0002`,
         equipment_id: q1 ?? null,
         subject_type: 'equipment',
         subject_id: q1 ?? null,
@@ -248,7 +202,7 @@ export async function createWorkedExample() {
       {
         // FAULT: two words, uncategorised, and no date.
         project_id: projectId,
-        ref: 'P-0003',
+        ref: `${EXAMPLE_MARK}P-0003`,
         equipment_id: tagIds.get('SUDB-A1-Q3') ?? null,
         subject_type: 'equipment',
         subject_id: tagIds.get('SUDB-A1-Q3') ?? null,
@@ -261,59 +215,84 @@ export async function createWorkedExample() {
     outcomes
   )
 
-  // ── Dates ─────────────────────────────────────────────────────────────
-  await insertRows(
-    'milestones',
-    [
-      {
-        project_id: projectId,
-        name: 'Energisation of switchboard A1',
-        target_date: daysAgo(21),
-        status: EXAMPLE_VOCAB.milestoneStatus,
-        notes: 'Held by the bus tie interlock defect.',
-      },
-    ],
-    outcomes
-  )
-
-  await insertRows(
-    'obligations',
-    [
-      {
-        project_id: projectId,
-        ref: 'OBL-0001',
-        statement: 'The contractor shall submit as-built drawings within 14 days of energisation.',
-        party: EXAMPLE_VOCAB.obligationParty,
-        status: 'submitted',
-        due_date: daysAgo(11),
-      },
-    ],
-    outcomes
-  )
-
   const wrote = outcomes.reduce((n, o) => n + o.wrote, 0)
-  const trouble = outcomes.filter((o) => o.error || o.dropped.length > 0)
-
   await recordAudit({
-    projectId: projectId!,
-    action: 'created the worked example project',
+    projectId,
+    action: 'added the worked example to this project',
     entity: 'project',
-    entityId: projectId!,
-    entityLabel: EXAMPLE_PROJECT.name,
-    newValue: `${wrote} records written${trouble.length > 0 ? `, ${trouble.length} table(s) with trouble` : ''}`,
+    entityId: projectId,
+    entityLabel: project.name,
+    newValue: `${wrote} records, every one prefixed ${EXAMPLE_MARK}`,
     comment:
-      'Built to fail in fourteen specific ways, one for each rule, so that Rule Checks shows what every finding looks like on real records. Delete the whole project when you are done.',
+      'Sample records built to fail in specific ways, one for each rule, so Rule Checks shows what every finding looks like. Remove them from Setup when you are done.',
   })
 
-  store.set(EXAMPLE_REPORT_COOKIE, encodeReport(outcomes), {
-    path: '/',
-    maxAge: EXAMPLE_REPORT_MAX_AGE,
-    sameSite: 'lax',
+  await finish()
+}
+
+/**
+ * Take the worked example back out of this project.
+ *
+ * Deletes only rows whose tag, system id or reference begins with the prefix.
+ * Checks go first, then equipment, then systems, then punch items — a child
+ * before its parent, because the database refuses a parent that something
+ * still points at and a half-removed example is worse than one left in.
+ */
+export async function removeWorkedExample() {
+  const project = await getCurrentProject()
+  if (!project) redirect('/projects')
+  const projectId = project.id
+
+  const like = `${EXAMPLE_MARK}%`
+
+  const [{ data: sysRows }, { data: tagRows }] = await Promise.all([
+    supabase.from('systems').select('id').eq('project_id', projectId).like('system_id', like),
+    supabase.from('equipment').select('id').eq('project_id', projectId).like('tag_id', like),
+  ])
+  const systemIds = (sysRows ?? []).map((r) => (r as { id: string }).id)
+  const tagIds = (tagRows ?? []).map((r) => (r as { id: string }).id)
+  const subjectIds = [...systemIds, ...tagIds]
+
+  let removed = 0
+  const count = (n: number | null) => {
+    removed += n ?? 0
+  }
+
+  if (subjectIds.length > 0) {
+    const checks = await supabase
+      .from('checklist_items')
+      .delete({ count: 'exact' })
+      .eq('project_id', projectId)
+      .in('subject_id', subjectIds)
+    count(checks.count)
+  }
+
+  const punch = await supabase
+    .from('issues')
+    .delete({ count: 'exact' })
+    .eq('project_id', projectId)
+    .like('ref', like)
+  count(punch.count)
+
+  if (tagIds.length > 0) {
+    const tags = await supabase.from('equipment').delete({ count: 'exact' }).in('id', tagIds)
+    count(tags.count)
+  }
+  if (systemIds.length > 0) {
+    const sys = await supabase.from('systems').delete({ count: 'exact' }).in('id', systemIds)
+    count(sys.count)
+  }
+
+  await recordAudit({
+    projectId,
+    action: 'removed the worked example from this project',
+    entity: 'project',
+    entityId: projectId,
+    entityLabel: project.name,
+    oldValue: `${removed} records`,
+    comment: `Only rows prefixed ${EXAMPLE_MARK} were removed. Nothing else was touched.`,
   })
 
   revalidatePath('/', 'layout')
-
-  // Straight to the findings when it built cleanly; back to the report when it
-  // did not, because findings from a half-built example are worse than none.
-  redirect(trouble.length > 0 ? '/setup?example=partial' : '/rules?example=created')
+  redirect(`/setup?example=removed&n=${removed}`)
 }

@@ -29,10 +29,17 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isAuthPage =
-    request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup')
+  // The pages a signed-out visitor may see. /about is here because the login
+  // screen links to it: somebody sent an invitation should be able to find out
+  // what they have been invited to before typing a password into it, and a
+  // link that bounces them back to the login screen they came from is worse
+  // than no link.
+  const isPublic =
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/signup') ||
+    request.nextUrl.pathname.startsWith('/about')
 
-  if (!user && !isAuthPage) {
+  if (!user && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
+import { Chrome } from "@/components/Chrome";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -9,9 +10,12 @@ export const metadata: Metadata = {
     "AI-assisted commissioning copilot for data centers, substations, and power plants — checklists, documents, and issue tracking in one place.",
 };
 
-// The sidebar only appears once you're logged in, so the login and signup
-// screens stay clean and full-width. Everything else renders inside the
-// sidebar shell, which is why no individual page draws its own navigation.
+// The sidebar appears once you're logged in AND you have a project open, so
+// the login screen and the project list stay clean and full-width. Everything
+// else renders inside the sidebar shell, which is why no individual page draws
+// its own navigation. Which screens are bare is decided in components/Chrome —
+// a layout cannot know the path, and route groups would have meant moving
+// thirty folders to answer a question one line answers.
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const supabase = await createClient();
   const {
@@ -33,16 +37,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body>
-        {user ? (
-          <div className="app-layout">
-            <Sidebar />
-            <main className="app-shell">
-              <div className="app-shell-inner">{children}</div>
-            </main>
-          </div>
-        ) : (
-          children
-        )}
+        {user ? <Chrome sidebar={<Sidebar />}>{children}</Chrome> : children}
       </body>
     </html>
   );

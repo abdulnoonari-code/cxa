@@ -180,6 +180,19 @@ export const EXAMPLE_SCRIPT: ExampleScriptLine[] = [
  * else. Naming them here lets the assertions check that claim; leaving them
  * inline meant the database was the first thing to notice.
  */
+/**
+ * The prefix that marks every row the worked example creates.
+ *
+ * It is the whole of the removal mechanism. Not a timestamp, not a "created
+ * in the last hour", not a separate table — a prefix on the tag, the system
+ * id and the punch reference, which is the only marker that still identifies
+ * these rows correctly six months later after somebody has edited them.
+ *
+ * It has to be ugly enough that nobody types it by accident and short enough
+ * not to overflow a tag column.
+ */
+export const EXAMPLE_MARK = 'ZZ-EXAMPLE-'
+
 export const EXAMPLE_VOCAB = {
   equipmentCategory: 'substation_protection',
   installStatus: 'installed',

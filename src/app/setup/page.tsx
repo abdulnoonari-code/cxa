@@ -1,11 +1,12 @@
 import { cookies } from 'next/headers'
+import { getCurrentProject } from '@/lib/project'
 import { runSetupProbes } from '@/data/setup-checks'
 import { countStates, setupHeadline } from '@/lib/setup-checks'
 import { USING_SERVICE_ROLE } from '@/lib/supabase'
 import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { aiConfigured } from '@/lib/ai'
-import { createWorkedExample } from '@/app/setup/example-actions'
-import { EXAMPLE_FAULTS, EXAMPLE_PROJECT } from '@/lib/example-plan'
+import { addWorkedExample, removeWorkedExample } from '@/app/setup/example-actions'
+import { EXAMPLE_FAULTS, EXAMPLE_MARK } from '@/lib/example-plan'
 import { EXAMPLE_REPORT_COOKIE, decodeReport, reportVerdict } from '@/lib/example-report'
 import { outcomeSentence } from '@/lib/pg-columns'
 
@@ -24,7 +25,12 @@ const STATE: Record<string, { color: string; word: string }> = {
 }
 
 export default async function SetupPage() {
-  const [results, anon, store] = await Promise.all([runSetupProbes(), probeAnonAccess(false), cookies()])
+  const [results, anon, store, project] = await Promise.all([
+    runSetupProbes(),
+    probeAnonAccess(false),
+    cookies(),
+    getCurrentProject(),
+  ])
   const n = countStates(results)
   const access = accessVerdict(USING_SERVICE_ROLE, anon)
   const aiOn = aiConfigured()
@@ -116,15 +122,22 @@ export default async function SetupPage() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <h2 className="section-title">A worked example</h2>
+        <h2 className="section-title">A worked example, inside this project</h2>
         <p style={{ margin: '0 0 4px', fontSize: 13 }}>
-          A switchboard, two systems, seven tags, a functional test script and a punch list, created in its own
-          project called <strong>{EXAMPLE_PROJECT.name}</strong>. Nothing touches the project you have open.
+          Two switchboards, seven tags, a functional test script and a punch list, added to{' '}
+          <strong>{project?.name ?? 'the open project'}</strong> alongside your own records — not as a project of
+          its own.
         </p>
         <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600 }}>
           It is not a demonstration of a well-run job. It is built to fail, deliberately, in {EXAMPLE_FAULTS.length}{' '}
           specific ways — one for each rule — so that Rule Checks shows what every finding looks like on real
           records instead of an empty page.
+        </p>
+
+        <p className="text-secondary" style={{ margin: '0 0 10px', fontSize: 12.5 }}>
+          Every row it adds is prefixed <span className="mono">{EXAMPLE_MARK}</span> — the tags, the systems and
+          the punch references. That prefix is how Remove finds them again, and it is the only thing it goes by, so
+          nothing of yours can be caught up in it.
         </p>
 
         <details style={{ marginBottom: 12 }}>
@@ -144,11 +157,23 @@ export default async function SetupPage() {
           </ul>
         </details>
 
-        <form action={createWorkedExample}>
-          <button type="submit" className="btn btn-primary">
-            Create the worked example
-          </button>
-        </form>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <form action={addWorkedExample}>
+            <button type="submit" className="btn btn-primary" disabled={!project}>
+              Add it to this project
+            </button>
+          </form>
+          <form action={removeWorkedExample}>
+            <button type="submit" className="btn btn-secondary" disabled={!project}>
+              Remove it from this project
+            </button>
+          </form>
+        </div>
+        {!project && (
+          <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 12 }}>
+            No project is open, so there is nowhere to put it. Choose one from Projects first.
+          </p>
+        )}
 
         {report.length > 0 && (
           <div
@@ -182,7 +207,11 @@ export default async function SetupPage() {
                         style={{
                           fontWeight: 600,
                           whiteSpace: 'nowrap',
-                          color: o.error ? 'var(--color-danger)' : o.dropped.length > 0 ? 'var(--color-warning, #a35700)' : 'inherit',
+                          color: o.error
+                            ? 'var(--color-danger)'
+                            : o.dropped.length > 0
+                              ? 'var(--color-warning, #a35700)'
+                              : 'inherit',
                         }}
                       >
                         {o.wrote} / {o.of}
@@ -201,10 +230,6 @@ export default async function SetupPage() {
             </p>
           </div>
         )}
-        <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
-          Delete it whole from All Projects when you are done — the password-confirmed project delete removes
-          every record with it. Press the button twice and you get two example projects, not a doubled one.
-        </p>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

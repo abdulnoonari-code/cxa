@@ -1152,3 +1152,227 @@ textarea.input {
     color-scheme: light;
   }
 }
+
+/* ── The frame for screens outside a project ─────────────────────────────
+ *
+ * The project picker had no frame at all: a white page with a heading on it,
+ * no product name, no sign-out, nothing saying who was signed in. It is the
+ * one screen where the rail is absent, so it is the one screen where the
+ * frame has to do the rail's job of saying where you are.
+ *
+ * The bar takes its colours from the rail so the two read as one product.
+ */
+.plain-layout {
+  min-height: 100vh;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 28px;
+  height: 58px;
+  background: linear-gradient(90deg, var(--rail-bg) 0%, var(--rail-bg-2) 100%);
+  border-bottom: 1px solid var(--rail-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #fff;
+}
+
+.topbar-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.topbar-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topbar-links {
+  display: flex;
+  gap: 18px;
+  margin-left: 10px;
+}
+
+.topbar-links a {
+  color: rgba(255, 255, 255, 0.66);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.topbar-links a:hover {
+  color: #fff;
+}
+
+.topbar-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.topbar-who {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-signout {
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--rail-border);
+  color: rgba(255, 255, 255, 0.88);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.topbar-signout:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.plain-shell {
+  flex: 1;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 30px 28px 72px;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0 16px;
+    gap: 12px;
+  }
+  .topbar-links {
+    display: none;
+  }
+  .topbar-who {
+    display: none;
+  }
+  .plain-shell {
+    padding: 22px 16px 56px;
+  }
+}
+
+/* ── The project picker ──────────────────────────────────────────────── */
+
+.picker-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(292px, 1fr));
+  gap: 16px;
+}
+
+.project-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow 0.16s ease, transform 0.16s ease, border-color 0.16s ease;
+}
+
+.project-card:hover {
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-2px);
+  border-color: #c3d2ee;
+}
+
+/* The accent strip carries the "which one is open" signal, so the card body
+   never has to shout it with a coloured border that fights the hover state. */
+.project-card-accent {
+  height: 4px;
+  background: var(--color-border-soft);
+}
+
+.project-card.is-open .project-card-accent {
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
+}
+
+.project-card-body {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.project-card-name {
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+}
+
+.project-card-meta {
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+
+.project-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px 0 2px;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.project-stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.project-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-neutral-bg);
+  overflow: hidden;
+}
+
+.project-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
+}

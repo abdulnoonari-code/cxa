@@ -39,63 +39,55 @@ function Box({
   stat: Stat
   current: boolean
 }) {
+  const where = [client, location].filter(Boolean).join(' · ')
   return (
-    <form
-      action={selectProject}
-      className="card"
-      style={{
-        margin: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        minHeight: 196,
-        borderColor: current ? 'var(--color-primary)' : undefined,
-        boxShadow: current ? '0 0 0 3px rgba(37, 99, 255, 0.12)' : undefined,
-      }}
-    >
+    <form action={selectProject} className={`project-card${current ? ' is-open' : ''}`}>
       <input type="hidden" name="id" value={id} />
+      <div className="project-card-accent" />
 
-      <div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.015em' }}>{name}</span>
-          {current && <span className="badge badge-info">Open now</span>}
-        </div>
-        <div className="text-secondary" style={{ fontSize: 12.5, marginTop: 2 }}>
-          {[client, location].filter(Boolean).join(' · ') || 'No client or location set'}
-        </div>
-        {(start || target) && (
-          <div className="text-secondary mono" style={{ fontSize: 11.5, marginTop: 3 }}>
-            {start ?? '—'} → {target ?? '—'}
+      <div className="project-card-body">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+            <span className="project-card-name">{name}</span>
+            {current && (
+              <span className="badge badge-info" style={{ flexShrink: 0, marginTop: 2 }}>
+                Open
+              </span>
+            )}
           </div>
-        )}
+          <div className="project-card-meta">{where || 'No client or location set'}</div>
+          {(start || target) && (
+            <div className="project-card-meta mono" style={{ fontSize: 11.5 }}>
+              {start ?? '—'} → {target ?? '—'}
+            </div>
+          )}
+        </div>
+
+        <div className="project-stats">
+          <div>
+            <div className="stat-label">Tags</div>
+            <div className="project-stat-value mono">{stat.tags}</div>
+          </div>
+          <div>
+            <div className="stat-label">Checks</div>
+            <div className="project-stat-value mono">{stat.checks}</div>
+          </div>
+          <div>
+            <div className="stat-label">Resolved</div>
+            {/* A dash, not 0%. Zero per cent is a statement about work that
+                exists and has not been done; a dash is no work recorded. */}
+            <div className="project-stat-value mono">{stat.checks > 0 ? `${stat.percent}%` : '—'}</div>
+          </div>
+        </div>
+
+        <div className="project-progress" aria-hidden="true">
+          <div className="project-progress-fill" style={{ width: `${stat.checks > 0 ? stat.percent : 0}%` }} />
+        </div>
+
+        <button type="submit" className="btn btn-primary" style={{ marginTop: 'auto', width: '100%' }}>
+          {current ? 'Continue' : 'Open project'}
+        </button>
       </div>
-
-      <div style={{ display: 'flex', gap: 22, marginTop: 2 }}>
-        <div>
-          <div className="stat-label">Tags</div>
-          <div className="mono" style={{ fontSize: 19, fontWeight: 600 }}>
-            {stat.tags}
-          </div>
-        </div>
-        <div>
-          <div className="stat-label">Checks</div>
-          <div className="mono" style={{ fontSize: 19, fontWeight: 600 }}>
-            {stat.checks}
-          </div>
-        </div>
-        <div>
-          <div className="stat-label">Resolved</div>
-          {/* A dash, not 0%, when there is nothing to resolve. Zero per cent is
-              a statement about work that exists and has not been done. */}
-          <div className="mono" style={{ fontSize: 19, fontWeight: 600 }}>
-            {stat.checks > 0 ? `${stat.percent}%` : '—'}
-          </div>
-        </div>
-      </div>
-
-      <button type="submit" className="btn btn-primary" style={{ marginTop: 'auto', width: '100%' }}>
-        {current ? 'Continue' : 'Open'}
-      </button>
     </form>
   )
 }
@@ -138,14 +130,16 @@ export default async function ProjectsPage({
 
   return (
     <>
-      <h1 className="page-title">Projects</h1>
-      <p className="page-subtitle" style={{ marginBottom: 6 }}>
-        Open one to work on it. Everything else in CxSentinel — dashboard, project details, setup, equipment,
-        checks, documents, punch list — lives inside a project.
-      </p>
-      <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 20px' }}>
-        {registerNote(reg, reg.email)}
-      </p>
+      <div className="picker-head">
+        <div>
+          <h1 className="page-title" style={{ marginBottom: 2 }}>
+            Projects
+          </h1>
+          <p className="text-secondary" style={{ fontSize: 13, margin: 0, maxWidth: '68ch' }}>
+            {registerNote(reg, reg.email)}
+          </p>
+        </div>
+      </div>
 
       {purge === 'ok' && (
         <div className="alert alert-info" style={{ marginBottom: 16 }}>
@@ -183,7 +177,7 @@ export default async function ProjectsPage({
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(272px, 1fr))', gap: 16 }}>
+        <div className="project-grid">
           {projects.map((p) => (
             <Box
               key={p.id}

@@ -15,14 +15,25 @@ import { usePathname } from 'next/navigation'
 // project, it has no rail.
 const BARE = new Set(['/', '/projects', '/login', '/signup', '/about'])
 
-export function Chrome({ sidebar, children }: { sidebar: React.ReactNode; children: React.ReactNode }) {
+export function Chrome({
+  sidebar,
+  topbar,
+  children,
+}: {
+  sidebar: React.ReactNode
+  topbar: React.ReactNode
+  children: React.ReactNode
+}) {
   const pathname = usePathname() ?? '/'
 
+  // Bare of the RAIL, not bare of everything. A page with no frame at all
+  // reads as an unfinished page rather than a deliberate one.
   if (BARE.has(pathname)) {
     return (
-      <main className="app-shell">
-        <div className="app-shell-inner">{children}</div>
-      </main>
+      <div className="plain-layout">
+        {topbar}
+        <main className="plain-shell">{children}</main>
+      </div>
     )
   }
 

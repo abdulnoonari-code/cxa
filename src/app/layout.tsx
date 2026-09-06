@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { Chrome } from "@/components/Chrome";
+import { TopBar } from "@/components/TopBar";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -37,7 +38,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body>
-        {user ? <Chrome sidebar={<Sidebar />}>{children}</Chrome> : children}
+        {user ? (
+          <Chrome sidebar={<Sidebar />} topbar={<TopBar />}>
+            {children}
+          </Chrome>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

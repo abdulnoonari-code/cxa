@@ -3,6 +3,8 @@ import { countStates, setupHeadline } from '@/lib/setup-checks'
 import { USING_SERVICE_ROLE } from '@/lib/supabase'
 import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { aiConfigured } from '@/lib/ai'
+import { createWorkedExample } from '@/app/setup/example-actions'
+import { EXAMPLE_FAULTS, EXAMPLE_PROJECT } from '@/lib/example-plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,6 +101,46 @@ export default async function SetupPage() {
         </div>
         <p className="text-secondary" style={{ margin: '4px 0 0', fontSize: 13 }}>
           {access.detail}
+        </p>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2 className="section-title">A worked example</h2>
+        <p style={{ margin: '0 0 4px', fontSize: 13 }}>
+          A switchboard, two systems, seven tags, a functional test script and a punch list, created in its own
+          project called <strong>{EXAMPLE_PROJECT.name}</strong>. Nothing touches the project you have open.
+        </p>
+        <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600 }}>
+          It is not a demonstration of a well-run job. It is built to fail, deliberately, in {EXAMPLE_FAULTS.length}{' '}
+          specific ways — one for each rule — so that Rule Checks shows what every finding looks like on real
+          records instead of an empty page.
+        </p>
+
+        <details style={{ marginBottom: 12 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            What is wrong with it, on purpose
+          </summary>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5 }}>
+            {EXAMPLE_FAULTS.map((f) => (
+              <li key={f.rule} style={{ marginBottom: 4 }}>
+                {f.what}
+                <br />
+                <span className="text-secondary mono" style={{ fontSize: 10.5 }}>
+                  {f.rule}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+
+        <form action={createWorkedExample}>
+          <button type="submit" className="btn btn-primary">
+            Create the worked example
+          </button>
+        </form>
+        <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+          Delete it whole from All Projects when you are done — the password-confirmed project delete removes
+          every record with it. Press the button twice and you get two example projects, not a doubled one.
         </p>
       </div>
 

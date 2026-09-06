@@ -27,6 +27,17 @@ import { gateVerdict } from '@/lib/gates'
 import { loadIssuePhotos, downloadPhotoBytes } from '@/data/photos'
 import { prepareGallery, photoSources, omissionNote, canDownscale, MAX_PHOTOS } from '@/lib/photo-prep'
 import type { Report, ReportTable, ReportGallery } from '@/lib/docgen'
+import { descendantsOf } from '@/lib/subjects'
+import { systemPicture, scopeOfSubject, scopeFindings, duplicateFindings, type ScopedCheck } from '@/lib/scope'
+import { leftOutFindings, type CoverageSubject, type CoverageCheck } from '@/lib/coverage'
+import {
+  deviceLevelTable,
+  systemLevelTable,
+  scopeNote,
+  findingsTable,
+  FINDINGS_NOTE,
+  type PackFinding,
+} from '@/lib/dossier-levels'
 
 export type BuiltDossier = {
   project: { id: string; name: string }
@@ -63,6 +74,10 @@ export async function buildDossier(url: string, type: string, id: string): Promi
 
   const tables: ReportTable[] = []
 
+  // Notes that belong to sections added below, collected here and appended to
+  // the pack's standing footnotes rather than interleaved with them.
+  const footnotes: string[] = []
+
   // ── Who signs ───────────────────────────────────────────────────────────
   tables.push({
     title: 'Signatures',
@@ -97,6 +112,56 @@ export async function buildDossier(url: string, type: string, id: string): Promi
     obligations: pack.input.obligations.total,
     gates: pack.input.gates.total,
     documents: pack.input.documents,
+  }
+
+  // ── The two scopes, and what the rules found ────────────────────────────
+  //
+  // Only for a system: a single tag has no second scope, and the tables would
+  // be one row of dashes under a heading explaining why they were empty.
+  //
+  // The findings go BEFORE the registers, with the gaps, for the reason
+  // written at the top of this file — a pack that buries what is missing gets
+  // found out, and one that names it gets negotiated.
+  const ref = { type: type as SubjectType, id }
+  if (scopeOfSubject(ref.type) === 'system') {
+    const tags = descendantsOf(index, ref)
+      .filter((s) => s.type === 'equipment' || s.type === 'component')
+      .map((s) => ({ id: s.id, code: s.code ?? s.name ?? '—' }))
+      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+
+    const scoped: ScopedCheck[] = pack.rollup.checks.map((c) => {
+      const [subjectType, subjectId] = c.subjectKey.split(':')
+      return { id: c.id, item: c.item, level: c.level, status: c.status, subjectType, subjectId }
+    })
+
+    const picture = systemPicture(id, tags, scoped)
+    tables.push(deviceLevelTable(picture))
+    tables.push(systemLevelTable(picture))
+    footnotes.push(scopeNote(picture))
+
+    const codeOf = (subjectId: string | null): string =>
+      tags.find((t) => t.id === subjectId)?.code ?? pack.title
+
+    const coverageSubjects: CoverageSubject[] = [
+      { id, code: pack.title, kind: 'system', systemId: null, systemCode: null },
+      ...tags.map((t) => ({ id: t.id, code: t.code, kind: 'tag' as const, systemId: id, systemCode: pack.title })),
+    ]
+    const coverageChecks: CoverageCheck[] = scoped.map((c) => ({
+      subjectId: c.subjectId,
+      level: c.level,
+      status: c.status,
+    }))
+
+    const findings: PackFinding[] = [
+      ...scopeFindings(scoped, codeOf),
+      ...duplicateFindings(scoped, codeOf),
+      ...leftOutFindings(coverageSubjects, coverageChecks),
+    ]
+    const found = findingsTable(findings)
+    if (found) {
+      tables.push(found)
+      footnotes.push(FINDINGS_NOTE)
+    }
   }
 
   tables.push({
@@ -397,6 +462,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
     tables,
     galleries: galleries.length > 0 ? galleries : undefined,
     footnotes: [
+      ...footnotes,
       `Asset path: ${pack.path}.`,
       withPhotos
         ? `Photographs show what was seen on site. A photograph carrying an AI reading is marked as such; that reading is a suggestion, it closed nothing and nobody signed it. At most ${MAX_PHOTOS} are carried so the pack stays small enough to send, and any left out are counted under the block.`

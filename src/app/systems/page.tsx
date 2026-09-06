@@ -1,11 +1,22 @@
 import { getCurrentProject } from '@/lib/project'
 import { loadProjectReadiness } from '@/lib/system-data'
 import { STAGES, stageLabel, readinessBadgeClass, readinessVerdict } from '@/lib/readiness'
-import { createSystem, updateSystem, deleteSystem, assignEquipment } from './actions'
+import { createSystem, updateSystem, deleteSystem, assignEquipment, importSystems } from './actions'
 
 export const dynamic = 'force-dynamic'
 
-export default async function SystemsPage() {
+export default async function SystemsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ import?: string; added?: string; updated?: string; warn?: string; why?: string }>
+}) {
+  const {
+    import: imp,
+    added = '0',
+    updated: changed = '0',
+    warn = '0',
+    why,
+  } = await searchParams
   const project = await getCurrentProject()
   const { systems, unassigned, overall } = await loadProjectReadiness(project?.id ?? null)
 
@@ -53,9 +64,62 @@ export default async function SystemsPage() {
         </div>
       </div>
 
-      <details className="card">
+      {imp === 'ok' && (
+        <div className="alert alert-info">
+          <strong>Imported.</strong> {added} system{added === '1' ? '' : 's'} added, {changed} updated.
+          {Number(warn) > 0 && ` ${warn} warning${warn === '1' ? '' : 's'} — see the audit trail.`}
+        </div>
+      )}
+      {imp === 'refused' && (
+        <div className="alert alert-danger">
+          <strong>Nothing was imported.</strong> {why}
+        </div>
+      )}
+      {imp === 'unreadable' && (
+        <div className="alert alert-danger">
+          <strong>That file could not be opened.</strong> It needs to be an .xlsx workbook.
+        </div>
+      )}
+      {imp === 'nofile' && (
+        <div className="alert alert-warning">
+          <strong>No file was chosen.</strong>
+        </div>
+      )}
+
+      {/* Bulk before single. Typing forty boards one at a time is the thing
+          this screen was being blamed for, and the form below it was the only
+          thing on the page. */}
+      <div className="card">
+        <h2 className="section-title">Import systems from a spreadsheet</h2>
+        <p className="text-secondary" style={{ fontSize: 13, margin: '0 0 12px' }}>
+          One row per system. A system whose code already exists is updated, not duplicated — so this is safe to
+          run after an equipment import, and it fills in the discipline, boundary and stage of boards that were
+          created from a tag list.
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <a href="/systems/template" className="btn btn-secondary btn-sm">
+            Download a blank template
+          </a>
+          <form
+            action={importSystems}
+            encType="multipart/form-data"
+            style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}
+          >
+            <input type="file" name="file" accept=".xlsx,.xls" required className="input" />
+            <button type="submit" className="btn btn-primary btn-sm">
+              Import
+            </button>
+          </form>
+        </div>
+        <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+          If any row cannot be read, nothing is imported at all and the reason is shown here. A blank cell means
+          &ldquo;I did not say&rdquo;, not &ldquo;clear this&rdquo;.
+        </p>
+      </div>
+
+      <details className="card" style={{ marginTop: 16 }}>
         <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>
-          Add a system
+          Add one by hand
         </summary>
         <form action={createSystem} style={{ display: 'grid', gap: 14, gridTemplateColumns: '1fr 2fr 1fr', marginTop: 16 }}>
           <input type="hidden" name="project_id" value={project?.id ?? ''} />

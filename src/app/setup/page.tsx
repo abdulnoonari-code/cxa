@@ -1,6 +1,6 @@
+import { supabase, USING_SERVICE_ROLE } from '@/lib/supabase'
 import { runSetupProbes } from '@/data/setup-checks'
 import { countStates, setupHeadline } from '@/lib/setup-checks'
-import { USING_SERVICE_ROLE } from '@/lib/supabase'
 import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { aiConfigured } from '@/lib/ai'
 
@@ -13,7 +13,25 @@ const STATE: Record<string, { color: string; word: string }> = {
 }
 
 export default async function SetupPage() {
-  const [results, anon] = await Promise.all([runSetupProbes(), probeAnonAccess(false)])
+  // Whether any project exists at all, asked with the SERVER key — which is
+  // the whole reason this panel can be sure of anything.
+  //
+  // With the database closed, a read by the browser key comes back as an
+  // empty list rather than an error, and an empty list is ambiguous: it means
+  // "refused" if there is something to read and "correct" if there is not.
+  // This page was passing `false` — "I do not know whether there are rows" —
+  // so it could only ever answer "could not tell", while the Project Details
+  // panel, which does know, was answering "the browser key cannot reach the
+  // data" on the same site at the same moment.
+  //
+  // Two panels disagreeing about the same question is worse than either
+  // answer alone, so this one is now told what the other one knows.
+  const [results, projectCount] = await Promise.all([
+    runSetupProbes(),
+    supabase.from('projects').select('id', { count: 'exact', head: true }),
+  ])
+  const anyProject = (projectCount.count ?? 0) > 0
+  const anon = await probeAnonAccess(anyProject)
   const n = countStates(results)
   const access = accessVerdict(USING_SERVICE_ROLE, anon)
   const aiOn = aiConfigured()

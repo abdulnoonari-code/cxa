@@ -1,22 +1,10 @@
-import { cookies } from 'next/headers'
-import { getCurrentProject } from '@/lib/project'
 import { runSetupProbes } from '@/data/setup-checks'
 import { countStates, setupHeadline } from '@/lib/setup-checks'
 import { USING_SERVICE_ROLE } from '@/lib/supabase'
 import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { aiConfigured } from '@/lib/ai'
-import { addWorkedExample, removeWorkedExample } from '@/app/setup/example-actions'
-import { EXAMPLE_FAULTS, EXAMPLE_MARK } from '@/lib/example-plan'
-import { EXAMPLE_REPORT_COOKIE, decodeReport, reportVerdict } from '@/lib/example-report'
-import { outcomeSentence } from '@/lib/pg-columns'
 
 export const dynamic = 'force-dynamic'
-
-const REPORT_TONE: Record<string, string> = {
-  good: 'var(--color-success)',
-  partial: 'var(--color-warning, #a35700)',
-  bad: 'var(--color-danger)',
-}
 
 const STATE: Record<string, { color: string; word: string }> = {
   'in place': { color: 'var(--color-success)', word: 'In place' },
@@ -25,17 +13,10 @@ const STATE: Record<string, { color: string; word: string }> = {
 }
 
 export default async function SetupPage() {
-  const [results, anon, store, project] = await Promise.all([
-    runSetupProbes(),
-    probeAnonAccess(false),
-    cookies(),
-    getCurrentProject(),
-  ])
+  const [results, anon] = await Promise.all([runSetupProbes(), probeAnonAccess(false)])
   const n = countStates(results)
   const access = accessVerdict(USING_SERVICE_ROLE, anon)
   const aiOn = aiConfigured()
-  const report = decodeReport(store.get(EXAMPLE_REPORT_COOKIE)?.value)
-  const verdict = reportVerdict(report)
 
   return (
     <>
@@ -119,117 +100,6 @@ export default async function SetupPage() {
         <p className="text-secondary" style={{ margin: '4px 0 0', fontSize: 13 }}>
           {access.detail}
         </p>
-      </div>
-
-      <div className="card" style={{ marginTop: 16 }}>
-        <h2 className="section-title">A worked example, inside this project</h2>
-        <p style={{ margin: '0 0 4px', fontSize: 13 }}>
-          Two switchboards, seven tags, a functional test script and a punch list, added to{' '}
-          <strong>{project?.name ?? 'the open project'}</strong> alongside your own records — not as a project of
-          its own.
-        </p>
-        <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 600 }}>
-          It is not a demonstration of a well-run job. It is built to fail, deliberately, in {EXAMPLE_FAULTS.length}{' '}
-          specific ways — one for each rule — so that Rule Checks shows what every finding looks like on real
-          records instead of an empty page.
-        </p>
-
-        <p className="text-secondary" style={{ margin: '0 0 10px', fontSize: 12.5 }}>
-          Every row it adds is prefixed <span className="mono">{EXAMPLE_MARK}</span> — the tags, the systems and
-          the punch references. That prefix is how Remove finds them again, and it is the only thing it goes by, so
-          nothing of yours can be caught up in it.
-        </p>
-
-        <details style={{ marginBottom: 12 }}>
-          <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            What is wrong with it, on purpose
-          </summary>
-          <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5 }}>
-            {EXAMPLE_FAULTS.map((f) => (
-              <li key={f.rule} style={{ marginBottom: 4 }}>
-                {f.what}
-                <br />
-                <span className="text-secondary mono" style={{ fontSize: 10.5 }}>
-                  {f.rule}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <form action={addWorkedExample}>
-            <button type="submit" className="btn btn-primary" disabled={!project}>
-              Add it to this project
-            </button>
-          </form>
-          <form action={removeWorkedExample}>
-            <button type="submit" className="btn btn-secondary" disabled={!project}>
-              Remove it from this project
-            </button>
-          </form>
-        </div>
-        {!project && (
-          <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 12 }}>
-            No project is open, so there is nowhere to put it. Choose one from Projects first.
-          </p>
-        )}
-
-        {report.length > 0 && (
-          <div
-            style={{
-              marginTop: 14,
-              border: '1px solid var(--color-border)',
-              borderLeft: `4px solid ${REPORT_TONE[verdict.level]}`,
-              borderRadius: 8,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: 700, color: REPORT_TONE[verdict.level] }}>{verdict.title}</div>
-            <p style={{ margin: '4px 0 10px', fontSize: 13 }}>{verdict.detail}</p>
-
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ fontSize: 12.5 }}>
-                <thead>
-                  <tr>
-                    <th style={{ minWidth: 130 }}>Table</th>
-                    <th style={{ minWidth: 70 }}>Written</th>
-                    <th>What happened</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.map((o) => (
-                    <tr key={o.table}>
-                      <td className="mono" style={{ fontSize: 11.5 }}>
-                        {o.table}
-                      </td>
-                      <td
-                        style={{
-                          fontWeight: 600,
-                          whiteSpace: 'nowrap',
-                          color: o.error
-                            ? 'var(--color-danger)'
-                            : o.dropped.length > 0
-                              ? 'var(--color-warning, #a35700)'
-                              : 'inherit',
-                        }}
-                      >
-                        {o.wrote} / {o.of}
-                      </td>
-                      <td className="text-secondary">{outcomeSentence(o)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
-              This is the last press of the button in this browser, and it disappears on its own after fifteen
-              minutes. A row refused here is not a fault in the example — it is this database missing something the
-              example expects, and the message is the database&rsquo;s own words.
-            </p>
-          </div>
-        )}
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

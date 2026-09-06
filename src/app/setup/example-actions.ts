@@ -85,7 +85,7 @@ export async function addWorkedExample() {
       sameSite: 'lax',
     })
     revalidatePath('/', 'layout')
-    redirect('/setup?example=done')
+    redirect('/rules?example=done')
   }
 
   const systems = await insertRows(
@@ -294,5 +294,5 @@ export async function removeWorkedExample() {
   })
 
   revalidatePath('/', 'layout')
-  redirect(`/setup?example=removed&n=${removed}`)
+  redirect(`/rules?example=removed&n=${removed}`)
 }

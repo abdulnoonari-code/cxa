@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { NAV, isActive, isOpen, type NavItem } from '@/lib/nav'
+import { NAV, TOP_NAV, isActive, isOpen, type NavItem, type NavSection } from '@/lib/nav'
 
 // The rail renders itself from `lib/nav.ts`. Nothing about the order or the
 // grouping lives in this file — it is here only to draw what the model says,
@@ -53,6 +53,13 @@ const ICONS: Record<string, React.ReactNode> = {
       <circle cx="9" cy="8" r="3.2" />
       <path d="M3 20a6 6 0 0 1 12 0" />
       <path d="M16.5 5.4a3.2 3.2 0 0 1 0 5.6M21 20a5.9 5.9 0 0 0-2.6-4.6" />
+    </>
+  ),
+  help: icon(
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.8-.9 1.4v.4" />
+      <path d="M12 17h.01" />
     </>
   ),
   audit: icon(
@@ -294,11 +301,21 @@ function Item({ item, pathname, depth }: { item: NavItem; pathname: string; dept
   )
 }
 
-export function NavLinks() {
+/**
+ * The rail, from whichever model applies.
+ *
+ * `projectOpen` is decided by the server component that renders this — the
+ * client cannot know whether a project cookie resolves to a project that
+ * still exists. When none is open the rail is the short one: a register, a
+ * help page and the administrator section. Twenty-one project links that all
+ * mean "no project selected" teach people the application is broken.
+ */
+export function NavLinks({ projectOpen = true }: { projectOpen?: boolean }) {
   const pathname = usePathname() ?? '/'
+  const sections: NavSection[] = projectOpen ? NAV : TOP_NAV
   return (
     <nav className="sidebar-nav">
-      {NAV.map((section) => (
+      {sections.map((section) => (
         <div key={section.label} className="nav-group">
           <div className="sidebar-section-label">{section.label}</div>
           {section.items.map((item) => (

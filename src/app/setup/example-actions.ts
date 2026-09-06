@@ -8,7 +8,7 @@ import { recordAudit, getActor } from '@/lib/audit'
 import { PROJECT_COOKIE } from '@/lib/project'
 import { insertWithFallback, type InsertOutcome } from '@/lib/pg-columns'
 import { EXAMPLE_REPORT_COOKIE, EXAMPLE_REPORT_MAX_AGE, encodeReport } from '@/lib/example-report'
-import { EXAMPLE_PROJECT, EXAMPLE_TAGS, EXAMPLE_TAGS_B, buildExampleChecks } from '@/lib/example-plan'
+import { EXAMPLE_PROJECT, EXAMPLE_TAGS, EXAMPLE_TAGS_B, EXAMPLE_VOCAB, buildExampleChecks } from '@/lib/example-plan'
 
 function daysAgo(n: number): string {
   const d = new Date()
@@ -124,7 +124,7 @@ export async function createWorkedExample() {
         name: '11kV switchboard A1',
         discipline: 'Electrical',
         boundary: 'Incomer, four breakers, bus tie, PQM',
-        stage: 'functional_testing',
+        stage: EXAMPLE_VOCAB.stageA,
         area_id: areaId,
       },
       {
@@ -132,7 +132,7 @@ export async function createWorkedExample() {
         system_id: 'SWGR-B1',
         name: '11kV switchboard B1',
         discipline: 'Electrical',
-        stage: 'prefunctional',
+        stage: EXAMPLE_VOCAB.stageB,
         area_id: areaId,
       },
     ],
@@ -155,8 +155,8 @@ export async function createWorkedExample() {
       project_id: projectId,
       tag_id: t.tag,
       description: t.description,
-      category: 'Switchgear',
-      install_status: 'installed',
+      category: EXAMPLE_VOCAB.equipmentCategory,
+      install_status: EXAMPLE_VOCAB.installStatus,
       system_id: t.system,
       location: 'MV switchroom',
     })),
@@ -221,9 +221,9 @@ export async function createWorkedExample() {
         subject_id: systemA,
         title: 'Bus tie interlock does not hold with the Kirk key removed',
         description: 'CB Q1 closed onto a closed earthing switch during interlock testing. Witnessed by the client.',
-        category: 'A',
-        severity: 'critical',
-        status: 'open',
+        category: EXAMPLE_VOCAB.punchA,
+        severity: EXAMPLE_VOCAB.severityCritical,
+        status: EXAMPLE_VOCAB.statusOpen,
         level: 'L4_fpt',
         due_date: daysAgo(6),
         raised_by: who,
@@ -237,9 +237,9 @@ export async function createWorkedExample() {
         subject_id: q1 ?? null,
         title: 'Two lugs in cubicle 3 have no second torque mark',
         description: 'Found during installation verification. Re-torqued and marked.',
-        category: 'B',
-        severity: 'minor',
-        status: 'closed',
+        category: EXAMPLE_VOCAB.punchB,
+        severity: EXAMPLE_VOCAB.severityMinor,
+        status: EXAMPLE_VOCAB.statusClosed,
         level: 'L2_iv',
         closed_at: daysAgo(20),
         closed_by: who,
@@ -253,7 +253,7 @@ export async function createWorkedExample() {
         subject_type: 'equipment',
         subject_id: tagIds.get('SUDB-A1-Q3') ?? null,
         title: 'Dust',
-        status: 'open',
+        status: EXAMPLE_VOCAB.statusOpen,
         level: 'L2_iv',
         raised_by: who,
       },
@@ -269,7 +269,7 @@ export async function createWorkedExample() {
         project_id: projectId,
         name: 'Energisation of switchboard A1',
         target_date: daysAgo(21),
-        status: 'on_track',
+        status: EXAMPLE_VOCAB.milestoneStatus,
         notes: 'Held by the bus tie interlock defect.',
       },
     ],
@@ -283,7 +283,7 @@ export async function createWorkedExample() {
         project_id: projectId,
         ref: 'OBL-0001',
         statement: 'The contractor shall submit as-built drawings within 14 days of energisation.',
-        party: 'contractor',
+        party: EXAMPLE_VOCAB.obligationParty,
         status: 'submitted',
         due_date: daysAgo(11),
       },

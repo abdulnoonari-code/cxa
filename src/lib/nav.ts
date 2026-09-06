@@ -42,8 +42,6 @@ export const NAV: NavSection[] = [
     label: 'Project',
     items: [
       { href: '/project', label: 'Project Details', icon: 'settings', note: 'Name, client, dates and the settings every other screen is scoped by.' },
-      { href: '/setup', label: 'Setup', icon: 'settings', note: 'Which SQL steps are actually in place, who can reach the data, and whether AI is on.' },
-      { href: '/projects', label: 'All Projects', icon: 'projects', note: 'Every project you can open, and where you create a new one.' },
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', note: 'What needs attention today, across the whole project.' },
       {
         href: '/plan',
@@ -160,7 +158,6 @@ export const NAV: NavSection[] = [
         icon: 'team',
         note: 'Who has access to this project and what they may do.',
         children: [
-          { href: '/roles', label: 'Roles', icon: 'roles', note: 'The roles this project defines, and their permissions.' },
           { href: '/contacts', label: 'Contacts', icon: 'contacts', note: 'People outside the team who receive notices.' },
         ],
       },
@@ -171,10 +168,58 @@ export const NAV: NavSection[] = [
     items: [
       { href: '/reports/daily', label: 'Daily Report', icon: 'daily', note: 'What happened on a given day, as a document.' },
       { href: '/reports', label: 'Progress Report', icon: 'report', note: 'Progress across the project, as a document.' },
-      { href: '/audit', label: 'Audit Trail', icon: 'audit', note: 'Every change anybody made, in order. Nothing here can be edited.' },
     ],
   },
 ]
+
+/**
+ * The rail when no project is open.
+ *
+ * Logging in used to land on a marketing page with four buttons, each of
+ * which opened a project screen scoped to whichever project happened to be
+ * in a cookie. So the first thing anybody saw was a project — possibly
+ * somebody else's, possibly the worked example — and the register of
+ * projects was an item five places down a menu called "All Projects".
+ *
+ * Now the register is the front door and the rail is short until a project
+ * is open. The reason to keep it short is not tidiness: every project screen
+ * is meaningless without a project, and a rail full of items that all say
+ * "no project selected" teaches people that this application is broken.
+ */
+export const TOP_NAV: NavSection[] = [
+  {
+    label: 'Start here',
+    items: [
+      { href: '/projects', label: 'Project Register', icon: 'projects', note: 'Every project you have access to. Open one to work on it.' },
+    ],
+  },
+  {
+    label: 'Help',
+    items: [
+      { href: '/support', label: 'Support & Contact', icon: 'help', note: 'What to do when something looks wrong, and who to ask.' },
+    ],
+  },
+  {
+    label: 'Administrator',
+    items: [
+      {
+        href: '/admin',
+        label: 'Administrator',
+        icon: 'settings',
+        note: 'Set-up, people, projects and the audit trail. Not part of any one project.',
+        children: [
+          { href: '/setup', label: 'Set-up & diagnostics', icon: 'settings', note: 'Which SQL steps are in place, who can reach the data, whether AI is on, and the worked example.' },
+          { href: '/projects/manage', label: 'All Projects', icon: 'projects', note: 'Create a project, or delete one and everything in it.' },
+          { href: '/roles', label: 'People & Roles', icon: 'roles', note: 'The roles a project can define, and what each may do.' },
+          { href: '/audit', label: 'Audit Trail', icon: 'audit', note: 'Every change anybody made, in order. Nothing here can be edited.' },
+        ],
+      },
+    ],
+  },
+]
+
+/** Both rails, for the assertions and for isActive. */
+const EVERY_SECTION: NavSection[] = [...NAV, ...TOP_NAV]
 
 /**
  * Whether a nav href is the page being looked at.
@@ -192,7 +237,7 @@ export function isActive(pathname: string, href: string): boolean {
 }
 
 const ALL_HREFS: Set<string> = new Set(
-  NAV.flatMap((s) => s.items.flatMap((i) => [i.href, ...(i.children ?? []).map((c) => c.href)]))
+  EVERY_SECTION.flatMap((s) => s.items.flatMap((i) => [i.href, ...(i.children ?? []).map((c) => c.href)]))
 )
 
 /** Whether an item's children should be shown: it is open, or a child is. */
@@ -203,7 +248,7 @@ export function isOpen(pathname: string, item: NavItem): boolean {
 
 /** The section a path belongs to, for the header and the document title. */
 export function sectionFor(pathname: string): NavSection | null {
-  for (const section of NAV) {
+  for (const section of EVERY_SECTION) {
     for (const item of section.items) {
       if (isActive(pathname, item.href)) return section
       if ((item.children ?? []).some((c) => isActive(pathname, c.href))) return section
@@ -214,7 +259,7 @@ export function sectionFor(pathname: string): NavSection | null {
 
 /** The item a path belongs to, parent first if the path is a child. */
 export function trailFor(pathname: string): NavItem[] {
-  for (const section of NAV) {
+  for (const section of EVERY_SECTION) {
     for (const item of section.items) {
       if (isActive(pathname, item.href)) return [item]
       const child = (item.children ?? []).find((c) => isActive(pathname, c.href))

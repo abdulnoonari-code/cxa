@@ -165,6 +165,37 @@ export const EXAMPLE_SCRIPT: ExampleScriptLine[] = [
 ]
 
 /** Every deliberate fault, so the screen can list what to look for. */
+/**
+ * The values the example writes into constrained columns.
+ *
+ * These are here, and asserted against the application's own option lists,
+ * because of what happened the first time the example was pressed on a real
+ * database: it wrote `category: 'Switchgear'`, which reads perfectly well in
+ * English and is not one of the six categories this application defines.
+ * Postgres refused all seven equipment rows on a check constraint, every
+ * check belonging to a tag had nothing to attach to, and the findings page
+ * reported five of fourteen as though five were the answer.
+ *
+ * A literal in seed data is a claim about a vocabulary defined somewhere
+ * else. Naming them here lets the assertions check that claim; leaving them
+ * inline meant the database was the first thing to notice.
+ */
+export const EXAMPLE_VOCAB = {
+  equipmentCategory: 'substation_protection',
+  installStatus: 'installed',
+  /** The board under test is in functional testing; the second board is behind it. */
+  stageA: 'functional_testing',
+  stageB: 'pre_commissioning',
+  severityCritical: 'critical',
+  severityMinor: 'minor',
+  punchA: 'A',
+  punchB: 'B',
+  statusOpen: 'open',
+  statusClosed: 'closed',
+  milestoneStatus: 'on_track',
+  obligationParty: 'contractor',
+} as const
+
 export const EXAMPLE_FAULTS: { rule: string; what: string }[] = [
   { rule: 'plan/left-out-of-a-level-its-neighbours-were-in', what: 'SUDB-A1-Q4 has no L2 checks at all, while its four neighbours carry ten each.' },
   { rule: 'plan/no-functional-test-exists-for-a-finished-system', what: 'SWGR-B1 has every pre-functional check passed and no functional test recorded at all.' },

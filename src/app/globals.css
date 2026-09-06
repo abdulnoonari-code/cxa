@@ -1064,6 +1064,42 @@ textarea.input {
   color: var(--color-danger);
 }
 
+/* ── Three classes that were used and never defined ──────────────────────
+ *
+ * `.btn-danger` and `.alert-warning` are written on eight screens — the
+ * project delete, the checklist bulk actions, obligations, milestones,
+ * meetings, readiness and the per-tag checklist — and neither existed in
+ * this stylesheet. A class with no rule is not an error anywhere: the
+ * markup is valid, the build is clean, the linter is happy, and the button
+ * simply renders in the browser's default grey. So the most dangerous
+ * button in the application has been indistinguishable from an ordinary one.
+ *
+ * Found by listing every class name used in the JSX and checking each one
+ * against this file, which is now something the assertions do on every run.
+ */
+.btn-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #a10b39;
+  border-color: #a10b39;
+}
+
+.alert-warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+/* Not decoration: it marks the sentence that says this application reports
+   and does not authorise. It gets a left rule so it cannot be skimmed past
+   as an ordinary information box. */
+.callout-safety {
+  border-left: 4px solid var(--color-info);
+}
+
 .alert-info {
   background: var(--color-primary-light);
   color: var(--color-primary-dark);

@@ -317,3 +317,79 @@ export function TrendChart({
     </>
   )
 }
+
+/**
+ * The frame every chart on the dashboard sits in.
+ *
+ * Three things are added to a picture that had none of them, and each one
+ * was a question the picture kept raising and could not answer:
+ *
+ *   • A DEFINITION. "Raised against closed" means four different things to
+ *     four people in a progress meeting. A chart whose terms are undefined
+ *     produces an argument about the chart instead of a decision about the
+ *     work.
+ *
+ *   • A WAY THROUGH. A number on a dashboard that cannot be traced back to
+ *     the records it came from is a number nobody can act on. Every chart
+ *     now names the register it was counted from and links to it.
+ *
+ *   • THE FIGURES. A picture cannot be pasted into a report, checked by
+ *     somebody who was not there, or added up by hand. The CSV is the same
+ *     numbers the chart is drawn from — not a second calculation, which
+ *     would eventually disagree with the first.
+ */
+export function ChartFrame({
+  title,
+  definition,
+  href,
+  hrefLabel,
+  csv,
+  children,
+}: {
+  title: string
+  definition: React.ReactNode
+  href: string
+  hrefLabel: string
+  csv?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="card" style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 10,
+        }}
+      >
+        <h3 className="section-title" style={{ margin: 0 }}>
+          {title}
+        </h3>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          {csv && (
+            <a href={csv} className="link" style={{ fontSize: 11.5 }} download>
+              Export CSV
+            </a>
+          )}
+          <a href={href} className="link" style={{ fontSize: 11.5 }}>
+            {hrefLabel} →
+          </a>
+        </div>
+      </div>
+
+      {children}
+
+      {/* Under the chart, not above it. Somebody reads the picture first and
+          comes to the words when a figure surprises them. */}
+      <p
+        className="text-secondary"
+        style={{ margin: '12px 0 0', fontSize: 11.5, lineHeight: 1.55, borderTop: '1px solid var(--color-border-soft)', paddingTop: 10 }}
+      >
+        {definition}
+      </p>
+    </section>
+  )
+}

@@ -99,7 +99,22 @@ export function punchTrend(items: PunchInput[], today: Date, weeks = 12): TrendP
   })
 }
 
-/** The sentence under the trend chart, which says what the picture means. */
+/**
+ * The sentence under the trend chart, which says what the picture means.
+ *
+ * It says "not closed", never "open", and that is not fussiness. The tiles
+ * above split the same items into open and awaiting acceptance; this line
+ * can only see the gap between two cumulative lines, which is both of them
+ * together. Rendered side by side, the old wording said "53 defects are
+ * open" directly above a tile reading 49 — two numbers for one word on one
+ * screen, which is exactly the kind of thing that ends an argument about
+ * the tool instead of the work.
+ *
+ * The gap is also measured by closure DATE rather than by status, because a
+ * line on a time axis has nowhere to put an item that is closed and carries
+ * no closed_at. That difference is stated in the definition printed beside
+ * the chart rather than hidden here.
+ */
 export function trendReading(points: TrendPoint[]): string {
   if (points.length < 2) return 'Not enough history yet to show a direction.'
   const first = points[0]
@@ -110,10 +125,10 @@ export function trendReading(points: TrendPoint[]): string {
   if (Number(last.raised) === 0) return 'No defects have been raised yet.'
   if (gapNow === 0) return 'Every defect raised has been closed.'
   if (gapNow > gapThen) {
-    return `${gapNow} defects are open, up from ${gapThen} twelve weeks ago. Defects are being raised faster than they are being closed.`
+    return `${gapNow} defects are not closed, up from ${gapThen} twelve weeks ago. Defects are being raised faster than they are being closed.`
   }
   if (gapNow < gapThen) {
-    return `${gapNow} defects are open, down from ${gapThen} twelve weeks ago. The list is coming down.`
+    return `${gapNow} defects are not closed, down from ${gapThen} twelve weeks ago. The list is coming down.`
   }
-  return `${gapNow} defects are open, the same as twelve weeks ago. Closing is keeping pace with raising, and no more.`
+  return `${gapNow} defects are not closed, the same as twelve weeks ago. Closing is keeping pace with raising, and no more.`
 }

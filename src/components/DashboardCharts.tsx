@@ -11,8 +11,41 @@ import { driftFindings } from '@/lib/templates'
 import { loadCoverage } from '@/data/coverage'
 import { leftOutFindings, untestedSystemFindings, partialApplicationFindings } from '@/lib/coverage'
 import { levelProgress, punchByCategory, punchTrend, trendReading } from '@/lib/dashboard-charts'
-import { StackedBars, TrendChart, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
+import { StackedBars, TrendChart, ChartFrame, PROGRESS_SERIES, PUNCH_SERIES, TREND_SERIES } from '@/components/charts'
+import { punchSummary, punchHeadline, PUNCH_DEFINITIONS } from '@/lib/punch-summary'
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
+
+/** One of the four punch figures, with the word that stops it being misread. */
+function Figure({
+  n,
+  label,
+  means,
+  tone,
+}: {
+  n: number
+  label: string
+  means: string
+  tone?: string
+}) {
+  return (
+    <div
+      style={{
+        border: '1px solid var(--color-border)',
+        borderLeft: `4px solid ${tone ?? 'var(--color-border)'}`,
+        borderRadius: 8,
+        padding: '10px 12px',
+      }}
+    >
+      <div className="mono" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.1, color: tone }}>
+        {n}
+      </div>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{label}</div>
+      <p className="text-secondary" style={{ margin: '3px 0 0', fontSize: 11, lineHeight: 1.45 }}>
+        {means}
+      </p>
+    </div>
+  )
+}
 
 /**
  * The picture half of the dashboard.
@@ -99,9 +132,107 @@ export default async function DashboardCharts({
   ]
   const n = countBy(findings)
   const trend = punchTrend(inputs.punch, today)
+  const punch = punchSummary(inputs.punch, today)
+  const means = (k: string) => PUNCH_DEFINITIONS.find((d) => d.key === k)?.means ?? ''
 
   return (
     <>
+      {/* ── The punch list, defined ──────────────────────────────────────
+          Four figures, each with the sentence that stops it being read two
+          ways, and the categories underneath so "priority" is a number
+          somebody can act on rather than a colour on a bar. */}
+      <section className="card" style={{ marginTop: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <h2 className="section-title" style={{ margin: 0 }}>
+            Punch list
+          </h2>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+            <a href="/dashboard/export?chart=punch" className="link" style={{ fontSize: 11.5 }} download>
+              Export CSV
+            </a>
+            <Link href="/issues" className="link" style={{ fontSize: 11.5 }}>
+              Open the punch list →
+            </Link>
+          </div>
+        </div>
+        <p style={{ margin: '4px 0 14px', fontSize: 13, fontWeight: 600 }}>{punchHeadline(punch)}</p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+          <Figure n={punch.raised} label="Raised" means={means('raised')} />
+          <Figure n={punch.open} label="Open" means={means('open')} tone="var(--color-danger)" />
+          <Figure n={punch.awaiting} label="Awaiting acceptance" means={means('awaiting')} tone="#4f46e5" />
+          <Figure n={punch.closed} label="Closed" means={means('closed')} tone="var(--color-success)" />
+        </div>
+
+        <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+          Raised = open + awaiting acceptance + closed. The three states do not overlap, so the four figures
+          always reconcile — if they ever do not, the records have changed while this page was open.
+        </p>
+
+        {punch.raised > 0 && (
+          <div style={{ overflowX: 'auto', marginTop: 14 }}>
+            <table className="table" style={{ fontSize: 12.5 }}>
+              <thead>
+                <tr>
+                  <th style={{ minWidth: 130 }}>Priority</th>
+                  <th style={{ minWidth: 60 }}>Raised</th>
+                  <th style={{ minWidth: 60 }}>Open</th>
+                  <th style={{ minWidth: 80 }}>Awaiting</th>
+                  <th style={{ minWidth: 60 }}>Closed</th>
+                  <th style={{ minWidth: 70 }}>Overdue</th>
+                  <th style={{ minWidth: 70 }}>No date</th>
+                  <th>What this priority means</th>
+                </tr>
+              </thead>
+              <tbody>
+                {punch.categories.map((c) => (
+                  <tr key={c.label}>
+                    <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{c.label}</td>
+                    <td className="mono">{c.raised}</td>
+                    <td className="mono" style={{ color: c.open > 0 ? 'var(--color-danger)' : undefined }}>
+                      {c.open}
+                    </td>
+                    <td className="mono">{c.awaiting}</td>
+                    <td className="mono">{c.closed}</td>
+                    <td
+                      className="mono"
+                      style={{ fontWeight: c.overdue > 0 ? 700 : 400, color: c.overdue > 0 ? 'var(--color-danger)' : undefined }}
+                    >
+                      {c.overdue}
+                    </td>
+                    <td
+                      className="mono"
+                      style={{ fontWeight: c.undated > 0 ? 700 : 400, color: c.undated > 0 ? 'var(--color-warning)' : undefined }}
+                    >
+                      {c.undated}
+                    </td>
+                    <td className="text-secondary" style={{ fontSize: 11.5 }}>
+                      {c.what}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {/* One footnote, not the same sentence repeated on four rows.
+                It is the trap this table sets: a register full of undated
+                items reports zero overdue and reads perfectly clean. */}
+            <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 11.5 }}>
+              <strong>No date</strong> counts items that are not closed and carry no due date. They can never
+              appear in the Overdue column, so a high figure here means the Overdue column is understating the
+              position — not that the position is good.
+            </p>
+          </div>
+        )}
+      </section>
+
       <div
         style={{
           display: 'grid',
@@ -110,33 +241,49 @@ export default async function DashboardCharts({
           marginTop: 16,
         }}
       >
-        <div className="card" style={{ margin: 0 }}>
-          <h2 className="section-title">Progress by level</h2>
-          <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
-            Every check on the project, by the level it sits at. N/A counts as done — a check that does not
-            apply is not outstanding work.
-          </p>
+        <ChartFrame
+          title="Progress by level"
+          href="/plan"
+          hrefLabel="Plan & progress"
+          csv="/dashboard/export?chart=progress"
+          definition={
+            <>
+              Every check on the project, counted at the level it sits at. <strong>Passed</strong> includes checks
+              marked N/A — a check that does not apply is not outstanding work. <strong>Not started</strong> means
+              the check exists on the plan with no answer against it. The percentage on each bar is passed out of
+              that level&rsquo;s total, and levels are never added together.
+            </>
+          }
+        >
           <StackedBars
             rows={levelProgress(inputs.checks)}
             series={PROGRESS_SERIES}
             percentOf={{ key: 'done', word: 'passed' }}
             emptyNote="No checks yet. Upload a checklist or a functional test script and this fills in."
           />
-        </div>
+        </ChartFrame>
 
-        <div className="card" style={{ margin: 0 }}>
-          <h2 className="section-title">Punch list by category</h2>
-          <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
-            The category is a commercial position, not a severity: A stops the next step, B blocks handover
-            unless the owner accepts it, C blocks nothing.
-          </p>
+        <ChartFrame
+          title="Punch list by priority"
+          href="/issues"
+          hrefLabel="Punch list"
+          csv="/dashboard/export?chart=punch"
+          definition={
+            <>
+              The full length of each bar is everything ever raised in that category. <strong>A</strong> stops the
+              system advancing, <strong>B</strong> blocks handover unless the owner accepts it, <strong>C</strong>{' '}
+              blocks nothing. <strong>Uncategorised</strong> is its own row on purpose: an item whose commercial
+              position nobody has decided is a decision waiting to be made, not a Category C.
+            </>
+          }
+        >
           <StackedBars
             rows={punchByCategory(inputs.punch)}
             series={PUNCH_SERIES}
             percentOf={{ key: 'closed', word: 'closed' }}
             emptyNote="No punch items yet."
           />
-        </div>
+        </ChartFrame>
       </div>
 
       <div
@@ -147,33 +294,46 @@ export default async function DashboardCharts({
           marginTop: 16,
         }}
       >
-        <div className="card" style={{ margin: 0 }}>
-          <h2 className="section-title">Raised against closed</h2>
-          <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px' }}>
-            Twelve weeks, running totals. The gap between the two lines is the open list — whether it is
-            widening or closing is the question a weekly count cannot answer.
-          </p>
+        <ChartFrame
+          title="Raised against closed"
+          href="/issues"
+          hrefLabel="Punch list"
+          csv="/dashboard/export?chart=trend"
+          definition={
+            <>
+              Twelve weeks, both lines cumulative — running totals, not weekly counts. The vertical gap between
+              them is everything <strong>not closed</strong>, which is the open items and the ones awaiting
+              acceptance together — so it is larger than the Open figure above, on purpose. A widening gap is a
+              project falling behind; a narrowing one is catching up. Closure is placed by the date it was closed,
+              so an item recorded as closed with no closing date cannot appear on the lower line.
+            </>
+          }
+        >
           <TrendChart
             points={trend}
             series={TREND_SERIES}
             emptyNote="Not enough history yet — this needs a couple of weeks of punch items."
           />
           <p style={{ margin: '10px 0 0', fontSize: 13, fontWeight: 600 }}>{trendReading(trend)}</p>
-        </div>
+        </ChartFrame>
 
-        <div
-          className="card"
-          style={{
-            margin: 0,
-            borderLeft: `4px solid ${n.blocking > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          }}
+        <ChartFrame
+          title="Rule checks"
+          href="/rules"
+          hrefLabel="See what they found"
+          definition={
+            <>
+              Free checks over the records — no AI, no key, nothing stored. They say what could not be verified by
+              somebody who was not there; they do not say the work was done badly. Worked out fresh every time this
+              page opens, so the figure is never out of date.
+            </>
+          }
         >
-          <h2 className="section-title">Rule checks</h2>
           <div
             style={{
-              fontSize: 34,
+              fontSize: 38,
               fontWeight: 700,
-              lineHeight: 1.1,
+              lineHeight: 1.05,
               color: n.blocking > 0 ? 'var(--color-danger)' : 'inherit',
             }}
           >
@@ -181,15 +341,9 @@ export default async function DashboardCharts({
           </div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{headline(findings)}</div>
           <p className="text-secondary" style={{ fontSize: 12.5, margin: '8px 0 0' }}>
-            {n.warning} worth a look, {n.note} noted. Free, no AI, nothing stored — worked out from the records
-            every time this page opens.
+            {n.warning} worth a look, {n.note} noted.
           </p>
-          <div style={{ marginTop: 12 }}>
-            <Link href="/rules" className="btn btn-secondary btn-sm">
-              See what they found
-            </Link>
-          </div>
-        </div>
+        </ChartFrame>
       </div>
     </>
   )

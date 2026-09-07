@@ -14,6 +14,17 @@ function str(formData: FormData, key: string): string | null {
   return value.trim()
 }
 
+// Does this database have the building and floor columns yet (SQL part 33)?
+//
+// Asked rather than assumed, because sending a column Postgres has never
+// heard of does not fail that field — it fails the WHOLE row. A person who
+// typed a floor into the form would otherwise have the whole system refused,
+// with a Postgres error message as the explanation.
+async function hasPlaceColumns(): Promise<boolean> {
+  const probe = await supabase.from('systems').select('building, floor').limit(1)
+  return !probe.error
+}
+
 function refresh() {
   revalidatePath('/systems')
   revalidatePath('/readiness')
@@ -27,6 +38,10 @@ export async function createSystem(formData: FormData) {
   const name = str(formData, 'name')
   if (!project_id || !system_id || !name) return
 
+  const place = (await hasPlaceColumns())
+    ? { building: str(formData, 'building'), floor: str(formData, 'floor') }
+    : {}
+
   await supabase.from('systems').insert({
     project_id,
     system_id,
@@ -36,6 +51,7 @@ export async function createSystem(formData: FormData) {
     boundary: str(formData, 'boundary'),
     responsible: str(formData, 'responsible'),
     stage: str(formData, 'stage') ?? 'construction',
+    ...place,
   })
 
   refresh()
@@ -45,12 +61,26 @@ export async function updateSystem(formData: FormData) {
   const id = str(formData, 'id')
   if (!id) return
 
+  // A field the form did not send is left alone; a field it sent EMPTY is
+  // cleared. On screen an empty box is something the person just emptied,
+  // which is the opposite of an empty spreadsheet cell — but a form that
+  // never carried the field at all has said nothing, and writing null for it
+  // would silently wipe a building somebody set somewhere else.
+  const place =
+    (formData.has('building') || formData.has('floor')) && (await hasPlaceColumns())
+      ? {
+          ...(formData.has('building') ? { building: str(formData, 'building') } : {}),
+          ...(formData.has('floor') ? { floor: str(formData, 'floor') } : {}),
+        }
+      : {}
+
   await supabase
     .from('systems')
     .update({
       stage: str(formData, 'stage') ?? 'construction',
       responsible: str(formData, 'responsible'),
       boundary: str(formData, 'boundary'),
+      ...place,
     })
     .eq('id', id)
 
@@ -143,6 +173,15 @@ export async function importSystems(formData: FormData) {
     )
   )
 
+  // Ask ONCE, before the loop, whether this database has the place columns.
+  // Sending a column the database has never heard of does not fail that
+  // field — it fails the WHOLE row. Before SQL part 33, a sheet with a Floor
+  // heading would have imported nothing at all and said nothing useful about
+  // why. Asked once and not per row, because a per-row retry turns forty
+  // systems into eighty requests and the answer cannot change halfway.
+  const placeProbe = await supabase.from('systems').select('building, floor').limit(1)
+  const hasPlace = !placeProbe.error
+
   let areasCreated = 0
   const ensureArea = async (name: string): Promise<string | null> => {
     const hit = areaByName.get(name.toLowerCase())
@@ -177,6 +216,10 @@ export async function importSystems(formData: FormData) {
     if (row.description) values.description = row.description
     if (row.stage) values.stage = row.stage
     if (areaId) values.area_id = areaId
+    if (hasPlace) {
+      if (row.building) values.building = row.building
+      if (row.floor) values.floor = row.floor
+    }
 
     const id = byCode.get(row.system_id.toLowerCase())
     if (id) {
@@ -190,14 +233,22 @@ export async function importSystems(formData: FormData) {
     }
   }
 
+  // A column that was in the file and could not be stored has to be said out
+  // loud. Silently dropping it is how somebody spends a morning filling in
+  // floors and never finds out they were thrown away.
+  const placeIgnored = !hasPlace && parsed.rows.some((r) => r.building || r.floor)
+
   await recordAudit({
     projectId: project.id,
     action: 'imported systems',
     entity: 'system',
     entityLabel: file.name,
-    newValue: `${inserted} added, ${updated} updated${areasCreated ? `, plus ${areasCreated} area${areasCreated === 1 ? '' : 's'}` : ''}`,
+    newValue: `${inserted} added, ${updated} updated${areasCreated ? `, plus ${areasCreated} area${areasCreated === 1 ? '' : 's'}` : ''}${placeIgnored ? ' — Building and Floor IGNORED' : ''}`,
     comment:
       `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
+      (placeIgnored
+        ? ' The file has Building or Floor values and this database has nowhere to put them. Run SQL part 33 and import again.'
+        : '') +
       (parsed.warnings.length > 0
         ? ` ${parsed.warnings.length} warning(s): ${parsed.warnings
             .slice(0, 6)
@@ -208,6 +259,6 @@ export async function importSystems(formData: FormData) {
 
   refresh()
   redirect(
-    `/systems?import=ok&added=${inserted}&updated=${updated}&warn=${parsed.warnings.length}`
+    `/systems?import=ok&added=${inserted}&updated=${updated}&warn=${parsed.warnings.length}${placeIgnored ? '&lost=place' : ''}`
   )
 }

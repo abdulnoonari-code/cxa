@@ -296,7 +296,7 @@ export default async function IssuesPage({
         <form action={importPunchList} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label className="field" style={{ flex: '1 1 320px' }}>
             Marked-up punch list (.xlsx or .csv)
-            <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+            <input type="file" name="file" accept=".xlsx,.csv" required className="io-file" />
           </label>
           <button type="submit" className="btn btn-primary">
             Import
@@ -390,7 +390,7 @@ export default async function IssuesPage({
               steps too many. */}
           <label className="field">
             Photo of the defect
-            <input type="file" name="photo" accept={ACCEPTED_TYPES.join(',')} className="input" />
+            <input type="file" name="photo" accept={ACCEPTED_TYPES.join(',')} className="io-file" />
             <span className="text-secondary" style={{ fontSize: 11.5, marginTop: 3 }}>
               Optional. JPEG, PNG or WebP, up to {MAX_BYTES / 1024 / 1024} MB. More can be added afterwards, including
               the after-photo.

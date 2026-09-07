@@ -46,7 +46,7 @@ export default async function FilesPage({
           <input type="hidden" name="project_id" value={project?.id ?? ''} />
           <label className="field">
             File *
-            <input type="file" name="file" required className="input" />
+            <input type="file" name="file" required className="io-file" />
           </label>
           <label className="field">
             Category

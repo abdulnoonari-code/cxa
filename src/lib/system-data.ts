@@ -11,6 +11,9 @@ export type SystemRow = {
   boundary: string | null
   responsible: string | null
   stage: string | null
+  /** Optional: these arrive with SQL part 33 and are absent before it. */
+  building?: string | null
+  floor?: string | null
 }
 
 export type EquipmentRow = {
@@ -53,11 +56,28 @@ export async function loadProjectReadiness(projectId: string | null): Promise<Pr
     }
   }
 
-  const { data: systemRows } = await supabase
+  // Building and floor arrive with SQL part 33. Asking for a column the
+  // database does not have fails the WHOLE query, not just that column — so
+  // on a database without part 33 this would return no systems at all on a
+  // project full of them. Ask with, then ask again without.
+  //
+  // Written out twice rather than built from a string: the client's types
+  // read the column list literally, and a computed one is not checked at all.
+  const withPlace = await supabase
     .from('systems')
-    .select('id, system_id, name, discipline, description, boundary, responsible, stage')
+    .select('id, system_id, name, discipline, description, boundary, responsible, stage, building, floor')
     .eq('project_id', projectId)
     .order('system_id')
+
+  const withoutPlace = withPlace.error
+    ? await supabase
+        .from('systems')
+        .select('id, system_id, name, discipline, description, boundary, responsible, stage')
+        .eq('project_id', projectId)
+        .order('system_id')
+    : null
+
+  const systemRows = (withoutPlace ?? withPlace).data
 
   const systems = (systemRows ?? []) as SystemRow[]
 

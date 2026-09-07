@@ -8,7 +8,14 @@ export const dynamic = 'force-dynamic'
 export default async function SystemsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ import?: string; added?: string; updated?: string; warn?: string; why?: string }>
+  searchParams: Promise<{
+    import?: string
+    added?: string
+    updated?: string
+    warn?: string
+    why?: string
+    lost?: string
+  }>
 }) {
   const {
     import: imp,
@@ -16,6 +23,7 @@ export default async function SystemsPage({
     updated: changed = '0',
     warn = '0',
     why,
+    lost,
   } = await searchParams
   const project = await getCurrentProject()
   const { systems, unassigned, overall } = await loadProjectReadiness(project?.id ?? null)
@@ -70,6 +78,13 @@ export default async function SystemsPage({
           {Number(warn) > 0 && ` ${warn} warning${warn === '1' ? '' : 's'} — see the audit trail.`}
         </div>
       )}
+      {lost === 'place' && (
+        <div className="alert alert-warning">
+          <strong>Building and Floor were not saved.</strong> Your file had them and this database has nowhere to
+          put them yet. Run <code className="mono">week5-part33-system-place.sql</code> in Supabase, then import
+          the same file again — everything else was saved and re-importing updates rather than duplicates.
+        </div>
+      )}
       {imp === 'refused' && (
         <div className="alert alert-danger">
           <strong>Nothing was imported.</strong> {why}
@@ -96,22 +111,18 @@ export default async function SystemsPage({
           run after an equipment import, and it fills in the discipline, boundary and stage of boards that were
           created from a tag list.
         </p>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <a href="/systems/template" className="btn btn-secondary btn-sm">
+        <div className="io-bar">
+          <a href="/systems/template" className="btn btn-secondary">
             Download a blank template
           </a>
-          <form
-            action={importSystems}
-            encType="multipart/form-data"
-            style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}
-          >
-            <input type="file" name="file" accept=".xlsx,.xls" required className="input" />
-            <button type="submit" className="btn btn-primary btn-sm">
+          <form action={importSystems} encType="multipart/form-data">
+            <input type="file" name="file" accept=".xlsx,.xls" required className="io-file" />
+            <button type="submit" className="btn btn-primary" disabled={!project}>
               Import
             </button>
           </form>
         </div>
-        <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+        <p className="io-note">
           If any row cannot be read, nothing is imported at all and the reason is shown here. A blank cell means
           &ldquo;I did not say&rdquo;, not &ldquo;clear this&rdquo;.
         </p>
@@ -138,6 +149,14 @@ export default async function SystemsPage({
           <label className="field">
             Responsible engineer
             <input name="responsible" className="input" />
+          </label>
+          <label className="field">
+            Building
+            <input name="building" placeholder="e.g. Building 1" className="input" />
+          </label>
+          <label className="field">
+            Floor
+            <input name="floor" placeholder="e.g. B1, G, L3, R" className="input" />
           </label>
           <label className="field">
             Description
@@ -187,6 +206,8 @@ export default async function SystemsPage({
                   <div className="text-secondary mono" style={{ fontSize: 11.5, marginBottom: 3 }}>
                     {s.system_id}
                     {s.discipline ? ` · ${s.discipline}` : ''}
+                    {s.building ? ` · ${s.building}` : ''}
+                    {s.floor ? ` · Floor ${s.floor}` : ''}
                     {s.responsible ? ` · ${s.responsible}` : ''}
                   </div>
                   <div style={{ fontWeight: 600, fontSize: 16 }}>
@@ -339,6 +360,25 @@ export default async function SystemsPage({
                       key={`r-${s.id}-${s.responsible ?? ''}`}
                       name="responsible"
                       defaultValue={s.responsible ?? ''}
+                      className="input"
+                    />
+                  </label>
+                  <label className="field" style={{ minWidth: 150 }}>
+                    Building
+                    <input
+                      key={`b-${s.id}-${s.building ?? ''}`}
+                      name="building"
+                      defaultValue={s.building ?? ''}
+                      className="input"
+                    />
+                  </label>
+                  <label className="field" style={{ minWidth: 90 }}>
+                    Floor
+                    <input
+                      key={`f-${s.id}-${s.floor ?? ''}`}
+                      name="floor"
+                      defaultValue={s.floor ?? ''}
+                      placeholder="G"
                       className="input"
                     />
                   </label>

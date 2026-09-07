@@ -274,7 +274,7 @@ export default async function ItpPage({
         )}
 
         <form action={importItp} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="file" name="file" accept=".xlsx,.xlsm,.csv" required className="input" style={{ maxWidth: 380 }} />
+          <input type="file" name="file" accept=".xlsx,.xlsm,.csv" required className="io-file" style={{ maxWidth: 380 }} />
           <button type="submit" className="btn btn-primary btn-sm">
             Import marked-up ITP
           </button>

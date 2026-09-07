@@ -1428,3 +1428,113 @@ textarea.input {
   border-radius: 999px;
   background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   IMPORT / EXPORT CONTROL ROW
+   ═══════════════════════════════════════════════════════════════════
+
+   Three or four controls that have to read as ONE row: download the
+   template, choose a file, import it.
+
+   Left to themselves they do not line up, and the Systems screen showed
+   exactly why. A file input is not a text input — its height comes from
+   the native "Choose file" button inside it, which no padding of ours
+   controls — so it sat higher than the buttons beside it. And `.input`
+   is width:100%, so inside a flex row it took the whole line and pushed
+   the Import button onto a row of its own. Three controls, three
+   baselines, on the one screen that is meant to make a spreadsheet easy.
+
+   So: every control in this bar is given the SAME height explicitly,
+   the file picker is given a width it can grow and shrink from instead
+   of 100%, and the native button inside it is restyled to match ours.
+   align-items is stretch, not center: equal heights beat guessed
+   nudges, and stretch survives a control whose text wraps. */
+
+.io-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin: 0;
+}
+
+/* A nested <form> is still part of the same row. Without this the form
+   is one flex item and its own contents line up inside it, which is the
+   arrangement that produced the ragged screenshot. */
+.io-bar form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin: 0;
+  flex: 1 1 340px;
+}
+
+.io-bar .btn {
+  height: var(--io-control-height, 38px);
+  padding-top: 0;
+  padding-bottom: 0;
+  box-sizing: border-box;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.io-file {
+  height: var(--io-control-height, 38px);
+  box-sizing: border-box;
+  min-width: 0;
+  width: auto;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 0;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+/* Only INSIDE the bar does the picker stretch. A file picker also appears
+   inside a `.field`, which is a COLUMN flex — and there `flex: 1 1 220px`
+   sets the main size in the other direction, giving a 220px-tall file
+   input. Height belongs on the element; growing belongs to the row. */
+.io-bar .io-file {
+  flex: 1 1 220px;
+}
+
+.io-file:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(31, 94, 255, 0.14);
+}
+
+.io-file::file-selector-button {
+  height: 100%;
+  margin: 0 12px 0 0;
+  padding: 0 15px;
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-neutral-bg);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.io-file:hover::file-selector-button {
+  background: var(--color-border-soft);
+}
+
+/* The sentence under the bar. Kept as a class so the two screens that
+   carry an import cannot drift into two different sizes of small print. */
+.io-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}

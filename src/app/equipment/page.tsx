@@ -138,35 +138,30 @@ export default async function EquipmentPage({
           Import the list the EPC or contractor sent you, in their format. If the sheet has an Area, System or Bay
           column, <strong>the asset tree is built from it</strong> — you do not key the hierarchy in twice.
         </p>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <a href="/equipment/export" className="btn btn-secondary btn-sm">
+        {/* One row, one baseline. The same .io-bar as the Systems screen, so
+            the two imports cannot drift into two different shapes. */}
+        <div className="io-bar">
+          <a href="/equipment/export" className="btn btn-secondary">
             Download current tags (.xlsx)
           </a>
-          <a href="/equipment/template" className="btn btn-secondary btn-sm">
+          <a href="/equipment/template" className="btn btn-secondary">
             Download a blank template
           </a>
+          {mayManage && (
+            <form action={importEquipment} encType="multipart/form-data">
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="io-file" />
+              <button type="submit" className="btn btn-primary" disabled={!project}>
+                Import
+              </button>
+            </form>
+          )}
         </div>
 
-        {mayManage ? (
-          <form
-            action={importEquipment}
-            style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}
-          >
-            <label className="field" style={{ flex: '1 1 320px' }}>
-              Import an equipment list
-              <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="input" />
-            </label>
-            <button type="submit" className="btn btn-primary" disabled={!project}>
-              Import
-            </button>
-          </form>
-        ) : (
-          <p className="text-secondary" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
-            Your role cannot import equipment.
-          </p>
+        {!mayManage && (
+          <p className="io-note">Your role cannot import equipment.</p>
         )}
 
-        <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 14, marginBottom: 0 }}>
+        <p className="io-note">
           Your own headings are fine — <em>Tag No</em>, <em>KKS</em>, <em>Asset ID</em>, <em>Service</em>,{' '}
           <em>Discipline</em>, <em>Vendor</em> are all understood, and the table can start anywhere on the sheet,
           under a title block. A tag that already exists is updated rather than duplicated. If any row is wrong,{' '}

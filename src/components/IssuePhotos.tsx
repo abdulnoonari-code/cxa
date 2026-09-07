@@ -136,7 +136,7 @@ export function IssuePhotos({
           name="file"
           required
           accept={ACCEPTED_TYPES.join(',')}
-          className="input"
+          className="io-file"
           style={{ maxWidth: 300, fontSize: 12.5 }}
         />
         <input

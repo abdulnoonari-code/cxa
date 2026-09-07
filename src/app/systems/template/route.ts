@@ -15,6 +15,7 @@ export async function GET() {
     { header: 'Discipline', key: 'discipline', width: 20 },
     { header: 'Building', key: 'building', width: 16 },
     { header: 'Area', key: 'area', width: 22 },
+    { header: 'Floor', key: 'floor', width: 12 },
     { header: 'Boundary', key: 'boundary', width: 52 },
     { header: 'Responsible', key: 'responsible', width: 22 },
     { header: 'Stage', key: 'stage', width: 22 },
@@ -29,6 +30,7 @@ export async function GET() {
     discipline: 'Electrical',
     building: 'Building 1',
     area: 'MV switchroom',
+    floor: 'B1',
     boundary: 'Incomer, four feeders, bus tie, PQM. Excludes upstream cable.',
     responsible: 'A. Jabbar',
     stage: 'Pre-Commissioning',
@@ -39,6 +41,7 @@ export async function GET() {
     discipline: 'Mechanical',
     building: 'Building 1',
     area: 'Plant room',
+    floor: 'R',
     boundary: 'Chillers, primary pumps, headers to the riser valves.',
     stage: 'Construction',
   })
@@ -48,6 +51,7 @@ export async function GET() {
     discipline: 'Fire & Life Safety',
     building: 'Building 2',
     area: 'Whole building',
+    floor: 'G',
     stage: 'Construction',
   })
 
@@ -67,6 +71,11 @@ export async function GET() {
   guide.addRow({ col: 'Discipline', meaning: 'Electrical, Mechanical, Civil, ELV and so on. Free text here.' })
   guide.addRow({ col: 'Building', meaning: 'Which building on the campus. Read, and used to find or create the Area.' })
   guide.addRow({ col: 'Area', meaning: 'The room or zone. Created if it does not exist.' })
+  guide.addRow({
+    col: 'Floor',
+    meaning:
+      'The storey: B2, B1, LG, G, M, L1, L2, L10, R. Write it how you write it — L3, Level 3, LVL 3, 3F and 3 are all read as the third floor, and whatever you type is what is stored. Head the column Level or Storey if that is your word. A riser or a system that spans floors: leave it blank rather than picking one.',
+  })
   guide.addRow({
     col: 'Boundary',
     meaning:

@@ -36,6 +36,13 @@ const BUILDING_ALIASES = ['building', 'building no', 'building number', 'bldg', 
 const BOUNDARY_ALIASES = ['boundary', 'scope', 'battery limit', 'battery limits', 'extent', 'includes']
 const RESPONSIBLE_ALIASES = ['responsible', 'responsible engineer', 'engineer', 'owner', 'lead']
 const STAGE_ALIASES = ['stage', 'phase', 'status', 'state', 'commissioning stage']
+// "Level" is deliberately accepted here even though L1-L5 mean the
+// commissioning levels everywhere else in this application. People head the
+// column Level because that is the word on the drawing; refusing it would
+// mean the floor is silently dropped from a sheet that plainly carries it.
+// It is read as the floor and stored as the floor — the ambiguity is in the
+// spreadsheet, and this is where it gets resolved rather than carried on.
+const FLOOR_ALIASES = ['floor', 'level', 'storey', 'story', 'floor level', 'fl', 'lvl', 'elevation level']
 const DESC_ALIASES = ['notes', 'note', 'remark', 'remarks', 'comment']
 
 export type SystemMapping = {
@@ -45,6 +52,7 @@ export type SystemMapping = {
   discipline: number | null
   area: number | null
   building: number | null
+  floor: number | null
   boundary: number | null
   responsible: number | null
   stage: number | null
@@ -58,6 +66,7 @@ export type ParsedSystem = {
   discipline: string | null
   area: string | null
   building: string | null
+  floor: string | null
   boundary: string | null
   responsible: string | null
   stage: string | null
@@ -132,6 +141,7 @@ export function findSystemMapping(sheet: ExcelJS.Worksheet): { mapping: SystemMa
         discipline: find(DISCIPLINE_ALIASES),
         area: find(AREA_ALIASES),
         building: find(BUILDING_ALIASES),
+        floor: find(FLOOR_ALIASES),
         boundary: find(BOUNDARY_ALIASES),
         responsible: find(RESPONSIBLE_ALIASES),
         stage: find(STAGE_ALIASES),
@@ -233,6 +243,10 @@ export function parseSystemWorkbook(wb: ExcelJS.Workbook): ParsedSystems {
         discipline: at(mapping.discipline) || null,
         area: at(mapping.area) || null,
         building: at(mapping.building) || null,
+        // Kept exactly as written. sortFloors() in @/lib/floors understands
+        // L3, Level 3, 3F and 3 as the same storey when it comes to putting
+        // them in lift-panel order; nothing here renames what you typed.
+        floor: at(mapping.floor) || null,
         boundary: at(mapping.boundary) || null,
         responsible: at(mapping.responsible) || null,
         stage,
@@ -249,6 +263,7 @@ export function parseSystemWorkbook(wb: ExcelJS.Workbook): ParsedSystems {
     add(mapping.discipline, 'Discipline')
     add(mapping.area, 'Area')
     add(mapping.building, 'Building')
+    add(mapping.floor, 'Floor')
     add(mapping.boundary, 'Boundary')
     add(mapping.responsible, 'Responsible')
     add(mapping.stage, 'Stage')

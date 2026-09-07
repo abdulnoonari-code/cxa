@@ -110,6 +110,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'Which building a tag is in, whether it is critical, and the wider discipline list — Civil, Architectural, Plumbing, ELV. Without it those columns are read from your spreadsheet and thrown away, and Civil or ELV are refused by the database.',
     probe: { table: 'equipment', columns: ['building', 'critical'] },
   },
+  {
+    id: 'part33',
+    source: 'week5-part33-system-place.sql',
+    title: 'Where a system is',
+    matters:
+      'Which building and floor a SYSTEM is on, in its own right — a board is on basement 1 whether or not a single tag has been loaded against it. Without it the Building and Floor columns in a systems spreadsheet are read and then thrown away.',
+    probe: { table: 'systems', columns: ['building', 'floor'] },
+  },
 ]
 
 export type StepResult = {

@@ -261,7 +261,7 @@ export default async function ChecklistsPage({
           <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '1.4fr 1fr' }}>
             <label className="field">
               Checklist file (.xlsx or .csv) *
-              <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+              <input type="file" name="file" accept=".xlsx,.csv" required className="io-file" />
             </label>
             <label className="field">
               Level to use if the file doesn&apos;t say
@@ -601,7 +601,7 @@ export default async function ChecklistsPage({
                       <input type="hidden" name="checklist_item_id" value={it.id} />
                       <input type="hidden" name="equipment_id" value={g.id} />
                       <input type="hidden" name="tag_id" value={g.tag_id} />
-                      <input type="file" name="file" required style={{ fontSize: 12.5 }} />
+                      <input type="file" name="file" required className="io-file" />
                       <button type="submit" className="btn btn-secondary btn-sm">
                         Attach
                       </button>

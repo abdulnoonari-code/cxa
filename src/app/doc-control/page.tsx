@@ -301,7 +301,7 @@ export default async function DocumentControlPage({
                                 name="file"
                                 accept=".docx,.pdf,.txt,.md"
                                 required
-                                className="input"
+                                className="io-file"
                                 style={{ fontSize: 11, padding: 4 }}
                               />
                               <button type="submit" className="btn btn-secondary btn-sm">

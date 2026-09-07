@@ -106,7 +106,7 @@ export default async function RolesPage() {
           <form action={importRoles} style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <label className="field" style={{ flex: '1 1 320px' }}>
               Import a role list
-              <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="input" />
+              <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="io-file" />
             </label>
             <button type="submit" className="btn btn-primary" disabled={!project}>
               Import

@@ -134,7 +134,7 @@ export default async function ChecklistPage({
           </a>
           <form action={importChecklist} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="hidden" name="equipment_id" value={equipment.id} />
-            <input type="file" name="file" accept=".xlsx" required style={{ fontSize: 12, maxWidth: 180 }} />
+            <input type="file" name="file" accept=".xlsx" required className="io-file" />
             <button type="submit" className="btn btn-secondary btn-sm">
               Import
             </button>
@@ -301,7 +301,7 @@ export default async function ChecklistPage({
                 <form action={uploadAttachment} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input type="hidden" name="checklist_item_id" value={it.id} />
                   <input type="hidden" name="equipment_id" value={equipment.id} />
-                  <input type="file" name="file" required style={{ fontSize: 13 }} />
+                  <input type="file" name="file" required className="io-file" />
                   <button type="submit" className="btn btn-secondary btn-sm">
                     Upload
                   </button>

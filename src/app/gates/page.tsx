@@ -164,7 +164,7 @@ export default async function GatesPage() {
             >
               <label className="field" style={{ flex: '1 1 320px' }}>
                 Import gate requirements
-                <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="input" />
+                <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="io-file" />
               </label>
               <button type="submit" className="btn btn-primary">
                 Import

@@ -186,7 +186,7 @@ export default async function ObligationsPage({
         <form action={readDocument} style={{ display: 'grid', gap: 12, gridTemplateColumns: '1.6fr 1fr 1fr auto', alignItems: 'flex-end' }}>
           <label className="field">
             Contract, specification or procedure
-            <input type="file" name="file" accept=".docx,.pdf,.txt,.md" required className="input" />
+            <input type="file" name="file" accept=".docx,.pdf,.txt,.md" required className="io-file" />
           </label>
           <label className="field">
             File it under
@@ -334,7 +334,7 @@ export default async function ObligationsPage({
         <form action={importObligations} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label className="field" style={{ flex: '1 1 320px' }}>
             Marked-up register (.xlsx or .csv)
-            <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+            <input type="file" name="file" accept=".xlsx,.csv" required className="io-file" />
           </label>
           <button type="submit" className="btn btn-primary">
             Import

@@ -238,7 +238,7 @@ export default async function TestsPage({
         <form action={importTests} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label className="field" style={{ flex: '1 1 320px' }}>
             Test results (.xlsx or .csv)
-            <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+            <input type="file" name="file" accept=".xlsx,.csv" required className="io-file" />
           </label>
           <button type="submit" className="btn btn-primary">
             Import

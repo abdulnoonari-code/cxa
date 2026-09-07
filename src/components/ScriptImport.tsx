@@ -122,7 +122,7 @@ export default function ScriptImport({ params }: { params: Record<string, string
         <div style={{ display: 'grid', gap: 14, gridTemplateColumns: '1.4fr 1fr' }}>
           <label className="field">
             Script file (.xlsx or .csv) *
-            <input type="file" name="file" accept=".xlsx,.csv" required className="input" />
+            <input type="file" name="file" accept=".xlsx,.csv" required className="io-file" />
           </label>
           <label className="field">
             Level, if the sheet does not say

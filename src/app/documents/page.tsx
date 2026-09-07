@@ -179,7 +179,7 @@ export default async function DocumentsPage({
             </label>
             <label className="field">
               File *
-              <input type="file" name="file" required className="input" />
+              <input type="file" name="file" required className="io-file" />
             </label>
             <div>
               <button type="submit" className="btn btn-primary">

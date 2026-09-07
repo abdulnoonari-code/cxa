@@ -2,6 +2,8 @@ import { supabase, USING_SERVICE_ROLE } from '@/lib/supabase'
 import { runSetupProbes } from '@/data/setup-checks'
 import { countStates, setupHeadline } from '@/lib/setup-checks'
 import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
+import { accessVerdict as whoMayUseApp } from '@/data/gate'
+import { parseOwners } from '@/lib/gate'
 import { aiConfigured } from '@/lib/ai'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +36,13 @@ export default async function SetupPage() {
   const anon = await probeAnonAccess(anyProject)
   const n = countStates(results)
   const access = accessVerdict(USING_SERVICE_ROLE, anon)
+
+  // Who may sign in and get past the front door. Separate from the two
+  // questions above, which are about the DATABASE: a database can be shut and
+  // the application still open to anybody who registers an account, and that
+  // is exactly the state this site was in.
+  const gate = await whoMayUseApp()
+  const owners = parseOwners(process.env.CXA_OWNER_EMAILS)
   const aiOn = aiConfigured()
 
   return (
@@ -130,6 +139,55 @@ export default async function SetupPage() {
           }}
         >
           {access.serverKey}
+        </p>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h2 className="section-title">Who can get in</h2>
+        <p className="text-secondary" style={{ fontSize: 13, marginTop: -6 }}>
+          Signing in and being allowed in are two different things. An account can exist and still be refused. This
+          panel is about the application; the two above are about the database.
+        </p>
+
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: gate.state === 'unconfigured' ? 'var(--color-danger)' : 'var(--color-success)',
+          }}
+        >
+          {gate.state === 'unconfigured'
+            ? 'OPEN — anybody who signs up can read this project'
+            : gate.state === 'owner'
+              ? 'Closed. You are on the owner list.'
+              : gate.state === 'member'
+                ? `Closed. You are on the team of ${gate.projects} project${gate.projects === 1 ? '' : 's'}.`
+                : 'Closed.'}
+        </div>
+
+        <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.6 }}>
+          {gate.state === 'unconfigured' ? (
+            <>
+              No owner address is set and no project has a single person on its team, so the application cannot
+              tell a stranger from you and lets everybody in. <strong>Two things close it, in this order:</strong>{' '}
+              add your address to <code className="mono">CXA_OWNER_EMAILS</code> in Vercel — so you cannot lock
+              yourself out — and then turn off new sign-ups in Supabase under Authentication → Sign In / Providers
+              → Email.
+            </>
+          ) : (
+            <>
+              An account that is not on the team of any project, and is not on the owner list, is refused at the
+              front door and shown nothing at all — not a project name, not a count.
+            </>
+          )}
+        </p>
+
+        <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 12.5 }}>
+          Owner addresses set: <strong>{owners.length}</strong>
+          {owners.length === 0 && ' — nobody can get in on the owner list alone.'}
+        </p>
+        <p className="text-secondary" style={{ margin: '4px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
+          The addresses themselves are counted, never printed. Signed in as {gate.email || 'nobody'}.
         </p>
       </div>
 

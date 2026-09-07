@@ -4,6 +4,9 @@ import { Sidebar } from "@/components/Sidebar";
 import { Chrome } from "@/components/Chrome";
 import { TopBar } from "@/components/TopBar";
 import { createClient } from "@/lib/supabase/server";
+import { accessVerdict } from "@/data/gate";
+import { mayUseApp, openDoorWarning } from "@/lib/gate";
+import NoAccess from "@/components/NoAccess";
 
 export const metadata: Metadata = {
   title: "CxSentinel — AI Commissioning Copilot",
@@ -23,6 +26,19 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // The gate, in the ONE place that runs for every route.
+  //
+  // Not in proxy.ts, and the reason matters: since SQL part 27 the browser
+  // key cannot read the team list at all, and the proxy has only the browser
+  // key. A gate there would refuse everybody, including the owner, and look
+  // exactly like a broken login. Here the server key is available.
+  //
+  // Not on each page either. Thirty-odd screens, and the one somebody forgets
+  // to add it to is the one that leaks.
+  const verdict = user ? await accessVerdict() : null;
+  const refused = verdict !== null && !mayUseApp(verdict);
+  const openDoor = verdict ? openDoorWarning(verdict) : null;
+
   return (
     <html lang="en">
       <head>
@@ -38,8 +54,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
       </head>
       <body>
-        {user ? (
+        {refused && verdict ? (
+          // No Chrome, no rail, no children. A refused account is not shown a
+          // navigation menu of screens it may not open.
+          <NoAccess verdict={verdict} />
+        ) : user ? (
           <Chrome sidebar={<Sidebar />} topbar={<TopBar />}>
+            {openDoor && (
+              <div className="alert alert-danger" role="alert">
+                <strong>This site is open.</strong> {openDoor}
+              </div>
+            )}
             {children}
           </Chrome>
         ) : (

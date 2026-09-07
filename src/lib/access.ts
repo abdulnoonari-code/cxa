@@ -17,11 +17,17 @@
 //      project where nobody has got round to the member list yet, and
 //      getActor already treats that person as a project admin.
 //
-//   2. An account that is on NO project anywhere sees everything, and is
-//      told so. That is the "you have not set up access yet" state. It is
-//      announced rather than silent, because unrestricted access that
-//      nobody mentions is how a system ends up thought to be locked when
-//      it is wide open.
+//   2. REMOVED, and it was a real hole. An account on NO project anywhere
+//      used to be shown EVERY project, with a note saying so. It was
+//      written for the person who built the projects before there was a
+//      member list — and it is precisely wrong for a live site, because a
+//      brand-new account is by definition on no project. Anybody who found
+//      the address could sign up and read the whole job.
+//
+//      That case is now handled a level up, by lib/gate.ts, which refuses
+//      the account outright rather than showing it everything. `unrestricted`
+//      is kept on the return type only so that the one first-run state —
+//      nothing configured anywhere — can still be reported honestly.
 //
 // Neither exception loosens anything once one membership row exists for the
 // account: from that moment the register is the projects they are on.
@@ -83,10 +89,9 @@ export function buildRegister<P extends { id: string }>(
       entries.push({ project: p, role: null, members: 0, openToAll: true })
       continue
     }
-    if (!mineAnywhere) {
-      entries.push({ project: p, role: null, members: members.length, openToAll: true })
-      continue
-    }
+    // Being on no project is no longer a reason to be shown one. The gate
+    // decides whether this account may be here at all; the register decides
+    // only what it lists, and it lists what they are on.
     hidden++
   }
 
@@ -114,7 +119,9 @@ export function registerNote<P extends { id: string }>(reg: Register<P>, email: 
     }. Ask whoever runs the project to add ${email ?? 'your address'} to its team.`
   }
   if (reg.unrestricted) {
-    return `${count}. You are not listed on the team of any project, so everything registered is shown. Once your address is added to a project team, this list becomes the projects you are on.`
+    return `${count}. No team list has been set up on ${
+      n === 1 ? 'it' : 'them'
+    } yet, so ${n === 1 ? 'it is' : 'they are'} open to everybody who can sign in. Add people to the project team to close that.`
   }
   // "3 projects you are on" was wrong whenever one of the three was listed
   // because it has no team at all. Being shown something because nobody has

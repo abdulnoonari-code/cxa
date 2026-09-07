@@ -26,7 +26,9 @@ export const REVIEW_STATES = [
 
 export const REVIEW_COLORS: Record<string, string> = {
   draft: 'var(--color-neutral-solid)',
-  submitted: 'var(--color-primary)',
+  // Not the brand. With an emerald brand, a submitted record drawn in the
+  // brand colour is a record that looks approved.
+  submitted: 'var(--color-progress)',
   reviewed: '#7c3aed',
   approved: 'var(--color-success-solid)',
   rejected: 'var(--color-danger-solid)',

@@ -41,34 +41,52 @@ export const NAV: NavSection[] = [
   {
     label: 'Project',
     items: [
-      { href: '/project', label: 'Project Details', icon: 'settings', note: 'Name, client, dates and the settings every other screen is scoped by.' },
-      { href: '/setup', label: 'Setup', icon: 'settings', note: 'Which SQL steps are actually in place, who can reach the data, and whether AI is on.' },
+      // The order is the order somebody actually moves through: pick a
+      // project, look at what it is and when it is due, then look at where
+      // it stands today. Setup last, because it is answered once and then
+      // only revisited when something breaks.
       { href: '/projects', label: 'All Projects', icon: 'projects', note: 'Every project you can open, and where you create a new one.' },
-      { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', note: 'What needs attention today, across the whole project.' },
       {
-        href: '/plan',
-        label: 'Plan & Progress',
-        icon: 'plan',
-        note: 'Progress by commissioning level, L1 through L5.',
+        href: '/project',
+        label: 'Project Details',
+        icon: 'settings',
+        note: 'Name, client, dates — and the plan: milestones, the timeline, the gates and progress against them.',
         children: [
-          { href: '/milestones', label: 'Milestones & Timeline', icon: 'milestone', note: 'The dated commitments the plan is measured against.' },
+          { href: '/milestones', label: 'Milestones & Timeline', icon: 'milestone', note: 'The dated commitments the plan is measured against, on a timeline.' },
+          { href: '/gates', label: 'Gates', icon: 'gate', note: 'The stage gates, what each one requires, and whether the evidence stands up.' },
+          { href: '/plan', label: 'Plan & Progress', icon: 'plan', note: 'Progress by commissioning level, L1 through L5.' },
         ],
+      },
+      { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', note: 'What needs attention today, across the whole project.' },
+      { href: '/setup', label: 'Setup', icon: 'settings', note: 'Which SQL steps are actually in place, who can reach the data, and whether AI is on.' },
+    ],
+  },
+  {
+    label: 'Assets',
+    items: [
+      {
+        href: '/systems',
+        label: 'Systems',
+        icon: 'system',
+        note: 'What gets energised and handed over. Systems and subsystems, with their boundaries.',
+      },
+      {
+        href: '/equipment',
+        label: 'Equipment & Tags',
+        icon: 'equipment',
+        note: 'Every tagged item of plant, and the parts inside each one.',
+      },
+      {
+        href: '/assets',
+        label: 'Asset Tree',
+        icon: 'tree',
+        note: 'The whole tree in one place — site, area, system, subsystem, equipment, part — and what is recorded against each.',
       },
     ],
   },
   {
-    label: 'Assets & Checks',
+    label: 'Testing & Commissioning',
     items: [
-      {
-        href: '/assets',
-        label: 'Assets',
-        icon: 'tree',
-        note: 'The whole tree — site, area, system, subsystem, equipment — and what is recorded against each.',
-        children: [
-          { href: '/systems', label: 'Systems', icon: 'system', note: 'Systems and subsystems on their own.' },
-          { href: '/equipment', label: 'Equipment & Tags', icon: 'equipment', note: 'Tagged equipment on its own.' },
-        ],
-      },
       {
         href: '/itp',
         label: 'Inspection & Test Plan',
@@ -105,6 +123,15 @@ export const NAV: NavSection[] = [
           { href: '/instruments', label: 'Test Instruments', icon: 'gauge', note: 'The instruments and their calibration dates.' },
         ],
       },
+      {
+        href: '/tasks',
+        label: 'Tasks & Issues',
+        icon: 'task',
+        note: 'Work assigned to people, and the defects raised against it, level by level.',
+        children: [
+          { href: '/issues', label: 'Punch List', icon: 'issue', note: 'Defects by category and level, and what each one blocks.' },
+        ],
+      },
     ],
   },
   {
@@ -127,16 +154,7 @@ export const NAV: NavSection[] = [
   {
     label: 'Quality',
     items: [
-      {
-        href: '/readiness',
-        label: 'Readiness',
-        icon: 'readiness',
-        note: 'How ready each system is, worked out from its records.',
-        children: [
-          { href: '/gates', label: 'Readiness Gates', icon: 'gate', note: 'The rules assessed and signed before each stage.' },
-        ],
-      },
-      { href: '/issues', label: 'Punch List', icon: 'issue', note: 'Defects by category and level, and what each one blocks.' },
+      { href: '/readiness', label: 'Readiness', icon: 'readiness', note: 'How ready each system is, worked out from its records. The gates that assess it are under Project Details.' },
       { href: '/rules', label: 'Rule Checks', icon: 'validity', note: 'Free checks over the punch list, the photographs and the dates. No AI, nothing stored.' },
       { href: '/validity', label: 'Validity Review', icon: 'validity', note: 'Where the records contradict themselves or do not support what they claim.' },
       { href: '/review', label: 'Review & Approvals', icon: 'review', note: 'What is waiting on somebody to accept it.' },
@@ -146,7 +164,6 @@ export const NAV: NavSection[] = [
   {
     label: 'Manage',
     items: [
-      { href: '/tasks', label: 'Tasks', icon: 'task', note: 'Work assigned to people, with dates.' },
       { href: '/meetings', label: 'Meetings', icon: 'meeting', note: 'Meetings and what was decided at them.' },
       { href: '/notifications', label: 'Alerts & Notices', icon: 'bell', note: 'Notices issued, and what is overdue.' },
     ],

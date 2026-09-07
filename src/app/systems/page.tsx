@@ -248,7 +248,10 @@ export default async function SystemsPage({
                             ? 'var(--color-danger-solid)'
                             : s.readiness.ready
                               ? 'var(--color-success-solid)'
-                              : 'var(--color-primary)',
+                              // Under way, not ready. Deliberately not green
+                              // and deliberately not the brand, which is now
+                              // also green.
+                              : 'var(--color-progress)',
                       }}
                     />
                   </div>

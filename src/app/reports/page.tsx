@@ -217,7 +217,7 @@ export default async function ReportsPage() {
                         className="bar-seg"
                         style={{
                           width: `${Math.max(l.donePercent - l.approvedPercent, 0)}%`,
-                          background: 'var(--color-primary)',
+                          background: 'var(--color-progress)',
                         }}
                       />
                     </div>
@@ -232,7 +232,7 @@ export default async function ReportsPage() {
             <span className="legend-dot" style={{ background: REVIEW_COLORS.approved }} /> Approved
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
-            <span className="legend-dot" style={{ background: 'var(--color-primary)' }} /> Resolved, awaiting approval
+            <span className="legend-dot" style={{ background: 'var(--color-progress)' }} /> Resolved, awaiting approval
           </span>
         </div>
       </div>

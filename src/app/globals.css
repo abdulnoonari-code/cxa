@@ -1918,3 +1918,241 @@ textarea.input {
     margin: 8mm;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   THE TIMELINE
+   ═══════════════════════════════════════════════════════════════════
+
+   One line of time. Gates fly above it as flags, milestones hang below
+   as diamonds, today is a vertical line through both.
+
+   Laid out in percentages against a positioned track, so it reflows with
+   the card rather than being drawn at a fixed width. Marks are absolutely
+   positioned and translated back by half their own width, which is what
+   puts the POINT of the flag on the date rather than its left edge. */
+
+.tl {
+  position: relative;
+  padding: 4px 0 2px;
+  /* The marks near the ends hang outside the track. Without room for them
+     the first and last labels are clipped by the card. */
+  margin: 0 46px;
+}
+
+.tl-lane {
+  position: relative;
+}
+
+/* Set by the component from how many rows the plan actually needs. The
+   fallbacks are the one-row case. */
+.tl-lane-gates {
+  height: var(--tl-gate-lane, 104px);
+}
+
+.tl-lane-milestones {
+  height: var(--tl-milestone-lane, 80px);
+}
+
+.tl-axis {
+  position: relative;
+  height: 34px;
+  border-top: 2px solid var(--color-border);
+}
+
+.tl-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.tl-tick-line {
+  display: block;
+  width: 1px;
+  height: 6px;
+  margin: 0 auto;
+  background: var(--color-border);
+}
+
+.tl-tick-label {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Today runs the full height of both lanes, not just the axis: the whole
+   point is to see which marks are behind it.
+   
+   Measured from the lane variables rather than a guessed number. The first
+   render used a fixed -160px and the line shot out through the top of the
+   card and across the heading above it — which is what looking at it
+   caught. */
+.tl-today {
+  position: absolute;
+  top: calc(var(--tl-gate-lane, 104px) * -1);
+  bottom: calc(var(--tl-milestone-lane, 80px) * -1 - 4px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.tl-today-line {
+  position: absolute;
+  top: 0;
+  bottom: 18px;
+  left: 0;
+  width: 2px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--color-text-secondary) 0 5px,
+    transparent 5px 10px
+  );
+  opacity: 0.55;
+}
+
+.tl-today-label {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  padding: 0 4px;
+}
+
+/* ── A mark ──────────────────────────────────────────────────────── */
+
+.tl-mark {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 108px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tl-gate {
+  bottom: 0;
+  justify-content: flex-end;
+}
+
+.tl-milestone {
+  top: 0;
+}
+
+.tl-flag {
+  width: 15px;
+  height: 11px;
+  border-radius: 2px 3px 3px 2px;
+  /* A pennant, not a rectangle: the notch is what makes it read as a flag
+     at 11 pixels tall. */
+  clip-path: polygon(0 0, 100% 0, 72% 50%, 100% 100%, 0 100%);
+  align-self: flex-start;
+  margin-left: calc(50% - 1px);
+}
+
+.tl-pole {
+  width: 2px;
+  height: 16px;
+  background: var(--color-text-secondary);
+  opacity: 0.5;
+  align-self: flex-start;
+  margin-left: calc(50% - 1px);
+}
+
+.tl-diamond {
+  width: 11px;
+  height: 11px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  margin-top: 3px;
+}
+
+.tl-label {
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: center;
+  max-width: 108px;
+  order: -1;
+  margin-bottom: 4px;
+}
+
+.tl-label-below {
+  order: 1;
+  margin: 4px 0 0;
+}
+
+.tl-label-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-weight: 600;
+}
+
+.tl-label-date {
+  display: block;
+  font-size: 9.5px;
+  color: var(--color-text-secondary);
+}
+
+.tl-mark:hover .tl-label-name {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+/* ── The key ─────────────────────────────────────────────────────── */
+
+.tl-key {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border-soft);
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+}
+
+.tl-key > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-key-flag {
+  width: 12px;
+  height: 9px;
+  background: var(--color-text-secondary);
+  clip-path: polygon(0 0, 100% 0, 72% 50%, 100% 100%, 0 100%);
+}
+
+.tl-key-diamond {
+  width: 9px;
+  height: 9px;
+  background: var(--color-text-secondary);
+  transform: rotate(45deg);
+}
+
+.tl-key-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+/* Narrow screens: the labels collide long before the marks do, so the
+   whole thing scrolls sideways rather than becoming unreadable. */
+@media (max-width: 720px) {
+  .tl {
+    min-width: 640px;
+  }
+  .tl-wrap {
+    overflow-x: auto;
+  }
+}

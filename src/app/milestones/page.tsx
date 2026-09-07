@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { createMilestone, updateMilestone, deleteMilestone } from './actions'
 import { MILESTONE_STATUSES, milestoneBadgeClass, isOverdue } from '@/lib/milestones'
+import TimelineChart from '@/components/TimelineChart'
+import { loadTimeline } from '@/data/timeline'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +28,11 @@ export default async function MilestonesPage() {
       : { data: [] as { id: string; item: string; equipment_id: string }[] }
   const linkedItemById = new Map((linkedItemsRaw ?? []).map((it) => [it.id, it]))
 
+  // Today is worked out once, here, and handed to the chart. The chart
+  // itself never reads the clock, so what it draws is a function of what it
+  // was given and can be asked the same question twice with the same answer.
+  const timeline = await loadTimeline(project?.id ?? null, new Date().toISOString().slice(0, 10))
+
   return (
     <>
       <h1 className="page-title">Milestones &amp; Timeline</h1>
@@ -38,7 +45,15 @@ export default async function MilestonesPage() {
           )}
         </p>
 
-        <div className="card">
+        {/* The chart before the form. The question somebody opens this
+            screen with is "where are we against the dates", and the answer
+            should not be below a data-entry form. */}
+        <h2 className="section-title">The dates, on one line</h2>
+        <div className="tl-wrap">
+          <TimelineChart timeline={timeline} />
+        </div>
+
+        <div className="card" style={{ marginTop: 20 }}>
           <h2 className="section-title">Add milestone</h2>
           <form action={createMilestone} style={{ display: 'grid', gap: 12, gridTemplateColumns: '2fr 1fr 1fr' }}>
             <input type="hidden" name="project_id" value={project?.id ?? ''} />

@@ -2,6 +2,9 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { updateProject } from './actions'
 import DatabaseAccess from '@/components/DatabaseAccess'
+import TimelineChart from '@/components/TimelineChart'
+import { loadTimeline } from '@/data/timeline'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,15 +29,45 @@ export default async function ProjectPage() {
 
   const equipmentCount = (equipmentRows ?? []).length
 
+  const timeline = await loadTimeline(project.id, new Date().toISOString().slice(0, 10))
+
   return (
     <>
-      <h1 className="page-title">Project</h1>
+      <h1 className="page-title">Project Details</h1>
       <p className="page-subtitle">
-        The name, client and dates used across every screen and every export. Change them here and the whole
-        site updates.
+        The name, client and dates used across every screen and every export — and the plan they are measured
+        against. Change anything here and the whole site updates.
       </p>
 
-      <div className="card">
+      {/* The plan first. Somebody opening Project Details wants to know
+          where the job stands before they want to edit its name. */}
+      <div className="panel-head" style={{ marginTop: 0 }}>
+        <div className="panel-head-row">
+          <h2 className="section-title" style={{ margin: 0 }}>
+            The plan
+          </h2>
+          <div className="panel-head-links">
+            <Link href="/milestones" className="link">
+              Milestones &amp; Timeline →
+            </Link>
+            <Link href="/gates" className="link">
+              Gates →
+            </Link>
+            <Link href="/plan" className="link">
+              Plan &amp; Progress →
+            </Link>
+          </div>
+        </div>
+        <p className="panel-head-means">
+          Every dated commitment on the project: milestones as diamonds, gates as flags, today as the dashed line
+          through both. Anything without a date is listed underneath rather than placed at a guess.
+        </p>
+      </div>
+      <div className="tl-wrap">
+        <TimelineChart timeline={timeline} />
+      </div>
+
+      <div className="card" style={{ marginTop: 20 }}>
         <h2 className="section-title">Project details</h2>
         <form action={updateProject} style={{ display: 'grid', gap: 14, gridTemplateColumns: '1fr 1fr' }}>
           <input type="hidden" name="id" value={project.id} />

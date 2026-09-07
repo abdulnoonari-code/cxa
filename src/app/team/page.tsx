@@ -4,7 +4,10 @@ import { getActor } from '@/lib/audit'
 import { roleBadgeClass } from '@/lib/roles'
 import { loadRoles } from '@/data/project-roles'
 import { activeRoles, canIn, roleLabelIn, CAPABILITIES } from '@/lib/project-roles'
-import { addMember, updateMemberRole, removeMember } from './actions'
+import { cookies } from 'next/headers'
+import { addMember, updateMemberRole, removeMember, resetMemberPassword } from './actions'
+import { inviteNote, carriesSecret, INVITE_COOKIE, type InviteOutcome } from '@/lib/invite'
+import { USING_SERVICE_ROLE } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +33,20 @@ export default async function TeamPage() {
 
   const approvers = members.filter((m) => canIn(roles, m.role, 'approve')).length
 
+  // The result of the last add or reset, if it happened in the last two
+  // minutes. It is in a short-lived httpOnly cookie rather than the URL,
+  // because a temporary password in a URL is a password in the browser
+  // history and in somebody's request log.
+  let invite: InviteOutcome | null = null
+  try {
+    const raw = (await cookies()).get(INVITE_COOKIE)?.value
+    if (raw) invite = JSON.parse(raw) as InviteOutcome
+  } catch {
+    // A cookie we cannot read is not worth an error page. It expires on its
+    // own and the person can add the colleague again.
+    invite = null
+  }
+
   return (
     <>
       <h1 className="page-title">Project Team</h1>
@@ -51,6 +68,38 @@ export default async function TeamPage() {
         <div className="alert alert-danger">
           <strong>Nobody on this project can approve anything.</strong> Add a Commissioning Manager, QA/QC or
           Client, or no record can be closed out.
+        </div>
+      )}
+
+      {invite && (
+        <div className={carriesSecret(invite) ? 'card' : 'alert alert-warning'} style={carriesSecret(invite) ? { borderLeft: '4px solid var(--color-primary)' } : undefined}>
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 550 }}>{inviteNote(invite)}</p>
+          {carriesSecret(invite) && (
+            <>
+              <p
+                className="mono"
+                style={{
+                  fontSize: 20,
+                  fontWeight: 700,
+                  letterSpacing: '0.02em',
+                  margin: '14px 0 0',
+                  padding: '14px 16px',
+                  background: 'var(--color-neutral-bg)',
+                  borderRadius: 10,
+                  userSelect: 'all',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {invite.password}
+              </p>
+              <p className="text-secondary" style={{ fontSize: 12.5, margin: '10px 0 0' }}>
+                Send it to them however you normally would, and tell them to change it once they are in. It is not
+                written to the audit trail, not stored anywhere by this application, and this panel disappears in
+                two minutes — there is no way to see it again. If it is lost, use <strong>Reset password</strong>{' '}
+                on their row.
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -87,6 +136,20 @@ export default async function TeamPage() {
                 ))}
               </select>
             </label>
+            <label
+              className="panel-choice"
+              style={{ gridColumn: '1 / -1', cursor: USING_SERVICE_ROLE ? 'pointer' : 'not-allowed' }}
+            >
+              <input type="checkbox" name="create_account" defaultChecked={USING_SERVICE_ROLE} disabled={!USING_SERVICE_ROLE} />
+              <span>
+                <span className="panel-choice-label">Create a sign-in account for them</span>
+                <span className="panel-choice-means">
+                  {USING_SERVICE_ROLE
+                    ? 'A temporary password is generated and shown once, here, for you to pass on. Untick it if they already have an account from another project — their existing password keeps working.'
+                    : 'Not available: this deployment has no server key, so it cannot create accounts. Set SUPABASE_SERVICE_ROLE_KEY in Vercel.'}
+                </span>
+              </span>
+            </label>
             <div style={{ gridColumn: '1 / -1' }}>
               <button type="submit" className="btn btn-primary" disabled={!project}>
                 {isFirst ? 'Add me as Project Admin' : 'Add to project'}
@@ -94,8 +157,9 @@ export default async function TeamPage() {
             </div>
           </form>
           <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 12, marginBottom: 0 }}>
-            The email must match the one they log in with. Adding someone here does not create their account —
-            they sign up themselves, and their role applies from the first time they log in.
+            The email must match the one they log in with — it is what the front door checks. Public sign-up is
+            switched off, so an account cannot be created any other way except in Supabase; that is what the box
+            above is for.
           </p>
         </div>
       ) : (
@@ -161,6 +225,20 @@ export default async function TeamPage() {
                           <button formAction={updateMemberRole} type="submit" className="btn btn-secondary btn-sm">
                             Save
                           </button>
+                          {USING_SERVICE_ROLE && (
+                            // Sign-up is off and this deployment sends no
+                            // email, so "forgot password" cannot reach
+                            // anybody. Without this, one forgotten password
+                            // sends somebody back into Supabase.
+                            <button
+                              formAction={resetMemberPassword}
+                              type="submit"
+                              className="btn-link"
+                              style={{ color: 'var(--color-primary)' }}
+                            >
+                              Reset password
+                            </button>
+                          )}
                           <button formAction={removeMember} type="submit" className="btn-link">
                             Remove
                           </button>

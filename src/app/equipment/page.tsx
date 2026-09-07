@@ -175,6 +175,9 @@ export default async function EquipmentPage({
               </button>
             </form>
           )}
+          <a href="/qr?scope=equipment" className="btn btn-secondary">
+            QR labels
+          </a>
         </div>
 
         {!mayManage && (

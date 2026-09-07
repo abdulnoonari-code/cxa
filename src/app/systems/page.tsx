@@ -121,6 +121,9 @@ export default async function SystemsPage({
               Import
             </button>
           </form>
+          <a href="/qr?scope=system" className="btn btn-secondary">
+            QR labels
+          </a>
         </div>
         <p className="io-note">
           If any row cannot be read, nothing is imported at all and the reason is shown here. A blank cell means

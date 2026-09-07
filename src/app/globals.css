@@ -1,44 +1,50 @@
 /* ============================================================================
    CxSentinel design system
    Type:  IBM Plex Sans (interface) + IBM Plex Mono (tags, figures, labels)
-   Color: near-black emerald command rail, emerald brand, engineering semantics
+   Color: near-black graphite command rail, deep azure brand, engineering
+          semantics
    ========================================================================= */
 
 :root {
-  /* Brand — emerald, with a cyan partner so gradients and highlights still
-     have somewhere to travel.
+  /* Brand — a deep azure on graphite, with a cyan partner so gradients and
+     highlights still have somewhere to travel.
      ────────────────────────────────────────────────────────────────────
-     ONE THING TO KNOW ABOUT AN EMERALD BRAND ON THIS APPLICATION.
-     Green already means something here: passed, closed, met. A brand in
-     the same family means colour alone can no longer say "this is good".
-     Three rules keep that from misleading anybody, and they are held by
-     assertions:
+     WHY BLUE, AND NOT A COLOUR WITH MORE CHARACTER.
+     On this application three colours are already spoken for and cannot be
+     borrowed: green means passed, amber means warning, red means failed.
+     A brand in any of those families means colour alone can no longer say
+     what a thing IS — an emerald brand made a half-finished progress bar
+     look like a completed one, which is why that palette did not last.
+     Blue is the only family left that can never be read as a verdict.
+     This is a deep, serious azure rather than the bright electric blue the
+     application started with.
+     Three rules keep the separation, and they are held by assertions:
        1. The brand appears on CHROME only — the rail, buttons, links,
           focus rings. Nowhere that a value is being reported.
        2. Charts carry their own hex palette and no brand colour is in it,
           so inside a chart green still means passed and nothing else.
        3. A state that is neither good nor bad — in progress, submitted,
           awaiting somebody — uses --color-progress, which is deliberately
-          not green. Before this it used the brand, and in emerald an
-          in-progress bar would have read as a passed one. */
-  --color-primary: #059669;
-  --color-primary-dark: #047857;
-  --color-primary-light: #ecfdf5;
-  --color-accent: #06d4f0;
+          neither green nor the brand. */
+  --color-primary: #0369a1;
+  --color-primary-dark: #075985;
+  --color-primary-light: #e8f4fd;
+  --color-accent: #22d3ee;
   --color-accent-2: #7c3aed;
 
   /* Neither good nor bad: in progress, submitted, awaiting acceptance.
      Never green, on purpose. */
   --color-progress: #4f46e5;
 
-  /* Command rail — a near-black emerald, so the darkest surface in the
-     application is still recognisably the brand. */
-  --rail-bg: #04130e;
-  --rail-bg-2: #0a3b2c;
-  --rail-text: #9dc7b6;
-  --rail-text-strong: #f0fdf7;
+  /* Command rail — near-black graphite. The darkest surface in the
+     application, and deliberately almost neutral so the azure on it is the
+     only thing that reads as brand. */
+  --rail-bg: #0b1017;
+  --rail-bg-2: #16232e;
+  --rail-text: #9fb3c4;
+  --rail-text-strong: #f2f7fb;
   --rail-border: rgba(255, 255, 255, 0.1);
-  --rail-active: rgba(5, 150, 105, 0.32);
+  --rail-active: rgba(3, 105, 161, 0.34);
 
   /* Semantic — brighter solids for charts, calm tints for badges */
   --color-success: #047a52;
@@ -213,7 +219,7 @@ a {
   font-weight: 700;
   letter-spacing: 0.02em;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px -2px rgba(5, 150, 105, 0.55);
+  box-shadow: 0 4px 12px -2px rgba(3, 105, 161, 0.55);
 }
 
 /* Project switcher — the one control that changes what every other screen
@@ -242,7 +248,7 @@ a {
   padding: 7px 9px;
   border-radius: 7px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(4, 24, 18, 0.85);
+  background: rgba(9, 16, 24, 0.85);
   color: var(--rail-text-strong);
   font-family: inherit;
   font-size: 13px;
@@ -892,7 +898,7 @@ textarea.input {
 .input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.16);
+  box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.18);
 }
 
 .input::placeholder {
@@ -933,11 +939,11 @@ textarea.input {
 .btn-primary {
   background: linear-gradient(140deg, var(--color-primary) 0%, var(--color-primary-dark) 120%);
   color: #fff;
-  box-shadow: 0 2px 8px -2px rgba(5, 150, 105, 0.5);
+  box-shadow: 0 2px 8px -2px rgba(3, 105, 161, 0.5);
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 4px 14px -2px rgba(5, 150, 105, 0.6);
+  box-shadow: 0 4px 14px -2px rgba(3, 105, 161, 0.6);
 }
 
 .btn-secondary {
@@ -1529,7 +1535,7 @@ textarea.input {
 .io-file:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.16);
+  box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.18);
 }
 
 .io-file::file-selector-button {
@@ -1709,4 +1715,206 @@ textarea.input {
   text-align: center;
   color: var(--color-text-secondary);
   font-size: 13.5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   QR LABELS
+   ═══════════════════════════════════════════════════════════════════
+
+   A sheet of labels to print and stick on plant. Everything here is
+   sized in MILLIMETRES rather than pixels, because the output is
+   physical: a label has to be a known width when it comes out of the
+   printer, and px on paper depends on the printer's DPI. */
+
+.qr-scopes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.qr-scope {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.qr-scope:hover {
+  border-color: var(--color-border);
+  background: var(--color-neutral-bg);
+}
+
+.qr-scope.is-on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.qr-scope input {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.qr-scope-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.qr-scope-count {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-neutral-bg);
+  color: var(--color-text-secondary);
+}
+
+.qr-scope-note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* ── The sheet ───────────────────────────────────────────────────── */
+
+.qr-sheet {
+  display: grid;
+  gap: 6mm;
+  margin-top: 22px;
+}
+
+.qr-sheet-small { grid-template-columns: repeat(auto-fill, minmax(45mm, 1fr)); }
+.qr-sheet-medium { grid-template-columns: repeat(auto-fill, minmax(62mm, 1fr)); }
+.qr-sheet-large { grid-template-columns: repeat(auto-fill, minmax(95mm, 1fr)); }
+
+.qr-label {
+  display: flex;
+  gap: 3mm;
+  align-items: center;
+  padding: 3mm;
+  border: 1px solid var(--color-border);
+  border-radius: 2mm;
+  background: #fff;
+  /* A label must never be split across two sheets of paper. */
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.qr-label-code {
+  flex: 0 0 auto;
+  width: 18mm;
+  height: 18mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-sheet-small .qr-label-code { width: 14mm; height: 14mm; }
+.qr-sheet-large .qr-label-code { width: 26mm; height: 26mm; }
+
+.qr-label-code svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.qr-label-missing {
+  font-size: 8px;
+  color: var(--color-danger);
+  text-align: center;
+}
+
+.qr-label-text {
+  min-width: 0;
+}
+
+/* The tag is the biggest thing on the label. A phone can be flat; the
+   person sticking it on still has to know where it goes. */
+.qr-label-tag {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.15;
+  word-break: break-word;
+  color: #000;
+}
+
+.qr-sheet-large .qr-label-tag { font-size: 16px; }
+.qr-sheet-small .qr-label-tag { font-size: 10px; }
+
+.qr-label-name {
+  font-size: 9px;
+  line-height: 1.3;
+  color: #333;
+  margin-top: 1mm;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.qr-label-kind {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #777;
+  margin-top: 1mm;
+}
+
+.qr-footer {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Print ───────────────────────────────────────────────────────────
+   Only the labels reach the paper. The rail, the controls and the
+   explanations are for the screen — printed, they would waste the first
+   sheet of every batch. */
+
+@media print {
+  .no-print,
+  .sidebar,
+  .topbar {
+    display: none !important;
+  }
+
+  .app-shell {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+
+  .app-shell-inner {
+    max-width: none;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .qr-sheet {
+    margin-top: 0;
+    gap: 4mm;
+  }
+
+  .qr-label {
+    border-color: #bbb;
+  }
+
+  @page {
+    margin: 8mm;
+  }
 }

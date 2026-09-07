@@ -82,6 +82,12 @@ export const NAV: NavSection[] = [
         icon: 'tree',
         note: 'The whole tree in one place — site, area, system, subsystem, equipment, part — and what is recorded against each.',
       },
+      {
+        href: '/qr',
+        label: 'QR Labels',
+        icon: 'qr',
+        note: 'Printable codes for the plant. A scan opens that system, tag or part on this site — its checks, its punch items, its documents.',
+      },
     ],
   },
   {

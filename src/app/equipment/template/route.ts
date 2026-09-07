@@ -20,6 +20,7 @@ export async function GET() {
     { header: 'System', key: 'system', width: 24 },
     { header: 'Subsystem', key: 'subsystem', width: 20 },
     { header: 'Part of tag', key: 'parent', width: 20 },
+    { header: 'Type code', key: 'type', width: 18 },
     { header: 'Location', key: 'location', width: 26 },
     { header: 'Manufacturer', key: 'manufacturer', width: 22 },
     { header: 'Model', key: 'model', width: 20 },
@@ -41,6 +42,7 @@ export async function GET() {
     location: 'Switchyard',
     manufacturer: 'Siemens Energy',
     model: '8DN9',
+    type: 'SIE-8DN9',
     critical: 'Yes',
     status: 'Installed',
   })
@@ -128,8 +130,13 @@ export async function GET() {
       'Two levels only. A part cannot contain another part — put both under the same equipment. A row naming a parent that is nowhere in the project is reported by row number and left unfiled; the parent is never invented for you.',
   })
   guide.addRow({
+    col: 'Type code',
+    meaning:
+      'The catalogue code this tag is one of — see the Equipment Types screen. Forty identical breakers carry the same code here and share one catalogue entry holding the rating, the manual and the spec. A code that does not exist yet is CREATED, with just the code, and the Equipment Types import fills the rest in afterwards. Leave it blank if you do not use a catalogue; a tag with no type is completely normal. Headed "Type code", not "Type": on a tag list "Type" has always meant the DISCIPLINE, and one column cannot mean two things.',
+  })
+  guide.addRow({
     col: 'Manufacturer',
-    meaning: 'The OEM. A heading of OEM, Vendor, Supplier, Maker, Make or Brand is read as this column.',
+    meaning: 'The OEM. A heading of OEM, Vendor, Supplier, Maker, Make or Brand is read as this column. Kept on the tag; the catalogue entry has its own.',
   })
   guide.addRow({ col: 'Location, Model, Serial number', meaning: 'Free text. All optional.' })
   guide.addRow({

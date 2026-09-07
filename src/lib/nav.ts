@@ -71,6 +71,12 @@ export const NAV: NavSection[] = [
         note: 'What gets energised and handed over. Systems and subsystems, with their boundaries.',
       },
       {
+        href: '/equipment-types',
+        label: 'Equipment Types',
+        icon: 'catalogue',
+        note: 'The catalogue behind the tags — makes and models, with their ratings. Forty identical breakers are forty tags and one type.',
+      },
+      {
         href: '/equipment',
         label: 'Equipment & Tags',
         icon: 'equipment',

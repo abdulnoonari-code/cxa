@@ -61,6 +61,13 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M8.5 8h7M8.5 12h7M8.5 16h4" />
     </>
   ),
+  catalogue: icon(
+    <>
+      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10v16H5.5A1.5 1.5 0 0 1 4 18.5Z" />
+      <path d="M10 4h8.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H10" />
+      <path d="M13 8.5h4M13 12h4" />
+    </>
+  ),
   qr: icon(
     <>
       <rect x="3" y="3" width="7" height="7" rx="1.2" />

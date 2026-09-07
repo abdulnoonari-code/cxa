@@ -126,6 +126,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'The breaker inside the board, the CT, the PQM. Without it the "Part of tag" column in an equipment spreadsheet has nowhere to go, and a file that uses it is refused rather than half imported.',
     probe: { table: 'components', columns: ['id', 'equipment_id', 'tag_id'] },
   },
+  {
+    id: 'part35',
+    source: 'week5-part35-equipment-types.sql',
+    title: 'Equipment types — the catalogue',
+    matters:
+      'Makes and models, so forty identical breakers are forty tags and one type carrying the rating, the manual and the spec. Without it the Equipment Types screen says it is not installed, and a Type column in a tag spreadsheet is read and then thrown away.',
+    probe: { table: 'equipment_types', columns: ['id', 'type_code'] },
+  },
 ]
 
 export type StepResult = {

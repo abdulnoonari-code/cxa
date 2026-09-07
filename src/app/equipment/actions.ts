@@ -234,6 +234,42 @@ export async function importEquipment(formData: FormData) {
   let areasCreated = 0
   let systemsCreated = 0
   let subsystemsCreated = 0
+  let typesCreated = 0
+
+  // The catalogue, read once. A tag list with a Type column creates the
+  // catalogue entries it names — bare, with just a code — in the same way it
+  // already creates systems and areas. The Equipment Types import then fills
+  // in their manufacturer, rating and discipline rather than making a second
+  // copy of each one.
+  //
+  // Arrives with SQL part 35. On a database without it the probe errors, the
+  // map stays empty and the Type column is read and reported rather than
+  // silently thrown away.
+  const typeProbe = await supabase.from('equipment_types').select('id, type_code').eq('project_id', project.id)
+  const hasTypes = !typeProbe.error
+  const typeKey = new Map(
+    ((typeProbe.data ?? []) as { id: string; type_code: string | null }[]).map((t) => [
+      (t.type_code ?? '').toLowerCase(),
+      t.id,
+    ])
+  )
+
+  const ensureType = async (code: string): Promise<string | null> => {
+    const key = code.toLowerCase()
+    const found = typeKey.get(key)
+    if (found) return found
+    const { data } = await supabase
+      .from('equipment_types')
+      .insert({ project_id: project.id, type_code: code, name: code })
+      .select('id')
+      .single()
+    const id = (data as { id: string } | null)?.id ?? null
+    if (id) {
+      typeKey.set(key, id)
+      typesCreated += 1
+    }
+    return id
+  }
 
   const ensureArea = async (name: string): Promise<string | null> => {
     const key = name.toLowerCase()
@@ -332,6 +368,7 @@ export async function importEquipment(formData: FormData) {
     const areaId = row.area ? await ensureArea(row.area) : null
     const systemId = row.system ? await ensureSystem(row.system, areaId) : null
     const subsystemId = row.subsystem && systemId ? await ensureSubsystem(row.subsystem, systemId) : null
+    const typeId = hasTypes && row.type_code ? await ensureType(row.type_code) : null
 
     // A column that is NOT IN THE FILE must not be written.
     //
@@ -371,6 +408,7 @@ export async function importEquipment(formData: FormData) {
       ...ifSaid('Status', 'install_status', row.install_status),
       ...(systemId ? { system_id: systemId } : {}),
       ...(subsystemId ? { subsystem_id: subsystemId } : {}),
+      ...(typeId ? { type_id: typeId } : {}),
     }
 
     const existingId = row.id ?? existingByTag.get(row.tag_id.toLowerCase())
@@ -459,22 +497,27 @@ export async function importEquipment(formData: FormData) {
   if (systemsCreated) created.push(`${systemsCreated} system${systemsCreated === 1 ? '' : 's'}`)
   if (subsystemsCreated) created.push(`${subsystemsCreated} subsystem${subsystemsCreated === 1 ? '' : 's'}`)
   if (componentsIn) created.push(`${componentsIn} component${componentsIn === 1 ? '' : 's'}`)
+  if (typesCreated) created.push(`${typesCreated} equipment type${typesCreated === 1 ? '' : 's'}`)
 
   // A column that was in the file and could not be stored has to be said out
   // loud. Silently dropping it is how somebody spends a morning filling in
   // floors and never finds out they were thrown away.
   const floorIgnored = !hasFloor && parsed.rows.some((r) => r.floor || r.building || r.critical !== null)
+  const typesIgnored = !hasTypes && parsed.rows.some((r) => r.type_code)
 
   await recordAudit({
     projectId: project.id,
     action: 'imported equipment',
     entity: 'equipment',
     entityLabel: file.name,
-    newValue: `${inserted} added, ${updated} updated, ${removed} removed${created.length ? `, plus ${created.join(', ')}` : ''}${componentsUpdated ? `, ${componentsUpdated} component${componentsUpdated === 1 ? '' : 's'} updated` : ''}${floorIgnored ? ' — Floor column IGNORED' : ''}${orphans.length ? ` — ${orphans.length} part(s) NOT filed` : ''}`,
+    newValue: `${inserted} added, ${updated} updated, ${removed} removed${created.length ? `, plus ${created.join(', ')}` : ''}${componentsUpdated ? `, ${componentsUpdated} component${componentsUpdated === 1 ? '' : 's'} updated` : ''}${floorIgnored ? ' — Floor column IGNORED' : ''}${typesIgnored ? ' — Type column IGNORED' : ''}${orphans.length ? ` — ${orphans.length} part(s) NOT filed` : ''}`,
     comment:
       `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
       (floorIgnored
         ? ' The file has Floor, Building or Critical values and this database has nowhere to put them. Run SQL part 32 and import again — nothing else was affected.'
+        : '') +
+      (typesIgnored
+        ? ' The file has a Type column and this database has no equipment_types table. Run SQL part 35 and import again — nothing else was affected.'
         : '') +
       (orphans.length > 0
         ? ` ${orphans.length} row(s) name a "Part of tag" that is not in this project and were NOT filed: ${orphans

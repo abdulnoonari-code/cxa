@@ -68,6 +68,10 @@ const MODEL_ALIASES = ['model', 'model no', 'model number', 'type no', 'part num
 const SERIAL_ALIASES = ['serial', 'serial no', 'serial number', 'sn', 's/n']
 const STATUS_ALIASES = ['status', 'install status', 'installation status', 'delivery status', 'state']
 const REMOVE_ALIASES = ['remove', 'delete', 'drop']
+// The catalogue code this tag is one of. NOT the same as Model: model is
+// whatever text the tag list happened to carry, this is a code that resolves
+// to a catalogue entry with a rating, a manual and — later — a checklist.
+const TYPE_ALIASES = ['type', 'type code', 'equipment type', 'type id', 'catalogue', 'catalog', 'catalogue code']
 // The column that makes one sheet describe two levels.
 //
 // A row whose "Part of tag" is blank is a piece of equipment, filed under its
@@ -141,6 +145,7 @@ type Mapping = {
   status: number | null
   remove: number | null
   parent: number | null
+  type: number | null
 }
 
 function findMapping(sheet: ExcelJS.Worksheet): { mapping: Mapping | null; headingsSeen: string[] } {
@@ -182,6 +187,13 @@ function findMapping(sheet: ExcelJS.Worksheet): { mapping: Mapping | null; headi
         status: find(STATUS_ALIASES),
         remove: find(REMOVE_ALIASES),
         parent: find(PARENT_ALIASES),
+        // 'type' is in CATEGORY_ALIASES too. If one column has been taken as
+        // the category it must not also be read as the catalogue code —
+        // that would file every tag under a type named "Electrical".
+        type: (() => {
+          const t = find(TYPE_ALIASES)
+          return t !== null && t === find(CATEGORY_ALIASES) ? null : t
+        })(),
       },
       headingsSeen,
     }
@@ -211,6 +223,8 @@ export type ParsedEquipment = {
   remove: boolean
   /** The tag this is a part of. Null means it is equipment in its own right. */
   parent_tag: string | null
+  /** The catalogue code this tag is one of. Null is normal. */
+  type_code: string | null
 }
 
 export type EquipmentProblem = { row: number; column: string; value: string; message: string }
@@ -317,6 +331,7 @@ export async function parseEquipmentWorkbook(
         install_status: status ?? 'not_delivered',
         remove: TRUTHY.has(at(mapping.remove).toLowerCase()),
         parent_tag: at(mapping.parent) || null,
+        type_code: at(mapping.type) || null,
       })
     }
 
@@ -380,6 +395,7 @@ export async function parseEquipmentWorkbook(
       add(mapping.serial, 'Serial')
       add(mapping.status, 'Status')
       add(mapping.parent, 'Part of tag')
+      add(mapping.type, 'Type')
 
       return {
         rows,

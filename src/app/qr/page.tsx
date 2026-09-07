@@ -4,6 +4,7 @@ import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
 import { subjectLabel, type Subject } from '@/lib/subjects'
 import { originFrom, targetUrl, qrSvg, fluid, LABEL_SIZES, labelSize, scanNote } from '@/lib/qr'
+import { supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,11 @@ const SCOPES = [
   { value: 'component', label: 'Parts', note: 'One per part inside an item — each cubicle, each CT.' },
   { value: 'area', label: 'Areas', note: 'One per room or zone.' },
   { value: 'site', label: 'Sites', note: 'One per site.' },
+  // Not part of the asset tree — a type is a catalogue entry, not a thing
+  // installed anywhere. Its label goes on a crate, a spares shelf or the
+  // front of the O&M folder, and a scan opens the model's spec and every
+  // unit of it on the job.
+  { value: 'type', label: 'Equipment types', note: 'One per make and model — for the crate, the spares shelf, the O&M folder.' },
 ] as const
 
 export default async function QrPage({
@@ -35,7 +41,27 @@ export default async function QrPage({
   // The index is a map keyed by "type:id"; the values are every subject on
   // the project, which is what this page wants.
   const everything: Subject[] = [...index.byKey.values()]
-  const all: Subject[] = everything.filter((s) => s.type === scope)
+
+  // The catalogue is not in the subject tree, so it is fetched on its own and
+  // shaped to look like one for the rest of this page. Its label points at
+  // /equipment-types/<id> rather than /assets/... — a different address for a
+  // different kind of thing.
+  const typeCountRes = project ? await supabase.from('equipment_types').select('id').eq('project_id', project.id) : null
+  const typeCount = (typeCountRes?.data ?? []).length
+
+  const typeRes =
+    scope === 'type' && project
+      ? await supabase
+          .from('equipment_types')
+          .select('id, type_code, name')
+          .eq('project_id', project.id)
+          .order('type_code')
+      : null
+  const typeSubjects: Subject[] = ((typeRes?.data ?? []) as { id: string; type_code: string; name: string | null }[]).map(
+    (t) => ({ type: 'equipment' as const, id: t.id, code: t.type_code, name: t.name ?? t.type_code, parent: null })
+  )
+
+  const all: Subject[] = scope === 'type' ? typeSubjects : everything.filter((s) => s.type === scope)
   const needle = (q ?? '').trim().toLowerCase()
   const subjects = needle
     ? all.filter((s) => `${s.code ?? ''} ${s.name}`.toLowerCase().includes(needle))
@@ -53,7 +79,14 @@ export default async function QrPage({
   const codes = await Promise.all(
     shown.map(async (s) => ({
       subject: s,
-      svg: origin ? fluid(await qrSvg(targetUrl(origin, s), 256)) : null,
+      svg: origin
+        ? fluid(
+            await qrSvg(
+              scope === 'type' ? `${origin.replace(/\/+$/, '')}/equipment-types/${s.id}` : targetUrl(origin, s),
+              256
+            )
+          )
+        : null,
     }))
   )
 
@@ -82,7 +115,10 @@ export default async function QrPage({
           <form method="get" action="/qr">
             <div className="qr-scopes">
               {SCOPES.map((s) => {
-                const n = everything.filter((x) => x.type === s.value).length
+                const n =
+                  s.value === 'type'
+                    ? typeCount
+                    : everything.filter((x) => x.type === s.value).length
                 return (
                   <label key={s.value} className={`qr-scope${s.value === scope ? ' is-on' : ''}`}>
                     <input type="radio" name="scope" value={s.value} defaultChecked={s.value === scope} />
@@ -156,7 +192,7 @@ export default async function QrPage({
               {subject.code && subject.name !== subject.code && (
                 <div className="qr-label-name">{subject.name}</div>
               )}
-              <div className="qr-label-kind">{subjectLabel(subject.type)}</div>
+              <div className="qr-label-kind">{scope === 'type' ? 'Equipment type' : subjectLabel(subject.type)}</div>
             </div>
           </div>
         ))}

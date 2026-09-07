@@ -15,11 +15,26 @@ export async function GET() {
 
   const index = await loadSubjectIndex(project.id)
 
-  const { data: rows } = await supabase
+  // Building, floor and critical arrive with SQL parts 31 and 32. Asking for
+  // a column the database does not have fails the WHOLE query, so without the
+  // step-back an export would come back as an empty workbook on a project
+  // full of tags. Written out twice rather than built from a string: the
+  // client's types read the column list literally.
+  const withPlace = await supabase
     .from('equipment')
-    .select('id, tag_id, description, category, manufacturer, model, serial_number, location, install_status, system_id, subsystem_id')
+    .select('id, tag_id, description, category, manufacturer, model, serial_number, location, install_status, system_id, subsystem_id, building, floor, critical')
     .eq('project_id', project.id)
     .order('tag_id')
+
+  const withoutPlace = withPlace.error
+    ? await supabase
+        .from('equipment')
+        .select('id, tag_id, description, category, manufacturer, model, serial_number, location, install_status, system_id, subsystem_id')
+        .eq('project_id', project.id)
+        .order('tag_id')
+    : null
+
+  const rows = (withoutPlace ?? withPlace).data
 
   const equipment = (rows ?? []) as {
     id: string
@@ -33,6 +48,9 @@ export async function GET() {
     install_status: string | null
     system_id: string | null
     subsystem_id: string | null
+    building?: string | null
+    floor?: string | null
+    critical?: boolean | null
   }[]
 
   const label = (value: string | null, options: { value: string; label: string }[]) =>
@@ -48,13 +66,17 @@ export async function GET() {
     { header: 'Tag', key: 'tag', width: 22 },
     { header: 'Description', key: 'description', width: 46 },
     { header: 'Category', key: 'category', width: 22 },
+    { header: 'Building', key: 'building', width: 16 },
     { header: 'Area', key: 'area', width: 20 },
+    { header: 'Floor', key: 'floor', width: 12 },
     { header: 'System', key: 'system', width: 24 },
     { header: 'Subsystem', key: 'subsystem', width: 20 },
+    { header: 'Part of tag', key: 'parent', width: 20 },
     { header: 'Location', key: 'location', width: 26 },
     { header: 'Manufacturer', key: 'manufacturer', width: 22 },
     { header: 'Model', key: 'model', width: 20 },
     { header: 'Serial number', key: 'serial', width: 20 },
+    { header: 'Critical', key: 'critical', width: 11 },
     { header: 'Status', key: 'status', width: 16 },
     { header: 'Remove', key: 'remove', width: 9 },
   ]
@@ -73,14 +95,64 @@ export async function GET() {
       tag: e.tag_id,
       description: e.description ?? self?.name ?? '',
       category: label(e.category, CATEGORIES),
+      building: e.building ?? '',
       area: area ? area.code ?? area.name : '',
+      floor: e.floor ?? '',
       system: system ? system.code ?? system.name : '',
       subsystem: subsystem ? subsystem.code ?? subsystem.name : '',
       location: e.location ?? '',
       manufacturer: e.manufacturer ?? '',
       model: e.model ?? '',
       serial: e.serial_number ?? '',
+      // Three states out as well as in: Yes, No, and blank meaning nobody
+      // has decided. Writing blank as "No" here would turn an open question
+      // into a decision every time somebody exported and re-imported.
+      critical: e.critical === true ? 'Yes' : e.critical === false ? 'No' : '',
+      parent: '',
       status: label(e.install_status, INSTALL_STATUSES),
+      remove: '',
+    })
+  }
+
+  // The parts, under the tag they belong to, in the same sheet and the same
+  // shape they are imported in. An export that could not describe half the
+  // register would be an export you cannot edit and send back.
+  const { data: componentRows } = await supabase
+    .from('components')
+    .select('id, tag_id, description, category, floor, location, manufacturer, model, serial_number, critical, install_status, equipment_id')
+    .eq('project_id', project.id)
+    .order('tag_id')
+
+  const tagOf = new Map(equipment.map((e) => [e.id, e.tag_id]))
+
+  for (const c of (componentRows ?? []) as {
+    tag_id: string
+    description: string | null
+    category: string | null
+    floor: string | null
+    location: string | null
+    manufacturer: string | null
+    model: string | null
+    serial_number: string | null
+    critical: boolean | null
+    install_status: string | null
+    equipment_id: string
+  }[]) {
+    const parent = tagOf.get(c.equipment_id)
+    if (!parent) continue
+    sheet.addRow({
+      id: '',
+      tag: c.tag_id,
+      description: c.description ?? '',
+      category: label(c.category, CATEGORIES),
+      floor: c.floor ?? '',
+      parent,
+      location: c.location ?? '',
+      manufacturer: c.manufacturer ?? '',
+      model: c.model ?? '',
+      serial: c.serial_number ?? '',
+      critical: c.critical === true ? 'Yes' : c.critical === false ? 'No' : '',
+      status: label(c.install_status, INSTALL_STATUSES),
       remove: '',
     })
   }

@@ -30,6 +30,8 @@ export type SystemWithReadiness = SystemRow & {
   checkCount: number
   testCount: number
   openIssueCount: number
+  /** Tagged parts inside this system's equipment. Counted, never added to it. */
+  partCount: number
 }
 
 export type ProjectReadiness = {
@@ -194,6 +196,25 @@ export async function loadProjectReadiness(projectId: string | null): Promise<Pr
       issues.filter((i) => ids.includes(i.equipment_id))
     )
 
+  // Parts, counted per piece of equipment. Deliberately NOT added to the
+  // equipment count: a board with twelve cubicles is one piece of plant with
+  // twelve parts, and a screen that says "13 tags" has told you something
+  // untrue about the size of the job.
+  //
+  // The components table arrives with SQL part 34. Before it, this query
+  // fails and every count is zero, which is the right answer for a database
+  // that holds no parts.
+  const partsPerEquipment = new Map<string, number>()
+  if (equipmentIds.length > 0) {
+    const { data: partRows } = await supabase
+      .from('components')
+      .select('id, equipment_id')
+      .in('equipment_id', equipmentIds)
+    for (const c of (partRows ?? []) as { equipment_id: string }[]) {
+      partsPerEquipment.set(c.equipment_id, (partsPerEquipment.get(c.equipment_id) ?? 0) + 1)
+    }
+  }
+
   const withReadiness: SystemWithReadiness[] = systems.map((s) => {
     const own = equipment.filter((e) => e.system_id === s.id)
     const ids = own.map((e) => e.id)
@@ -206,6 +227,7 @@ export async function loadProjectReadiness(projectId: string | null): Promise<Pr
       openIssueCount: issues.filter(
         (i) => ids.includes(i.equipment_id) && i.status !== 'closed' && i.status !== 'verified'
       ).length,
+      partCount: ids.reduce((n, id) => n + (partsPerEquipment.get(id) ?? 0), 0),
     }
   })
 

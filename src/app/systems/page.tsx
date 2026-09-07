@@ -254,7 +254,9 @@ export default async function SystemsPage({
                   </div>
                 </div>
                 <div className="text-secondary mono" style={{ fontSize: 12.5 }}>
-                  {s.equipment.length} tags · {s.checkCount} checks · {s.testCount} tests
+                  {s.equipment.length} equipment
+                  {s.partCount > 0 ? ` · ${s.partCount} part${s.partCount === 1 ? '' : 's'}` : ''} ·{' '}
+                  {s.checkCount} checks · {s.testCount} tests
                   {s.openIssueCount > 0 ? ` · ${s.openIssueCount} open` : ''}
                 </div>
               </div>

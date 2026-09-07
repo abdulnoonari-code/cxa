@@ -127,11 +127,23 @@ export async function loadSubjectIndex(projectId: string | null): Promise<Subjec
   const equipmentIds = equipment.map((e) => e.id)
 
   if (equipmentIds.length > 0) {
-    const { data: componentRows } = await supabase
+    // The components table arrives with SQL part 34. Until it was written
+    // this query failed on every project and the error was thrown away with
+    // the result — components simply never appeared in the tree, on any
+    // screen, and nothing anywhere said why. The error is read now: a missing
+    // table is an empty list, and any OTHER failure is loud, because a
+    // components table that exists and cannot be read is a different problem
+    // and must not look like a project with no parts in it.
+    const componentRes = await supabase
       .from('components')
       .select('id, tag_id, description, equipment_id')
       .in('equipment_id', equipmentIds)
       .order('tag_id')
+
+    const componentRows = componentRes.data
+    if (componentRes.error && !/does not exist|schema cache|find the table/i.test(componentRes.error.message ?? '')) {
+      console.error('components could not be read:', componentRes.error.message)
+    }
 
     for (const c of (componentRows ?? []) as {
       id: string

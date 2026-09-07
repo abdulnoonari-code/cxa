@@ -24,6 +24,7 @@ export default async function EquipmentPage({
     import?: string
     named?: string
     open?: string
+    rows?: string
   }>
 }) {
   const {
@@ -33,6 +34,7 @@ export default async function EquipmentPage({
     import: importResult,
     named: namedProject,
     open: openProject,
+    rows: importRows,
   } = await searchParams
   const page = Math.max(1, Number(pageParam ?? '1') || 1)
   const from = (page - 1) * PAGE_SIZE
@@ -102,6 +104,24 @@ export default async function EquipmentPage({
     | null
   const error = fallback ? fallback.error : first.error
   const count = (fallback ?? first).count
+
+  // How many parts each tag on THIS page has. One query for the page, not
+  // one per row — and asked only for the hundred tags being shown.
+  //
+  // Components arrive with SQL part 34. A database without it answers with an
+  // error, which is read as "no parts anywhere" rather than being allowed to
+  // empty the register.
+  const shownIds = (rows ?? []).map((r) => r.id)
+  const partCount = new Map<string, number>()
+  if (shownIds.length > 0) {
+    const { data: parts } = await supabase
+      .from('components')
+      .select('id, equipment_id')
+      .in('equipment_id', shownIds)
+    for (const c of (parts ?? []) as { equipment_id: string }[]) {
+      partCount.set(c.equipment_id, (partCount.get(c.equipment_id) ?? 0) + 1)
+    }
+  }
 
   const total = count ?? 0
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -256,6 +276,25 @@ export default async function EquipmentPage({
         )}
       </form>
 
+      {importResult === 'nocomponents' && (
+        <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+          <strong>Nothing was imported.</strong> {importRows} row{importRows === '1' ? '' : 's'} in that file name a{' '}
+          <em>Part of tag</em>, and this database has no components table yet. Run{' '}
+          <code className="mono">week5-part34-components.sql</code> in Supabase and upload the same file again.
+          Nothing was half-imported: the boards without their cubicles would have looked finished.
+        </div>
+      )}
+      {importResult === 'orphans' && (
+        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+          <strong>{importRows} part{importRows === '1' ? ' was' : 's were'} not filed.</strong> They name a{' '}
+          <em>Part of tag</em> that is not in this project. Everything else was imported. The{' '}
+          <Link href="/audit" className="link">
+            audit trail
+          </Link>{' '}
+          lists them by row. The parent tag was not created for you — inventing a piece of plant nobody listed is
+          worse than leaving a part unfiled.
+        </div>
+      )}
       {importResult === 'wrongproject' && (
         <div className="alert alert-danger" style={{ marginBottom: 16 }}>
           <strong>Nothing was imported — that file is for a different project.</strong> Its Project column says{' '}
@@ -274,6 +313,7 @@ export default async function EquipmentPage({
               <th>Building</th>
               <th>Floor</th>
               <th>Location</th>
+              <th>Parts</th>
               <th>Status</th>
               <th style={{ minWidth: 200 }}></th>
             </tr>
@@ -297,6 +337,15 @@ export default async function EquipmentPage({
                     )}
                   </td>
                   <td style={{ fontSize: 13 }}>{item.location ?? '—'}</td>
+                  <td style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+                    {partCount.get(item.id) ? (
+                      <Link href={`/assets/equipment/${item.id}`} className="link">
+                        {partCount.get(item.id)} part{partCount.get(item.id) === 1 ? '' : 's'}
+                      </Link>
+                    ) : (
+                      <span className="text-secondary">—</span>
+                    )}
+                  </td>
                   <td>
                     <span className={installBadgeClass(item.install_status ?? '')}>
                       {installLabel(item.install_status ?? '')}
@@ -330,7 +379,7 @@ export default async function EquipmentPage({
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="empty-row">
+                <td colSpan={9} className="empty-row">
                   {total === 0 ? 'No equipment yet — import your tag list above.' : 'Nothing matches that filter.'}
                 </td>
               </tr>

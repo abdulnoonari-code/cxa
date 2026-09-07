@@ -68,6 +68,27 @@ const MODEL_ALIASES = ['model', 'model no', 'model number', 'type no', 'part num
 const SERIAL_ALIASES = ['serial', 'serial no', 'serial number', 'sn', 's/n']
 const STATUS_ALIASES = ['status', 'install status', 'installation status', 'delivery status', 'state']
 const REMOVE_ALIASES = ['remove', 'delete', 'drop']
+// The column that makes one sheet describe two levels.
+//
+// A row whose "Part of tag" is blank is a piece of equipment, filed under its
+// system. A row that names another tag is a COMPONENT of that item — the
+// breaker inside the board, the CT, the PQM, the panel. That is the "under
+// equipment can be multiple tags" level, and putting it in the same sheet is
+// deliberate: a second spreadsheet with its own template and its own rules is
+// a second thing to get wrong, and the tag list you are sent already has the
+// board and its cubicles on consecutive rows.
+const PARENT_ALIASES = [
+  'part of tag',
+  'part of',
+  'parent tag',
+  'parent',
+  'belongs to',
+  'component of',
+  'sub tag of',
+  'installed in',
+  'mounted in',
+  'within tag',
+]
 
 const TRUTHY = new Set(['y', 'yes', 'true', '1', 'x', '✓', '✔'])
 
@@ -119,6 +140,7 @@ type Mapping = {
   serial: number | null
   status: number | null
   remove: number | null
+  parent: number | null
 }
 
 function findMapping(sheet: ExcelJS.Worksheet): { mapping: Mapping | null; headingsSeen: string[] } {
@@ -159,6 +181,7 @@ function findMapping(sheet: ExcelJS.Worksheet): { mapping: Mapping | null; headi
         serial: find(SERIAL_ALIASES),
         status: find(STATUS_ALIASES),
         remove: find(REMOVE_ALIASES),
+        parent: find(PARENT_ALIASES),
       },
       headingsSeen,
     }
@@ -186,6 +209,8 @@ export type ParsedEquipment = {
   serial_number: string | null
   install_status: string
   remove: boolean
+  /** The tag this is a part of. Null means it is equipment in its own right. */
+  parent_tag: string | null
 }
 
 export type EquipmentProblem = { row: number; column: string; value: string; message: string }
@@ -291,7 +316,48 @@ export async function parseEquipmentWorkbook(
         serial_number: at(mapping.serial) || null,
         install_status: status ?? 'not_delivered',
         remove: TRUTHY.has(at(mapping.remove).toLowerCase()),
+        parent_tag: at(mapping.parent) || null,
       })
+    }
+
+    // ── The parent column, checked once the whole sheet has been read ──
+    //
+    // Only here, because a component may appear ABOVE its parent in the file
+    // — a tag list sorted alphabetically puts SUDB-Q01 before SUDB-SWGR — and
+    // a row cannot be judged against rows that have not been read yet.
+    //
+    // Two levels only: equipment, and components inside it. A component of a
+    // component is refused rather than flattened, because flattening it would
+    // silently move a part somewhere it does not belong, and nothing on any
+    // screen afterwards would show that it had been moved.
+    if (mapping.parent !== null) {
+      const byTag = new Map(rows.map((r) => [r.tag_id.toLowerCase(), r]))
+      for (const r of rows) {
+        if (!r.parent_tag) continue
+        const key = r.parent_tag.toLowerCase()
+
+        if (key === r.tag_id.toLowerCase()) {
+          errors.push({
+            row: r.row,
+            column: 'Part of tag',
+            value: r.parent_tag,
+            message: 'A tag cannot be part of itself.',
+          })
+          continue
+        }
+
+        const parent = byTag.get(key)
+        if (parent && parent.parent_tag) {
+          errors.push({
+            row: r.row,
+            column: 'Part of tag',
+            value: r.parent_tag,
+            message: `"${parent.tag_id}" is itself a part of "${parent.parent_tag}". A part cannot contain another part — put both under the equipment.`,
+          })
+        }
+        // A parent that is not in this file may already be in the register.
+        // That is checked where the register can be read, not here.
+      }
     }
 
     if (rows.length > 0 || errors.length > 0) {
@@ -313,6 +379,7 @@ export async function parseEquipmentWorkbook(
       add(mapping.model, 'Model')
       add(mapping.serial, 'Serial')
       add(mapping.status, 'Status')
+      add(mapping.parent, 'Part of tag')
 
       return {
         rows,

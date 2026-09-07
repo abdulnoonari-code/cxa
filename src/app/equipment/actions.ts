@@ -286,11 +286,40 @@ export async function importEquipment(formData: FormData) {
     return id
   }
 
+  // ── Two levels in one sheet ───────────────────────────────────────────
+  //
+  // A row with a "Part of tag" is a component of that item, not a piece of
+  // equipment. The equipment rows are done FIRST and in full, because a
+  // component's parent may be created by this same file — a tag list sorted
+  // alphabetically puts SUDB-Q01 above SUDB-SWGR.
+  const componentRows = parsed.rows.filter((r) => r.parent_tag && !r.remove)
+  const equipmentRows = parsed.rows.filter((r) => !r.parent_tag || r.remove)
+
+  // Does this database have the components table (SQL part 34)?
+  //
+  // Asked before anything is written, and a file that carries components for
+  // a database that cannot hold them is REFUSED ENTIRELY rather than half
+  // imported. Half of a tag list is worse than none: the boards would be in,
+  // the cubicles would not, and the register would look finished.
+  const componentProbe = await supabase.from('components').select('id').limit(1)
+  const hasComponents = !componentProbe.error
+
+  if (componentRows.length > 0 && !hasComponents) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'equipment import refused — no components table',
+      entity: 'equipment',
+      entityLabel: file.name,
+      comment: `The file has ${componentRows.length} row(s) with a "Part of tag" and this database has no components table. Nothing was imported. Run SQL part 34 and import the same file again.`,
+    })
+    redirect(`/equipment?import=nocomponents&rows=${componentRows.length}`)
+  }
+
   let inserted = 0
   let updated = 0
   let removed = 0
 
-  for (const row of parsed.rows) {
+  for (const row of equipmentRows) {
     if (row.remove) {
       const id = row.id ?? existingByTag.get(row.tag_id.toLowerCase())
       if (id) {
@@ -304,20 +333,42 @@ export async function importEquipment(formData: FormData) {
     const systemId = row.system ? await ensureSystem(row.system, areaId) : null
     const subsystemId = row.subsystem && systemId ? await ensureSubsystem(row.subsystem, systemId) : null
 
+    // A column that is NOT IN THE FILE must not be written.
+    //
+    // This was a real way to lose data and it took the components work to
+    // find it. The export did not carry Building, Floor or Critical; import
+    // that export back and every one of them was set to null on every tag,
+    // silently, because the code wrote each field whether or not the sheet
+    // had ever mentioned it. Somebody would have spent a morning on floors,
+    // exported to check them, re-imported, and lost the lot.
+    //
+    // The rule now: the COLUMN is the statement. A column the file does not
+    // have says nothing and the stored value is left alone. A column that is
+    // there with an empty cell does say something — the person has the column
+    // in front of them and left it blank — and clears the field.
+    const has = (label: string) => parsed.detectedColumns.includes(label)
+    const ifSaid = <T,>(label: string, key: string, value: T) => (has(label) ? { [key]: value } : {})
+
     const values = {
       tag_id: row.tag_id,
-      // Only when the column exists. Sending a column the database has never
-      // heard of does not fail that field — it fails the WHOLE row, so one
-      // spreadsheet with a Floor heading, uploaded before SQL part 31, would
-      // import nothing at all and say nothing useful about why.
-      ...(hasFloor ? { floor: row.floor, building: row.building, critical: row.critical } : {}),
-      description: row.description,
-      category: row.category,
-      location: row.location,
-      manufacturer: row.manufacturer,
-      model: row.model,
-      serial_number: row.serial_number,
-      install_status: row.install_status,
+      // Only when the database has the columns. Sending a column Postgres has
+      // never heard of does not fail that field — it fails the WHOLE row, so
+      // one spreadsheet with a Floor heading, uploaded before SQL part 31,
+      // would import nothing at all and say nothing useful about why.
+      ...(hasFloor
+        ? {
+            ...ifSaid('Floor', 'floor', row.floor),
+            ...ifSaid('Building', 'building', row.building),
+            ...ifSaid('Critical', 'critical', row.critical),
+          }
+        : {}),
+      ...ifSaid('Description', 'description', row.description),
+      ...ifSaid('Category', 'category', row.category),
+      ...ifSaid('Location', 'location', row.location),
+      ...ifSaid('Manufacturer', 'manufacturer', row.manufacturer),
+      ...ifSaid('Model', 'model', row.model),
+      ...ifSaid('Serial', 'serial_number', row.serial_number),
+      ...ifSaid('Status', 'install_status', row.install_status),
       ...(systemId ? { system_id: systemId } : {}),
       ...(subsystemId ? { subsystem_id: subsystemId } : {}),
     }
@@ -328,8 +379,78 @@ export async function importEquipment(formData: FormData) {
       await supabase.from('equipment').update(values).eq('id', existingId)
       updated += 1
     } else {
-      await supabase.from('equipment').insert({ project_id: project.id, ...values })
+      await supabase
+        .from('equipment')
+        .insert({ project_id: project.id, install_status: row.install_status, ...values })
       inserted += 1
+    }
+  }
+
+  // ── Now the components, with every parent guaranteed to exist ─────────
+  //
+  // The register is re-read rather than trusted from memory: a parent may
+  // have been created by the loop above, or may have been in the database
+  // before this file was ever opened.
+  let componentsIn = 0
+  let componentsUpdated = 0
+  const orphans: { row: number; tag: string; parent: string }[] = []
+
+  if (componentRows.length > 0) {
+    const { data: allTags } = await supabase
+      .from('equipment')
+      .select('id, tag_id')
+      .eq('project_id', project.id)
+    const tagToId = new Map(
+      ((allTags ?? []) as { id: string; tag_id: string }[]).map((e) => [e.tag_id.toLowerCase(), e.id])
+    )
+
+    const { data: existingComponents } = await supabase
+      .from('components')
+      .select('id, tag_id, equipment_id')
+      .eq('project_id', project.id)
+    const componentKey = new Map(
+      ((existingComponents ?? []) as { id: string; tag_id: string; equipment_id: string }[]).map((c) => [
+        `${c.equipment_id}|${c.tag_id.toLowerCase()}`,
+        c.id,
+      ])
+    )
+
+    for (const row of componentRows) {
+      const parentId = tagToId.get((row.parent_tag ?? '').toLowerCase())
+      if (!parentId) {
+        // Recorded, not guessed at and not silently dropped. Creating the
+        // missing board would invent a piece of plant nobody listed.
+        orphans.push({ row: row.row, tag: row.tag_id, parent: row.parent_tag ?? '' })
+        continue
+      }
+
+      // Same rule as above: a column the file does not have says nothing.
+      const has = (label: string) => parsed.detectedColumns.includes(label)
+      const ifSaid = <T,>(label: string, key: string, value: T) => (has(label) ? { [key]: value } : {})
+
+      const values = {
+        tag_id: row.tag_id,
+        ...ifSaid('Description', 'description', row.description),
+        ...ifSaid('Category', 'category', row.category),
+        ...ifSaid('Floor', 'floor', row.floor),
+        ...ifSaid('Location', 'location', row.location),
+        ...ifSaid('Manufacturer', 'manufacturer', row.manufacturer),
+        ...ifSaid('Model', 'model', row.model),
+        ...ifSaid('Serial', 'serial_number', row.serial_number),
+        ...ifSaid('Critical', 'critical', row.critical),
+        ...ifSaid('Status', 'install_status', row.install_status),
+      }
+
+      const existing = componentKey.get(`${parentId}|${row.tag_id.toLowerCase()}`)
+      if (existing) {
+        await supabase.from('components').update(values).eq('id', existing)
+        componentsUpdated += 1
+      } else {
+        await supabase
+          .from('components')
+          .insert({ project_id: project.id, equipment_id: parentId, install_status: row.install_status, ...values })
+        componentsIn += 1
+      }
     }
   }
 
@@ -337,6 +458,7 @@ export async function importEquipment(formData: FormData) {
   if (areasCreated) created.push(`${areasCreated} area${areasCreated === 1 ? '' : 's'}`)
   if (systemsCreated) created.push(`${systemsCreated} system${systemsCreated === 1 ? '' : 's'}`)
   if (subsystemsCreated) created.push(`${subsystemsCreated} subsystem${subsystemsCreated === 1 ? '' : 's'}`)
+  if (componentsIn) created.push(`${componentsIn} component${componentsIn === 1 ? '' : 's'}`)
 
   // A column that was in the file and could not be stored has to be said out
   // loud. Silently dropping it is how somebody spends a morning filling in
@@ -348,11 +470,17 @@ export async function importEquipment(formData: FormData) {
     action: 'imported equipment',
     entity: 'equipment',
     entityLabel: file.name,
-    newValue: `${inserted} added, ${updated} updated, ${removed} removed${created.length ? `, plus ${created.join(', ')}` : ''}${floorIgnored ? ' — Floor column IGNORED' : ''}`,
+    newValue: `${inserted} added, ${updated} updated, ${removed} removed${created.length ? `, plus ${created.join(', ')}` : ''}${componentsUpdated ? `, ${componentsUpdated} component${componentsUpdated === 1 ? '' : 's'} updated` : ''}${floorIgnored ? ' — Floor column IGNORED' : ''}${orphans.length ? ` — ${orphans.length} part(s) NOT filed` : ''}`,
     comment:
       `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
       (floorIgnored
         ? ' The file has Floor, Building or Critical values and this database has nowhere to put them. Run SQL part 32 and import again — nothing else was affected.'
+        : '') +
+      (orphans.length > 0
+        ? ` ${orphans.length} row(s) name a "Part of tag" that is not in this project and were NOT filed: ${orphans
+            .slice(0, 8)
+            .map((o) => `row ${o.row} "${o.tag}" → "${o.parent}"`)
+            .join('; ')}. The parent tag was not created, because inventing a piece of plant nobody listed is worse than leaving the part unfiled. Add the parent and import again.`
         : '') +
       (parsed.warnings.length > 0
         ? ` ${parsed.warnings.length} warnings: ${parsed.warnings
@@ -363,4 +491,7 @@ export async function importEquipment(formData: FormData) {
   })
 
   refresh()
+  if (orphans.length > 0) {
+    redirect(`/equipment?import=orphans&rows=${orphans.length}`)
+  }
 }

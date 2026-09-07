@@ -118,6 +118,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'Which building and floor a SYSTEM is on, in its own right — a board is on basement 1 whether or not a single tag has been loaded against it. Without it the Building and Floor columns in a systems spreadsheet are read and then thrown away.',
     probe: { table: 'systems', columns: ['building', 'floor'] },
   },
+  {
+    id: 'part34',
+    source: 'week5-part34-components.sql',
+    title: 'Components — the tags inside a tag',
+    matters:
+      'The breaker inside the board, the CT, the PQM. Without it the "Part of tag" column in an equipment spreadsheet has nowhere to go, and a file that uses it is refused rather than half imported.',
+    probe: { table: 'components', columns: ['id', 'equipment_id', 'tag_id'] },
+  },
 ]
 
 export type StepResult = {

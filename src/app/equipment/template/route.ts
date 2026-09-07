@@ -19,6 +19,7 @@ export async function GET() {
     { header: 'Floor', key: 'floor', width: 12 },
     { header: 'System', key: 'system', width: 24 },
     { header: 'Subsystem', key: 'subsystem', width: 20 },
+    { header: 'Part of tag', key: 'parent', width: 20 },
     { header: 'Location', key: 'location', width: 26 },
     { header: 'Manufacturer', key: 'manufacturer', width: 22 },
     { header: 'Model', key: 'model', width: 20 },
@@ -52,6 +53,24 @@ export async function GET() {
     floor: 'B1',
     system: 'Transformer',
     location: 'Transformer bay',
+    status: 'Received',
+  })
+  // Two parts of the transformer above, to show the level without
+  // explaining it. A person reading this sheet sees the shape immediately:
+  // blank Part of tag = plant, filled in = a piece of that plant.
+  sheet.addRow({
+    tag: 'TX-01-OLTC',
+    description: 'On-load tap changer',
+    category: 'Electrical',
+    parent: 'TX-01',
+    critical: 'Yes',
+    status: 'Received',
+  })
+  sheet.addRow({
+    tag: 'TX-01-BUCH',
+    description: 'Buchholz relay',
+    category: 'Electrical',
+    parent: 'TX-01',
     status: 'Received',
   })
   sheet.addRow({
@@ -98,6 +117,16 @@ export async function GET() {
   })
   guide.addRow({ col: 'System', meaning: 'Created if it does not exist, filed under the Area on the same row. This is how the asset tree gets built.' })
   guide.addRow({ col: 'Subsystem', meaning: 'Created if it does not exist, filed under the System on the same row. A bay, a panel, a train.' })
+  guide.addRow({
+    col: 'Part of tag',
+    meaning:
+      'LEAVE BLANK for a piece of equipment. Fill it in with another Tag from this same sheet, or one already in the project, and this row becomes a PART of that item instead — the breaker inside the board, the CT, the PQM. One sheet describes both levels: System > Equipment > Parts. Headings of Parent tag, Part of, Belongs to, Component of, Installed in or Mounted in are read as this column.',
+  })
+  guide.addRow({
+    col: '',
+    meaning:
+      'Two levels only. A part cannot contain another part — put both under the same equipment. A row naming a parent that is nowhere in the project is reported by row number and left unfiled; the parent is never invented for you.',
+  })
   guide.addRow({
     col: 'Manufacturer',
     meaning: 'The OEM. A heading of OEM, Vendor, Supplier, Maker, Make or Brand is read as this column.',

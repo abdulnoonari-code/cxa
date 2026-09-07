@@ -61,7 +61,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         ) : user ? (
           <Chrome sidebar={<Sidebar />} topbar={<TopBar />}>
             {openDoor && (
-              <div className="alert alert-danger" role="alert">
+              // no-print: this belongs on the screen, not on paper. Without
+              // it, every sheet of QR labels comes out of the printer with a
+              // red "this site is open" banner across the top of it.
+              <div className="alert alert-danger no-print" role="alert">
                 <strong>This site is open.</strong> {openDoor}
               </div>
             )}

@@ -16,6 +16,7 @@ import { punchSummary, punchHeadline, PUNCH_DEFINITIONS } from '@/lib/punch-summ
 import { punchFindings, scheduleFindings, countBy, headline } from '@/lib/site-rules'
 import { loadHierarchy } from '@/data/hierarchy'
 import ProjectSummary from '@/components/ProjectSummary'
+import { type PanelId } from '@/lib/dashboard-panels'
 
 /** One of the four punch figures, with the word that stops it being misread. */
 function Figure({
@@ -67,22 +68,36 @@ function Figure({
 export default async function DashboardCharts({
   projectId,
   project,
+  show,
 }: {
   projectId: string | null
   project: { name: string | null; target_date: string | null } | null
+  /** Which panels this person has chosen. Anything not in here is not
+   *  rendered — and, where the data is only used by that panel, not
+   *  loaded either. A simpler dashboard is also a faster one. */
+  show: PanelId[]
 }) {
+  const on = (id: PanelId) => show.includes(id)
+
+  // loadRuleInputs feeds the punch figures, the progress bars and the trend,
+  // so it is always needed. The other six are each behind one panel.
+  const wantRules = on('rules')
+  const wantTree = on('tree')
+
+  const empty = <T,>(v: T) => Promise.resolve(v)
+
   const [inputs, checkInputs, failed, scoped, lib, cov, hierarchy] = await Promise.all([
     loadRuleInputs(projectId, project),
-    loadCheckLinkInputs(projectId),
-    loadFailedChecks(projectId),
-    loadScopedChecks(projectId),
-    loadLibrary(projectId),
-    loadCoverage(projectId),
-    loadHierarchy(projectId),
+    wantRules ? loadCheckLinkInputs(projectId) : empty(null),
+    wantRules ? loadFailedChecks(projectId) : empty(null),
+    wantRules ? loadScopedChecks(projectId) : empty(null),
+    wantRules ? loadLibrary(projectId) : empty(null),
+    wantRules ? loadCoverage(projectId) : empty(null),
+    wantTree ? loadHierarchy(projectId) : empty(null),
   ])
   const today = new Date()
 
-  const findings = [
+  const findings = !wantRules || !checkInputs || !failed || !scoped || !lib || !cov ? [] : [
     ...punchFindings(inputs.punch, inputs.checks, today),
     ...scheduleFindings(
       {
@@ -144,12 +159,13 @@ export default async function DashboardCharts({
           punch list answers "what went wrong" before "how far through are
           we", and the second question is the one asked first in every
           progress meeting. */}
-      <ProjectSummary nodes={hierarchy} />
+      {on('tree') && hierarchy && <ProjectSummary nodes={hierarchy} />}
 
       {/* ── The punch list, defined ──────────────────────────────────────
           Four figures, each with the sentence that stops it being read two
           ways, and the categories underneath so "priority" is a number
           somebody can act on rather than a colour on a bar. */}
+      {on('punch') && (
       <section className="card" style={{ marginTop: 16 }}>
         <div
           style={{
@@ -241,7 +257,9 @@ export default async function DashboardCharts({
           </div>
         )}
       </section>
+      )}
 
+      {(on('progress') || on('punch')) && (
       <div
         style={{
           display: 'grid',
@@ -250,6 +268,7 @@ export default async function DashboardCharts({
           marginTop: 16,
         }}
       >
+        {on('progress') && (
         <ChartFrame
           title="Progress by level"
           href="/plan"
@@ -271,7 +290,9 @@ export default async function DashboardCharts({
             emptyNote="No checks yet. Upload a checklist or a functional test script and this fills in."
           />
         </ChartFrame>
+        )}
 
+        {on('punch') && (
         <ChartFrame
           title="Punch list by priority"
           href="/issues"
@@ -293,16 +314,22 @@ export default async function DashboardCharts({
             emptyNote="No punch items yet."
           />
         </ChartFrame>
+        )}
       </div>
+      )}
 
+      {(on('catchup') || on('rules')) && (
       <div
         style={{
           display: 'grid',
           gap: 16,
-          gridTemplateColumns: 'minmax(340px, 2fr) minmax(260px, 1fr)',
+          /* auto-fit, not a fixed 2fr/1fr: with one of the two hidden, a
+             fixed pair leaves an empty column beside a stretched chart. */
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
           marginTop: 16,
         }}
       >
+        {on('catchup') && (
         <ChartFrame
           title="Raised against closed"
           href="/issues"
@@ -325,7 +352,9 @@ export default async function DashboardCharts({
           />
           <p style={{ margin: '10px 0 0', fontSize: 13, fontWeight: 600 }}>{trendReading(trend)}</p>
         </ChartFrame>
+        )}
 
+        {on('rules') && (
         <ChartFrame
           title="Rule checks"
           href="/rules"
@@ -353,7 +382,9 @@ export default async function DashboardCharts({
             {n.warning} worth a look, {n.note} noted.
           </p>
         </ChartFrame>
+        )}
       </div>
+      )}
     </>
   )
 }

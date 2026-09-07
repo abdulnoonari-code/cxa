@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { cookies } from 'next/headers'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { getActor } from '@/lib/audit'
@@ -22,6 +23,9 @@ import {
 import DashboardCharts from '@/components/DashboardCharts'
 import RuleSummary from '@/components/RuleSummary'
 import { loadAllFindings } from '@/data/all-findings'
+import PanelChooser from '@/components/PanelChooser'
+import PanelHead from '@/components/PanelHead'
+import { PANEL_COOKIE, readPanels } from '@/lib/dashboard-panels'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,6 +104,10 @@ function HealthRow({
 export default async function CommandCenter() {
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
+
+  // Which panels this browser has asked for. No cookie means somebody who has
+  // never chosen, and they get the standard four rather than all ten.
+  const show = readPanels((await cookies()).get(PANEL_COOKIE)?.value)
 
   const index = await loadSubjectIndex(project?.id ?? null)
   const rollup = await loadProjectRollup(project?.id ?? null, index)
@@ -197,11 +205,15 @@ export default async function CommandCenter() {
   // The free rules, on the screen people actually open. Loaded here rather
   // than inside the component because a component that fetches its own data
   // cannot be rendered by a test without a database.
-  const rules = await loadAllFindings(project ?? null)
+  // Only for the panel that shows them. On the standard four this is not
+  // loaded at all — the point of a simpler dashboard is partly that it is a
+  // faster one.
+  const rules = show.includes('rules') ? await loadAllFindings(project ?? null) : null
 
   return (
     <>
       {/* ── Hero ─────────────────────────────────────────────────── */}
+      {show.includes('headline') && (
       <section className="hero rise rise-1">
         <HeroScene />
         <div className="hero-scrim" />
@@ -250,27 +262,49 @@ export default async function CommandCenter() {
           )}
         </div>
       </section>
+      )}
 
-      <DashboardCharts projectId={project?.id ?? null} project={project ?? null} />
+      {/* The chooser sits under the headline and above everything it
+          controls, so the thing you change is next to the thing that
+          changes. One line tall until it is opened. */}
+      <PanelChooser chosen={show} />
+
+      {show.length === 0 && (
+        <p className="panel-empty">
+          Every panel is hidden. That is a choice this page will keep — nothing has been reset behind your back.
+          Open <strong>Choose what you see</strong> above to put some back.
+        </p>
+      )}
+
+      <DashboardCharts projectId={project?.id ?? null} project={project ?? null} show={show} />
 
       {/* ── What the rules found ─────────────────────────────────── */}
-      <h2 className="section-title" style={{ marginTop: 30 }}>
-        What the checks found
-      </h2>
-      <p className="text-secondary" style={{ fontSize: 13, marginTop: -6, marginBottom: 12 }}>
-        Rules run over the records every time this page opens. They say what could not be verified by somebody who
-        was not there — not that the work was done badly.
-      </p>
-      <RuleSummary findings={rules.findings} counts={rules.counts} linked />
+      {show.includes('rules') && rules && (
+        <>
+          <PanelHead id="rules" />
+          <RuleSummary findings={rules.findings} counts={rules.counts} linked />
+        </>
+      )}
 
       {/* ── What to do today ─────────────────────────────────────── */}
-      <h2 className="section-title" style={{ marginTop: 30 }}>
-        {firstName ? `What needs you, ${firstName}` : 'What needs attention'}
-      </h2>
-      <p className="text-secondary" style={{ fontSize: 13, marginTop: -6 }}>
-        Ordered by what it costs to leave it alone. Every line comes from a record — fix the record and the line
-        disappears by itself. There is nothing here to tick off.
-      </p>
+      {show.includes('actions') && (
+      <>
+      <div className="panel-head">
+        <div className="panel-head-row">
+          <h2 className="section-title" style={{ margin: 0 }}>
+            {firstName ? `What needs you, ${firstName}` : 'What needs attention'}
+          </h2>
+          <div className="panel-head-links">
+            <Link href="/checklists" className="link">
+              Checklists →
+            </Link>
+          </div>
+        </div>
+        <p className="panel-head-means">
+          Ordered by what it costs to leave it alone. Every line comes from a record — fix the record and the line
+          disappears by itself. There is nothing here to tick off.
+        </p>
+      </div>
 
       {actions.length === 0 ? (
         <div className="alert alert-info">
@@ -326,11 +360,13 @@ export default async function CommandCenter() {
           )
         })
       )}
+      </>
+      )}
 
       {/* ── Health across the lifecycle ──────────────────────────── */}
-      <h2 className="section-title" style={{ marginTop: 30 }}>
-        Where the project stands
-      </h2>
+      {show.includes('health') && (
+      <>
+      <PanelHead id="health" />
 
       <div className="card">
         {dimensions.map((d) => (
@@ -342,13 +378,13 @@ export default async function CommandCenter() {
           than a gap in the software. Only the tracked areas count towards the project figure.
         </p>
       </div>
+      </>
+      )}
 
       {/* ── Systems ──────────────────────────────────────────────── */}
-      {topLevel.length > 0 && (
+      {show.includes('toplevel') && topLevel.length > 0 && (
         <>
-          <h2 className="section-title" style={{ marginTop: 30 }}>
-            Top level
-          </h2>
+          <PanelHead id="toplevel" />
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -402,11 +438,9 @@ export default async function CommandCenter() {
       )}
 
       {/* ── Gates ────────────────────────────────────────────────── */}
-      {gates.length > 0 && (
+      {show.includes('gates') && gates.length > 0 && (
         <>
-          <h2 className="section-title" style={{ marginTop: 30 }}>
-            Gates
-          </h2>
+          <PanelHead id="gates" />
           <div className="table-wrap">
             <table className="table">
               <thead>

@@ -1538,3 +1538,156 @@ textarea.input {
   font-size: 12.5px;
   color: var(--color-text-secondary);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CHOOSE WHAT YOU SEE
+   ═══════════════════════════════════════════════════════════════════
+
+   The dashboard answers ten questions and no one person wants all ten.
+   The chooser has to be findable and must not itself add clutter, so
+   it is one line tall until it is opened. */
+
+.panel-chooser {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  margin: 18px 0;
+}
+
+.panel-chooser > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 18px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+
+.panel-chooser > summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-chooser-count {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.panel-chooser-cue {
+  color: var(--color-primary);
+  font-weight: 550;
+}
+
+.panel-chooser[open] > summary {
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.panel-chooser-body {
+  padding: 16px 18px 18px;
+}
+
+/* Two columns where there is room. Ten options in one column is a scroll;
+   ten in three columns is a wall. */
+.panel-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px 22px;
+}
+
+.panel-choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.panel-choice:hover {
+  border-color: var(--color-border);
+  background: var(--color-neutral-bg);
+}
+
+.panel-choice input {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: var(--color-primary);
+}
+
+.panel-choice-label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.panel-choice-tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-neutral-bg);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.panel-choice-means {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+/* ── A panel's own head ─────────────────────────────────────────────
+   Title, the sentence that defines it, and the way through to the
+   records. Every panel, the same shape. */
+
+.panel-head {
+  margin: 30px 0 12px;
+}
+
+.panel-head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.panel-head-links {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.panel-head-means {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  max-width: 78ch;
+}
+
+/* Said once, when the person has hidden everything. Not an error — a
+   deliberate choice, honoured, with the way back in the same sentence. */
+.panel-empty {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius);
+  padding: 26px 22px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13.5px;
+}

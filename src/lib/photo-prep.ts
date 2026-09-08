@@ -1,3 +1,4 @@
+import { pathFromPublicUrl, FILE_ROUTE } from '@/lib/file-url'
 // Getting photographs into a document without producing a file nobody can send.
 //
 // A handover pack with a defect photo on it is exactly what a client asks for.
@@ -162,6 +163,51 @@ export async function shrink(bytes: ArrayBuffer, contentType: string): Promise<{
   }
 }
 
+/**
+ * The storage path this photograph lives at, however the row spells it.
+ *
+ * `path` when the row has one. Otherwise recovered from the URL column,
+ * which has held three different things over the life of this application:
+ * a public Supabase address (before update 90), and `/file/<path>` after
+ * it. BOTH are storage paths wearing a coat, and both must come back as
+ * the path so the bytes are fetched with the server key.
+ *
+ * ── Why this had to be added ─────────────────────────────────────────────
+ *
+ * The fallback under this used to `fetch(source.url)` over HTTP, and after
+ * update 90 that was dead in both directions. A `/file/...` address is
+ * RELATIVE, and fetch inside a serverless function has no page to be
+ * relative to, so it throws. And the old public addresses stopped
+ * answering the moment the bucket was made private.
+ *
+ * Neither failure was loud. A photograph that cannot be fetched is left
+ * out of the document with a line of text where the picture should be — so
+ * a handover pack would have gone to a client with its evidence missing
+ * and nothing shouting about it. That is the exact failure this whole
+ * application exists to prevent.
+ */
+export function storagePathOf(source: { path?: string | null; url?: string | null }): string | null {
+  const direct = (source.path ?? '').trim()
+  if (direct) return direct
+
+  const url = (source.url ?? '').trim()
+  if (!url) return null
+
+  // Already gated: /file/<encoded path>
+  if (url === FILE_ROUTE || url.startsWith(`${FILE_ROUTE}/`)) {
+    const rest = url.slice(FILE_ROUTE.length + 1).split('?')[0]
+    if (!rest) return null
+    try {
+      return decodeURIComponent(rest)
+    } catch {
+      return rest
+    }
+  }
+
+  // A public or signed Supabase address written before update 90.
+  return pathFromPublicUrl(url)
+}
+
 export type PhotoSource = {
   /** The path inside the storage bucket. Preferred — see `fetchBytes`. */
   path?: string | null
@@ -196,18 +242,28 @@ export async function fetchBytes(
   source: PhotoSource,
   download: (path: string) => Promise<{ data: Blob | null; error: unknown }>
 ): Promise<{ ok: true; bytes: ArrayBuffer } | { ok: false; reason: string }> {
-  if (source.path) {
+  // Anything of ours — a path, a gated /file address, or a legacy public
+  // one — is fetched with the server key. No HTTP at all.
+  const path = storagePathOf(source)
+  if (path) {
     try {
-      const { data } = await download(source.path)
+      const { data } = await download(path)
       if (data) return { ok: true, bytes: await data.arrayBuffer() }
+      return { ok: false, reason: 'That photograph is not in storage. It may have been deleted.' }
     } catch {
-      // Fall through to the URL. A storage client that throws is not a reason
-      // to give up on a photograph that also has a working public link.
+      return { ok: false, reason: 'The photograph could not be read from storage.' }
     }
   }
 
   if (!source.url) {
     return { ok: false, reason: 'No file was stored for this photograph.' }
+  }
+
+  // Only a genuinely external link reaches here — something a person
+  // pasted, pointing at somebody else's server. Ours never do, which is
+  // why a relative /file address can no longer end up in fetch().
+  if (!/^https?:\/\//i.test(source.url)) {
+    return { ok: false, reason: 'That photograph has no usable address.' }
   }
 
   try {

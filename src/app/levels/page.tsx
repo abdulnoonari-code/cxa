@@ -100,6 +100,12 @@ export default async function LevelsPage() {
         number here opens the list behind it.
       </p>
 
+      <div className="no-print" style={{ marginBottom: 18 }}>
+        <Link href="/project/configuration" className="btn btn-secondary">
+          Which levels apply to this project?
+        </Link>
+      </div>
+
       {schemaNote && (
         <div className="alert alert-warning" role="alert" style={{ marginBottom: 18 }}>
           {schemaNote}
@@ -152,7 +158,18 @@ export default async function LevelsPage() {
             </thead>
             <tbody>
               {summary.rows.map((row) => (
-                <tr key={row.key} className={row.orphan ? 'lv-orphan' : row.untouched ? 'lv-untouched' : undefined}>
+                <tr
+                  key={row.key}
+                  className={
+                    row.orphan
+                      ? 'lv-orphan'
+                      : row.outOfScope
+                        ? 'lv-outofscope'
+                        : row.untouched
+                          ? 'lv-untouched'
+                          : undefined
+                  }
+                >
                   <td>
                     <div className="lv-level">
                       <span
@@ -166,7 +183,12 @@ export default async function LevelsPage() {
                         {row.code}
                       </span>
                       <div>
-                        <div className="lv-label">{row.label.replace(/^L\d\s*—\s*/, '')}</div>
+                        <div className="lv-label">
+                          {row.label.replace(/^L\d\s*—\s*/, '')}
+                          {/* Marked, never removed. The row, its counts and
+                              the totals all still include this level. */}
+                          {row.outOfScope && <span className="lv-scope-tag">out of scope</span>}
+                        </div>
                         <div className="lv-verdict">{row.verdict}</div>
                       </div>
                     </div>

@@ -55,6 +55,12 @@ export const NAV: NavSection[] = [
           { href: '/milestones', label: 'Milestones & Timeline', icon: 'milestone', note: 'The dated commitments the plan is measured against, on a timeline.' },
           { href: '/gates', label: 'Gates', icon: 'gate', note: 'The stage gates, what each one requires, and whether the evidence stands up.' },
           { href: '/plan', label: 'Plan & Progress', icon: 'plan', note: 'Progress by commissioning level, L1 through L5.' },
+          {
+            href: '/project/configuration',
+            label: 'Configuration',
+            icon: 'settings',
+            note: 'What this job actually commissions — which levels, which disciplines, against which standards. Not the Setup screen: that one checks the database, this one describes the work.',
+          },
         ],
       },
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', note: 'What needs attention today, across the whole project.' },

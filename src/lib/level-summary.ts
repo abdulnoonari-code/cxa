@@ -93,6 +93,15 @@ const EMPTY: Counts = { total: 0, open: 0, overdue: 0, done: 0, flagged: 0, perc
 
 export type LevelRow = {
   key: string
+  /**
+   * This project says it does not plan to do this level.
+   *
+   * It is a statement about intent, never a filter: the row is still
+   * shown, its records are still counted, and the totals still include
+   * them. All this does is stop an untouched out-of-scope level being read
+   * as work outstanding — which is the whole reason somebody turned it off.
+   */
+  outOfScope: boolean
   /** 'L3', or 'No level'. */
   code: string
   /** The full name, for the row heading and the hover. */
@@ -158,9 +167,21 @@ export function levelVerdict(row: {
   code: string
   orphan: boolean
   untouched: boolean
+  outOfScope?: boolean
   tasks: Counts
   issues: Counts
 }): string {
+  // Out of scope AND empty is the ordinary, correct case for a level this
+  // job was never going to do. Out of scope WITH records is not: those
+  // records are real and the sentence has to say so rather than let the
+  // setting quietly absorb them.
+  if (row.outOfScope && row.untouched) return 'Not in this project’s scope. Nothing recorded, and none expected.'
+  if (row.outOfScope) {
+    const n = row.tasks.total + row.issues.total
+    return `Not in this project’s scope, but ${n} record${n === 1 ? '' : 's'} already exist${
+      n === 1 ? 's' : ''
+    } here — still open, still counted, not hidden.`
+  }
   if (row.orphan) {
     return `${row.tasks.total + row.issues.total} record${
       row.tasks.total + row.issues.total === 1 ? '' : 's'
@@ -182,13 +203,24 @@ export function levelVerdict(row: {
   return 'Everything raised at this level is closed out.'
 }
 
-export function buildLevelSummary(tasks: TaskLike[], issues: IssueLike[], today: string): LevelSummary {
+export function buildLevelSummary(
+  tasks: TaskLike[],
+  issues: IssueLike[],
+  today: string,
+  /** Levels this project plans to do. Undefined means all of them — the
+   *  safe direction, because a missing configuration must never look like
+   *  a narrowed one. */
+  levelsInScope?: string[]
+): LevelSummary {
   const keys = [...LEVELS.map((l) => l.value), NO_LEVEL]
   const bucket = (v: string | null) => (v && LEVELS.some((l) => l.value === v) ? v : NO_LEVEL)
+
+  const scope = levelsInScope && levelsInScope.length > 0 ? new Set(levelsInScope) : null
 
   const rows: LevelRow[] = []
   for (const key of keys) {
     const orphan = key === NO_LEVEL
+    const outOfScope = !orphan && scope !== null && !scope.has(key)
     const t = tasks.filter((x) => bucket(x.level) === key)
     const i = issues.filter((x) => bucket(x.level) === key)
 
@@ -201,13 +233,14 @@ export function buildLevelSummary(tasks: TaskLike[], issues: IssueLike[], today:
     const code = orphan ? 'No level' : levelCode(key)
     rows.push({
       key,
+      outOfScope,
       code,
       label: orphan ? 'No level recorded' : LEVELS.find((l) => l.value === key)?.label ?? key,
       tone: levelTone(orphan ? null : key),
       orphan,
       untouched,
       ...counts,
-      verdict: levelVerdict({ code, orphan, untouched, ...counts }),
+      verdict: levelVerdict({ code, orphan, untouched, outOfScope, ...counts }),
     })
   }
 

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { buildLevelSummary, type LevelSummary, type TaskLike, type IssueLike } from '@/lib/level-summary'
 import { selectWithFallback } from '@/lib/pg-columns'
+import { loadProjectConfig } from '@/data/project-config'
 
 export type LevelSummaryLoad = {
   summary: LevelSummary
@@ -24,7 +25,7 @@ export async function loadLevelSummary(projectId: string | null, today: string):
   if (!projectId)
     return { summary: buildLevelSummary([], [], today), missing: [], error: null }
 
-  const [taskRes, issueRes] = await Promise.all([
+  const [taskRes, issueRes, cfg] = await Promise.all([
     selectWithFallback<TaskLike>(['level', 'status', 'due_date'], async (cols) => {
       const r = await supabase.from('tasks').select(cols.join(', ')).eq('project_id', projectId)
       return { data: r.data as unknown as TaskLike[] | null, error: r.error }
@@ -33,6 +34,7 @@ export async function loadLevelSummary(projectId: string | null, today: string):
       const r = await supabase.from('issues').select(cols.join(', ')).eq('project_id', projectId)
       return { data: r.data as unknown as IssueLike[] | null, error: r.error }
     }),
+    loadProjectConfig(projectId),
   ])
 
   // A row that came back without a `level` column has no level, which is
@@ -48,7 +50,7 @@ export async function loadLevelSummary(projectId: string | null, today: string):
   }))
 
   return {
-    summary: buildLevelSummary(tasks, issues, today),
+    summary: buildLevelSummary(tasks, issues, today, cfg.config.levels),
     missing: Array.from(new Set([...taskRes.missing, ...issueRes.missing])),
     error: taskRes.error ?? issueRes.error,
   }

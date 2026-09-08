@@ -56,6 +56,9 @@ export default async function ProjectPage() {
             <Link href="/plan" className="link">
               Plan &amp; Progress →
             </Link>
+            <Link href="/project/configuration" className="link">
+              Configuration →
+            </Link>
           </div>
         </div>
         <p className="panel-head-means">

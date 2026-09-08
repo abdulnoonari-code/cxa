@@ -14,6 +14,7 @@ import {
   claimsApproval,
   tooLittleText,
 } from '@/lib/document-review'
+import { storedBytes } from '@/data/stored-bytes'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -107,19 +108,12 @@ export async function assessAttachment(formData: FormData) {
 
   // Fetch the bytes. Storage path first, the same reasoning as photographs:
   // it works whether the bucket is public or private.
-  let bytes: ArrayBuffer | null = null
-  if (row.file_path) {
-    const { data: blob } = await supabase.storage.from('documents').download(row.file_path)
-    if (blob) bytes = await blob.arrayBuffer()
-  }
-  if (!bytes && row.file_url) {
-    try {
-      const res = await fetch(row.file_url, { cache: 'no-store' })
-      if (res.ok) bytes = await res.arrayBuffer()
-    } catch {
-      bytes = null
-    }
-  }
+  // One way in, and it never uses HTTP. The fallback that used to sit here
+  // fetched row.file_url, which after update 90 is a RELATIVE /file address
+  // that fetch cannot resolve — and before that was a public address that
+  // stopped answering when the bucket was closed. It failed silently both
+  // ways: the screen just said there was no file.
+  const bytes: ArrayBuffer | null = await storedBytes(row)
   if (!bytes) redirect(back('assess=nofile'))
 
   const extraction = await extractDocument(bytes, fileName)

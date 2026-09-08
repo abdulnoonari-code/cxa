@@ -26,6 +26,8 @@ import {
   REVIEW_SYSTEM,
   type PhotoKind,
 } from '@/lib/photo'
+import { FILE_ROUTE, encodePath } from '@/lib/file-url'
+import { storedBytes } from '@/data/stored-bytes'
 
 function refresh(issueId?: string) {
   revalidatePath('/issues')
@@ -80,7 +82,9 @@ export async function uploadIssuePhoto(formData: FormData) {
   })
   if (uploadError) redirect(back(issueId, `photo=upload&reason=${encodeURIComponent(uploadError.message)}`))
 
-  const { data: publicUrl } = supabase.storage.from('documents').getPublicUrl(path)
+  // NOT getPublicUrl — see src/lib/file-url.ts. A site photograph behind a
+  // link that needs no sign-in is a client's site open to anybody.
+  const publicUrl = { publicUrl: `${FILE_ROUTE}/${encodePath(path)}` }
 
   const { error } = await supabase.from('issue_photos').insert({
     project_id: project.id,
@@ -139,15 +143,12 @@ export async function deleteIssuePhoto(formData: FormData) {
 
 // ── Asking the AI to look ────────────────────────────────────────────────
 
-async function fetchBytes(url: string): Promise<ArrayBuffer | null> {
-  try {
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) return null
-    return await res.arrayBuffer()
-  } catch {
-    return null
-  }
-}
+// Removed: a local fetchBytes(url) that pulled the photograph over HTTP.
+// After update 90 the URL column holds a RELATIVE /file address, which
+// fetch inside a serverless function cannot resolve, and the public
+// addresses it used to hold stopped answering when the bucket was closed.
+// Both failures were silent — the AI panel simply said it could not read
+// the photograph. storedBytes() reads it with the server key instead.
 
 /**
  * Ask Claude what it can see in one photograph.
@@ -183,7 +184,7 @@ export async function reviewIssuePhoto(formData: FormData) {
     ref?: string | null
   }
 
-  const bytes = await fetchBytes(photo.file_url)
+  const bytes = await storedBytes(photo)
   if (!bytes) redirect(back(issueId, 'ai=unreachable'))
 
   const outcome = await askAboutImages({
@@ -288,7 +289,7 @@ export async function comparePhotos(formData: FormData) {
     .single()
   const issue = (issueRow ?? {}) as { title?: string; description?: string | null }
 
-  const [defectBytes, fixBytes] = await Promise.all([fetchBytes(defect.file_url), fetchBytes(fix.file_url)])
+  const [defectBytes, fixBytes] = await Promise.all([storedBytes(defect), storedBytes(fix)])
   if (!defectBytes || !fixBytes) redirect(back(issueId, 'ai=unreachable'))
 
   const outcome = await askAboutImages({

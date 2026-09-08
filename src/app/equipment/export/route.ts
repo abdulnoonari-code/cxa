@@ -4,12 +4,15 @@ import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
 import { ancestorsOf, getSubject } from '@/lib/subjects'
 import { CATEGORIES, INSTALL_STATUSES } from '@/app/equipment/styles'
+import { requireAccess } from '@/data/require-access'
 
 // The project's tag list, laid out so it can be edited in Excel and imported
 // straight back. The System / Subsystem / Area columns are written out as
 // names, and read back the same way — so moving a tag between systems is a
 // cell edit rather than a database job.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

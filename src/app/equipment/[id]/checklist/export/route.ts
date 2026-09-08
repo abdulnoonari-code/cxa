@@ -1,11 +1,14 @@
 import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase'
 import { LEVELS, STATUSES } from '@/lib/checklist'
+import { requireAccess } from '@/data/require-access'
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const refused = await requireAccess()
+  if (refused) return refused
   const { id } = await params
 
   const { data: equipment } = await supabase

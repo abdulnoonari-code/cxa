@@ -1,12 +1,15 @@
 import ExcelJS from 'exceljs'
 import { LEVELS, STATUSES } from '@/lib/checklist'
 import { INSPECTION_TYPES } from '@/lib/inspection'
+import { requireAccess } from '@/data/require-access'
 
 // A blank checklist in the same shape the export comes out in, so the two are
 // the same file and there is only one format to learn. Three worked rows, one
 // per common case: a check against a tag, a check against a system, and a hold
 // point.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

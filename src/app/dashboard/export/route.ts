@@ -4,6 +4,7 @@ import { levelProgress, punchTrend } from '@/lib/dashboard-charts'
 import { punchSummary, PUNCH_DEFINITIONS } from '@/lib/punch-summary'
 import { loadHierarchy } from '@/data/hierarchy'
 import { devicePercent, systemPercent, sumCells, HIERARCHY_NOTE } from '@/lib/hierarchy'
+import { requireAccess } from '@/data/require-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,8 @@ function stamp(): string {
 }
 
 export async function GET(request: Request) {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
   if (!project) return new Response('No project is open.', { status: 400 })
 

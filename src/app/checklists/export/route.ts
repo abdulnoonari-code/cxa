@@ -5,12 +5,15 @@ import { LEVELS, STATUSES } from '@/lib/checklist'
 import { INSPECTION_TYPES } from '@/lib/inspection'
 import { loadSubjectIndex } from '@/data/subjects'
 import { refKey, subjectLabel, type Subject } from '@/lib/subjects'
+import { requireAccess } from '@/data/require-access'
 
 // The whole project's checklist in one workbook — and the same workbook goes
 // back in. The first eight columns are what the importer reads; everything
 // after them is reporting, and is ignored on the way back. The CXA ID is what
 // makes a re-import an update instead of six thousand duplicates.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

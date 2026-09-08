@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs'
 import { getCurrentProject } from '@/lib/project'
 import { loadAssetReport } from '@/data/asset-report'
+import { requireAccess } from '@/data/require-access'
 
 // The asset report as a workbook, so it can go in a monthly pack or be
 // pasted into somebody else's format.
@@ -9,6 +10,8 @@ import { loadAssetReport } from '@/data/asset-report'
 // this should meet the rows that will make another screen wrong before
 // they meet the pie-chart material.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

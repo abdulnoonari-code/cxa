@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import { LEVELS } from '@/lib/checklist'
+import { requireAccess } from '@/data/require-access'
 
 // The blank test script.
 //
@@ -8,6 +9,8 @@ import { LEVELS } from '@/lib/checklist'
 // delete the three rows and start typing.
 
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

@@ -2,10 +2,13 @@ import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { CATEGORIES } from '@/app/equipment/styles'
+import { requireAccess } from '@/data/require-access'
 
 // The catalogue as it stands, in the same shape the importer reads — so it
 // can be edited in Excel and sent straight back.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

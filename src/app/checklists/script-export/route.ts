@@ -5,6 +5,7 @@ import { loadSubjectIndex } from '@/data/subjects'
 import { getSubject } from '@/lib/subjects'
 import { LEVELS } from '@/lib/checklist'
 import { answerWords } from '@/lib/script-io'
+import { requireAccess } from '@/data/require-access'
 
 // The whole project as a test script, in the same shape the template comes in.
 //
@@ -15,6 +16,8 @@ import { answerWords } from '@/lib/script-io'
 // It round-trips: an export that goes straight back in changes nothing.
 
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
 
   const wb = new ExcelJS.Workbook()

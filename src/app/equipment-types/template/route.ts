@@ -1,9 +1,12 @@
 import ExcelJS from 'exceljs'
 import { CATEGORIES } from '@/app/equipment/styles'
+import { requireAccess } from '@/data/require-access'
 
 // A blank catalogue with four worked rows, so a new project has something to
 // type over rather than a format to guess at.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

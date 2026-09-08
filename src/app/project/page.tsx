@@ -63,9 +63,9 @@ export default async function ProjectPage() {
           through both. Anything without a date is listed underneath rather than placed at a guess.
         </p>
       </div>
-      <div className="tl-wrap">
-        <TimelineChart timeline={timeline} />
-      </div>
+      {/* No wrapper. The sideways scroll for narrow screens now lives
+          inside the component, where the thing that needs to scroll is. */}
+      <TimelineChart timeline={timeline} />
 
       <div className="card" style={{ marginTop: 20 }}>
         <h2 className="section-title">Project details</h2>

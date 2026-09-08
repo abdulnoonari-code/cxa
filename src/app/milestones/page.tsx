@@ -49,9 +49,7 @@ export default async function MilestonesPage() {
             screen with is "where are we against the dates", and the answer
             should not be below a data-entry form. */}
         <h2 className="section-title">The dates, on one line</h2>
-        <div className="tl-wrap">
-          <TimelineChart timeline={timeline} />
-        </div>
+        <TimelineChart timeline={timeline} />
 
         <div className="card" style={{ marginTop: 20 }}>
           <h2 className="section-title">Add milestone</h2>

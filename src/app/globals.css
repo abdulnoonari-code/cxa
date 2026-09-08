@@ -1923,183 +1923,281 @@ textarea.input {
    THE TIMELINE
    ═══════════════════════════════════════════════════════════════════
 
-   One line of time. Gates fly above it as flags, milestones hang below
-   as diamonds, today is a vertical line through both.
+   One line of time. Gates fly above it as flags, milestones hang below as
+   diamonds, today is a dashed line through both.
 
-   Laid out in percentages against a positioned track, so it reflows with
-   the card rather than being drawn at a fixed width. Marks are absolutely
-   positioned and translated back by half their own width, which is what
-   puts the POINT of the flag on the date rather than its left edge. */
+   The layout rule that matters: A GLYPH AND ITS LABEL ARE TWO SEPARATE
+   THINGS. The glyph is positioned on its date and never moves. The label
+   is positioned wherever it fits and is joined back to the glyph by a
+   leader line. The first version made each mark one centred column, and
+   both of its defects came from that: nudging a label sideways dragged the
+   flag off its date, and a label near either end was clipped by the card.
+
+   Everything is in percentages against a positioned track, so it reflows
+   with the card rather than being drawn at a fixed width. */
+
+/* On a phone the labels collide long before the dates do, so the track
+   keeps a workable width and the card scrolls sideways instead. */
+.tl-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
 
 .tl {
   position: relative;
-  padding: 4px 0 2px;
-  /* The marks near the ends hang outside the track. Without room for them
-     the first and last labels are clipped by the card. */
-  margin: 0 46px;
+  /* Room above the chart for the TODAY pill to sit clear of everything. */
+  padding-top: 19px;
+  /* Wide enough that a label has room for real words. At 560 a label was
+     64px and every name on a phone came out as "Pre-commiss…", which is
+     not a chart, it is a puzzle. The card scrolls sideways instead. */
+  min-width: 900px;
+  /* Local to the chart: a stripe has to be lighter than any badge or state
+     tint in the palette, because a mark sits on top of it and the mark's
+     colour is the thing carrying the meaning. */
+  --tl-band-tint: #f4f7fd;
 }
 
 .tl-lane {
   position: relative;
+  z-index: 2;
 }
 
-/* Set by the component from how many rows the plan actually needs. The
-   fallbacks are the one-row case. */
+/* Set by the component from how many rows of labels the plan actually
+   needs. The fallbacks are the one-row case. */
 .tl-lane-gates {
-  height: var(--tl-gate-lane, 104px);
+  height: var(--tl-gate-lane, 62px);
 }
 
 .tl-lane-milestones {
-  height: var(--tl-milestone-lane, 80px);
+  height: var(--tl-milestone-lane, 62px);
 }
+
+/* ── Month stripes ───────────────────────────────────────────────────
+   Alternate periods tinted, so you can see which month a flag is in
+   without reading a label. */
+
+.tl-bands {
+  position: absolute;
+  top: 19px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tl-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.tl-band-shade {
+  background: var(--tl-band-tint);
+}
+
+/* ── The ruler ───────────────────────────────────────────────────────
+
+   A band, not a line. Gates sit on its top edge and milestones on its
+   bottom edge, so both are the same short stem from the same measure.
+
+   The month names live INSIDE the band. The first version made them a
+   30px strip between the axis and the milestone lane, which pushed every
+   diamond a full centimetre away from the line it is measured against and
+   left its stem hanging in mid-air with the month names running through
+   the gap. Rendering it and looking at it is what caught that.
+
+   Names sit CENTRED IN THEIR MONTH, not on the boundary: a label printed
+   on the 1st is ambiguous between the month before it and the month after
+   it, and readers guess wrong about half the time. */
 
 .tl-axis {
   position: relative;
-  height: 34px;
+  z-index: 2;
+  height: 21px;
   border-top: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
-.tl-tick {
+.tl-axis-label {
   position: absolute;
   top: 0;
-  transform: translateX(-50%);
+  line-height: 20px;
   text-align: center;
-}
-
-.tl-tick-line {
-  display: block;
-  width: 1px;
-  height: 6px;
-  margin: 0 auto;
-  background: var(--color-border);
-}
-
-.tl-tick-label {
-  display: block;
-  margin-top: 3px;
-  font-size: 10.5px;
-  color: var(--color-text-secondary);
   white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
 
-/* Today runs the full height of both lanes, not just the axis: the whole
-   point is to see which marks are behind it.
-   
-   Measured from the lane variables rather than a guessed number. The first
-   render used a fixed -160px and the line shot out through the top of the
-   card and across the heading above it — which is what looking at it
-   caught. */
-.tl-today {
+/* The year rides on the month name and is printed only where it changes,
+   so a two-year chart says it twice rather than twenty-four times. */
+.tl-axis-year {
+  font-weight: 400;
+  font-size: 9.5px;
+  opacity: 0.7;
+}
+
+/* ── Today ───────────────────────────────────────────────────────────
+   Runs the full height of both lanes, not just the axis: the whole point
+   is to see at a glance which marks are behind it. It sits UNDER the
+   marks (z-index 1 against their 2) so it can never strike through a
+   label — an earlier version drew it on top and it ran across the text. */
+
+.tl-now {
   position: absolute;
-  top: calc(var(--tl-gate-lane, 104px) * -1);
-  bottom: calc(var(--tl-milestone-lane, 80px) * -1 - 4px);
-  transform: translateX(-50%);
+  top: 0;
+  bottom: 0;
+  z-index: 1;
   pointer-events: none;
 }
 
-.tl-today-line {
+.tl-now-line {
+  position: absolute;
+  top: 19px;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: repeating-linear-gradient(180deg, var(--color-text-secondary) 0 5px, transparent 5px 10px);
+  opacity: 0.5;
+}
+
+.tl-now-pill {
   position: absolute;
   top: 0;
-  bottom: 18px;
   left: 0;
-  width: 2px;
-  background: repeating-linear-gradient(
-    180deg,
-    var(--color-text-secondary) 0 5px,
-    transparent 5px 10px
-  );
-  opacity: 0.55;
-}
-
-.tl-today-label {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
   transform: translateX(-50%);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  line-height: 15px;
+  height: 15px;
+  padding: 0 7px;
+  border-radius: 999px;
+  white-space: nowrap;
   color: var(--color-text-secondary);
   background: var(--color-surface);
-  padding: 0 4px;
+  border: 1px solid var(--color-border);
 }
 
-/* ── A mark ──────────────────────────────────────────────────────── */
+/* ── A mark: stem, glyph, leader, label ──────────────────────────────
+   The link fills the lane and is transparent to the pointer; only the
+   glyph and the label take clicks. Marks overlap each other constantly,
+   and without this the topmost one would swallow every click in the lane. */
 
 .tl-mark {
   position: absolute;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 108px;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
   text-decoration: none;
   color: inherit;
+  pointer-events: none;
 }
 
-.tl-gate {
-  bottom: 0;
-  justify-content: flex-end;
+/* The short stalk from the axis to the glyph. Same length for every mark,
+   which is what puts all the flags on one line and all the diamonds on
+   another however their labels ended up stacked.
+
+   The stem and the leader are the same width and the same x, so that a
+   raised mark reads as ONE stalk from the axis to its label rather than
+   two lines that nearly meet. */
+.tl-stem {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  opacity: 0.45;
 }
 
-.tl-milestone {
-  top: 0;
+/* Only drawn when a label has been pushed up a row. Dotted, and in the
+   mark's own colour — the component sets it — because on a crowded month
+   the only way to tell which label belongs to which flag is to follow the
+   line, and a grey line answers that for none of them. */
+.tl-leader {
+  position: absolute;
+  width: 2px;
+  margin-left: -1px;
+  opacity: 0.5;
 }
 
 .tl-flag {
-  width: 15px;
+  position: absolute;
+  width: 14px;
   height: 11px;
+  margin-left: 1px;
   border-radius: 2px 3px 3px 2px;
   /* A pennant, not a rectangle: the notch is what makes it read as a flag
-     at 11 pixels tall. */
+     at eleven pixels tall. */
   clip-path: polygon(0 0, 100% 0, 72% 50%, 100% 100%, 0 100%);
-  align-self: flex-start;
-  margin-left: calc(50% - 1px);
-}
-
-.tl-pole {
-  width: 2px;
-  height: 16px;
-  background: var(--color-text-secondary);
-  opacity: 0.5;
-  align-self: flex-start;
-  margin-left: calc(50% - 1px);
+  pointer-events: auto;
 }
 
 .tl-diamond {
+  position: absolute;
   width: 11px;
   height: 11px;
+  margin-left: -5.5px;
   transform: rotate(45deg);
   border-radius: 2px;
-  margin-top: 3px;
+  pointer-events: auto;
 }
 
 .tl-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  height: 38px;
+  padding: 0 3px;
+  text-align: center;
   font-size: 10.5px;
   line-height: 1.25;
-  text-align: center;
-  max-width: 108px;
-  order: -1;
-  margin-bottom: 4px;
+  pointer-events: auto;
+  overflow: hidden;
 }
 
-.tl-label-below {
-  order: 1;
-  margin: 4px 0 0;
+/* The box is a fixed height so that rows line up. The TEXT inside it is
+   pushed to whichever edge faces the axis, or a one-line name in a
+   two-line box floats away from its own flag with a band of nothing
+   between them. */
+.tl-label-up {
+  justify-content: flex-end;
+}
+
+.tl-label-down {
+  justify-content: flex-start;
 }
 
 .tl-label-name {
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-weight: 600;
+  color: var(--color-text);
 }
 
 .tl-label-date {
   display: block;
   font-size: 9.5px;
+  line-height: 1.4;
   color: var(--color-text-secondary);
+}
+
+/* Bring the whole mark forward on hover, so a label that is partly behind
+   a neighbour can still be read before it is clicked. */
+.tl-mark:hover {
+  z-index: 5;
+}
+
+.tl-mark:hover .tl-label {
+  background: var(--color-surface);
+  border-radius: 6px;
 }
 
 .tl-mark:hover .tl-label-name {
@@ -2107,13 +2205,13 @@ textarea.input {
   text-decoration: underline;
 }
 
-/* ── The key ─────────────────────────────────────────────────────── */
+/* ── The key ─────────────────────────────────────────────────────────── */
 
 .tl-key {
   display: flex;
   gap: 18px;
   flex-wrap: wrap;
-  margin-top: 22px;
+  margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--color-border-soft);
   font-size: 11.5px;
@@ -2146,13 +2244,8 @@ textarea.input {
   border-radius: 50%;
 }
 
-/* Narrow screens: the labels collide long before the marks do, so the
-   whole thing scrolls sideways rather than becoming unreadable. */
-@media (max-width: 720px) {
-  .tl {
-    min-width: 640px;
-  }
-  .tl-wrap {
-    overflow-x: auto;
-  }
+.tl-undated {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border-soft);
 }

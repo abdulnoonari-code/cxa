@@ -59,6 +59,72 @@ export function missingColumn(message: string | null | undefined): string | null
   return null
 }
 
+/**
+ * The same problem on the way OUT of the database.
+ *
+ * Selecting a column that does not exist does not return that column as
+ * null — it fails the WHOLE query, and every other column with it. This is
+ * the single most repeated bug in this application: a screen that worked
+ * yesterday shows nothing at all today because one new column was added to
+ * a SELECT and the SQL step that creates it has not been run.
+ *
+ * So a screen that reads a column the schema may not have yet asks for it,
+ * and if the database says it has never heard of it, asks again without.
+ * What comes back is the rest of the row and a list of what was missing —
+ * which the screen shows, because a column quietly missing forever is how
+ * two half-schemas happen.
+ *
+ * `run` is passed in rather than imported for the same reason as above:
+ * the part that decides whether to give up or retry has to be testable
+ * against every answer it can get, and it cannot be if the only way to
+ * reach it is a live Postgres.
+ */
+export type SelectAttempt<T> = { data: T[] | null; error: { message: string } | null }
+
+export type SelectOutcome<T> = {
+  rows: T[]
+  /** Columns this database does not have. Empty is the good answer. */
+  missing: string[]
+  /** Set only when the query failed for some reason other than a column. */
+  error: string | null
+}
+
+export async function selectWithFallback<T>(
+  columns: string[],
+  run: (columns: string[]) => Promise<SelectAttempt<T>>,
+  maxAttempts = 4
+): Promise<SelectOutcome<T>> {
+  let current = [...columns]
+  const missing: string[] = []
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { data, error } = await run(current)
+    if (!error) return { rows: data ?? [], missing, error: null }
+
+    const column = missingColumn(error.message)
+    // Not a missing column, or not one we asked for. Dropping something at
+    // random would loop against a database refusing for another reason
+    // entirely — a permission, a policy, a table that is not there.
+    if (!column || !current.includes(column)) return { rows: [], missing, error: error.message }
+
+    missing.push(column)
+    current = current.filter((c) => c !== column)
+    // Every column asked for is unknown. There is nothing left to select
+    // and no honest way to carry on pretending this is the right table.
+    if (current.length === 0) return { rows: [], missing, error: `No column of ${columns.join(', ')} exists here.` }
+  }
+
+  return { rows: [], missing, error: `Too many unknown columns (${missing.join(', ')}).` }
+}
+
+/** One sentence for a screen, or null when there is nothing to say. */
+export function missingColumnNote(missing: string[], sqlStep: string): string | null {
+  if (missing.length === 0) return null
+  return `This database does not have ${missing.map((c) => `"${c}"`).join(' or ')} yet, so ${
+    missing.length === 1 ? 'that column is' : 'those columns are'
+  } blank everywhere on this screen. Run ${sqlStep} on the Setup page and reload.`
+}
+
 /** The rows again, without one column. */
 export function withoutColumn<T extends Record<string, unknown>>(rows: T[], column: string): Record<string, unknown>[] {
   return rows.map((r) => {

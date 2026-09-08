@@ -2249,3 +2249,158 @@ textarea.input {
   padding-top: 14px;
   border-top: 1px solid var(--color-border-soft);
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   THE LEVEL SUMMARY
+   ═══════════════════════════════════════════════════════════════════
+
+   Two blocks of columns — defects on the left, tasks on the right —
+   separated by a rule rather than by a gap, because a gap in a table is
+   read as a missing column. Numbers are right-aligned and tabular so the
+   eye can compare down a column without reading any of them. */
+
+.lv-table th,
+.lv-table td {
+  vertical-align: middle;
+}
+
+.lv-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The group heading over each block. */
+.lv-group-row th {
+  padding-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.lv-group {
+  text-align: center;
+}
+
+.lv-group-tasks,
+.lv-table thead tr:last-child th:nth-child(7),
+.lv-table tbody td:nth-child(7),
+.lv-table tfoot td:nth-child(7) {
+  border-left: 1px solid var(--color-border);
+}
+
+.lv-level {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.lv-chip {
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.lv-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* The sentence under each level name. This is the column that actually
+   answers "so what" — the numbers say how many, this says what to do. */
+.lv-verdict {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+  max-width: 46ch;
+}
+
+.lv-count {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-primary);
+  border-bottom: 1px solid transparent;
+}
+
+.lv-count:hover {
+  border-bottom-color: currentColor;
+}
+
+.lv-danger {
+  color: var(--color-danger);
+}
+
+.lv-warn {
+  color: var(--color-warning);
+}
+
+/* A zero is a dash, not a nought. A table of noughts reads as a table of
+   data; a table of dashes reads as an empty level, which is what it is. */
+.lv-zero {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+
+.lv-bar {
+  display: block;
+  width: 62px;
+  height: 5px;
+  margin-left: auto;
+  border-radius: 3px;
+  background: var(--color-border-soft);
+  overflow: hidden;
+}
+
+.lv-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  /* Not the brand, and not green until it IS green: closed-out share is a
+     quantity, and a bar in the "passed" colour at 40% reads as passed. */
+  background: var(--color-progress);
+}
+
+.lv-percent {
+  display: block;
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+/* A level nobody has touched is dimmed but never hidden. */
+.lv-untouched .lv-label,
+.lv-untouched .lv-chip {
+  opacity: 0.6;
+}
+
+/* Records with no level are a fault in the data, not a sixth level. */
+.lv-orphan {
+  background: var(--color-warning-bg);
+}
+
+.lv-orphan .lv-chip {
+  background: #fff !important;
+}
+
+.lv-legend {
+  display: grid;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.lv-legend dt {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.lv-legend dd {
+  color: var(--color-text-secondary);
+  max-width: 92ch;
+}

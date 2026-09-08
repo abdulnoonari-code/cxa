@@ -142,6 +142,12 @@ export const NAV: NavSection[] = [
         note: 'Work assigned to people, and the defects raised against it, level by level.',
         children: [
           { href: '/issues', label: 'Punch List', icon: 'issue', note: 'Defects by category and level, and what each one blocks.' },
+          {
+            href: '/levels',
+            label: 'Level Summary',
+            icon: 'readiness',
+            note: 'The five levels side by side — open, serious, late and closed, in defects and in tasks. Every number opens the list behind it.',
+          },
         ],
       },
     ],

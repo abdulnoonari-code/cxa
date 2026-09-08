@@ -7,35 +7,73 @@ import {
   priorityBadgeClass,
   isTaskOverdue,
 } from '@/lib/tasks'
+import { LEVELS } from '@/lib/checklist'
+import { levelTone, levelCode } from '@/lib/levels'
+import { selectWithFallback, missingColumnNote } from '@/lib/pg-columns'
 import { createTask, updateTask, deleteTask } from './actions'
 
 export const dynamic = 'force-dynamic'
 
+type TaskRow = {
+  id: string
+  title: string
+  description: string | null
+  assignee: string | null
+  due_date: string | null
+  status: string
+  priority: string
+  level?: string | null
+}
+
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; assignee?: string }>
+  searchParams: Promise<{ status?: string; assignee?: string; level?: string }>
 }) {
-  const { status: statusFilter, assignee: assigneeFilter } = await searchParams
+  const { status: statusFilter, assignee: assigneeFilter, level: levelFilter } = await searchParams
   const project = await getCurrentProject()
 
-  let query = supabase
-    .from('tasks')
-    .select('id, title, description, assignee, due_date, status, priority')
-    .order('due_date', { ascending: true, nullsFirst: false })
+  // `level` is new, and selecting a column the database has not got does
+  // not return it as null — it fails the WHOLE query and this page goes
+  // blank. So it is asked for, and asked for again without, and the banner
+  // says which SQL step is outstanding. Same bug class that has taken this
+  // application's screens down more often than anything else.
+  const listed = project
+    ? await selectWithFallback<TaskRow>(
+        ['id', 'title', 'description', 'assignee', 'due_date', 'status', 'priority', 'level'],
+        async (cols) => {
+          let q = supabase
+            .from('tasks')
+            .select(cols.join(', '))
+            .eq('project_id', project.id)
+            .order('due_date', { ascending: true, nullsFirst: false })
+          if (statusFilter) q = q.eq('status', statusFilter)
+          if (assigneeFilter) q = q.eq('assignee', assigneeFilter)
+          // Only filter on a column this attempt actually asked for.
+          if (levelFilter && cols.includes('level')) q = q.eq('level', levelFilter)
+          const r = await q
+          return { data: r.data as unknown as TaskRow[] | null, error: r.error }
+        }
+      )
+    : { rows: [] as TaskRow[], missing: [] as string[], error: null }
 
-  if (project) query = query.eq('project_id', project.id)
-  if (statusFilter) query = query.eq('status', statusFilter)
-  if (assigneeFilter) query = query.eq('assignee', assigneeFilter)
+  const tasks = listed.rows
+  const schemaNote = missingColumnNote(listed.missing, 'Step 36 — Task levels')
 
-  const { data: tasksRaw } = project ? await query : { data: [] }
-  const tasks = tasksRaw ?? []
+  const summed = project
+    ? await selectWithFallback<{ assignee: string | null; status: string; due_date: string | null; level?: string | null }>(
+        ['assignee', 'status', 'due_date', 'level'],
+        async (cols) => {
+          const r = await supabase.from('tasks').select(cols.join(', ')).eq('project_id', project.id)
+          return {
+            data: r.data as unknown as { assignee: string | null; status: string; due_date: string | null }[] | null,
+            error: r.error,
+          }
+        }
+      )
+    : { rows: [], missing: [], error: null }
 
-  const { data: allRaw } = project
-    ? await supabase.from('tasks').select('assignee, status, due_date').eq('project_id', project.id)
-    : { data: [] as { assignee: string | null; status: string; due_date: string | null }[] }
-
-  const all = allRaw ?? []
+  const all = summed.rows
   const people = Array.from(new Set(all.map((t) => t.assignee).filter((a): a is string => Boolean(a)))).sort()
 
   const openCount = all.filter((t) => t.status !== 'done').length
@@ -50,6 +88,12 @@ export default async function TasksPage({
         {project ? project.name : 'No project selected'} — who owes what, and by when. Separate from the punch
         list: a task is work to be done, a punch list item is a defect found.
       </p>
+
+      {schemaNote && (
+        <div className="alert alert-warning" role="alert" style={{ marginBottom: 18 }}>
+          {schemaNote}
+        </div>
+      )}
 
       <div className="stat-grid">
         <div className="stat" style={{ ['--stat-accent' as string]: 'var(--color-primary)' }}>
@@ -117,6 +161,20 @@ export default async function TasksPage({
               ))}
             </select>
           </label>
+          <label className="field">
+            Commissioning level
+            <select name="level" className="input" defaultValue={levelFilter ?? ''}>
+              <option value="">— not tied to a level —</option>
+              {LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <span className="text-secondary" style={{ fontSize: 11.5, fontWeight: 400 }}>
+              A task with no level does not appear against any level on the Level Summary.
+            </span>
+          </label>
           <label className="field" style={{ gridColumn: '1 / -1' }}>
             Detail
             <input name="description" placeholder="What needs to happen" className="input" />
@@ -147,9 +205,22 @@ export default async function TasksPage({
               </option>
             ))}
           </select>
+          <select name="level" defaultValue={levelFilter ?? ''} className="input" style={{ maxWidth: 240 }}>
+            <option value="">All levels</option>
+            {LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
           <button type="submit" className="btn btn-secondary">
             Filter
           </button>
+          {(statusFilter || assigneeFilter || levelFilter) && (
+            <a className="btn btn-secondary" href="/tasks">
+              Clear
+            </a>
+          )}
         </form>
       </div>
 
@@ -158,6 +229,7 @@ export default async function TasksPage({
           <thead>
             <tr>
               <th>Task</th>
+              <th>Level</th>
               <th>Owner</th>
               <th>Due</th>
               <th>Priority</th>
@@ -177,6 +249,25 @@ export default async function TasksPage({
                         <div className="text-secondary" style={{ fontSize: 12, marginTop: 2 }}>
                           {t.description}
                         </div>
+                      )}
+                    </td>
+                    <td>
+                      {t.level ? (
+                        <span
+                          className="lv-chip"
+                          style={{
+                            background: levelTone(t.level).bg,
+                            borderColor: levelTone(t.level).border,
+                            color: levelTone(t.level).text,
+                          }}
+                          title={LEVELS.find((l) => l.value === t.level)?.label ?? t.level}
+                        >
+                          {levelCode(t.level)}
+                        </span>
+                      ) : (
+                        <span className="text-secondary" title="Not tied to a level — will not appear against any level on the Level Summary">
+                          —
+                        </span>
                       )}
                     </td>
                     <td>{t.assignee ?? <span className="text-secondary">Unassigned</span>}</td>
@@ -205,7 +296,7 @@ export default async function TasksPage({
                         style={{
                           display: 'grid',
                           gap: 8,
-                          gridTemplateColumns: '1fr 1fr auto auto',
+                          gridTemplateColumns: '1fr 1fr 1fr auto auto',
                           alignItems: 'center',
                         }}
                       >
@@ -224,6 +315,19 @@ export default async function TasksPage({
                           defaultValue={t.due_date ?? ''}
                           className="input"
                         />
+                        <select
+                          key={`l-${t.id}-${t.level ?? ''}`}
+                          name="level"
+                          defaultValue={t.level ?? ''}
+                          className="input"
+                        >
+                          <option value="">No level</option>
+                          {LEVELS.map((l) => (
+                            <option key={l.value} value={l.value}>
+                              {levelCode(l.value)}
+                            </option>
+                          ))}
+                        </select>
                         <input type="hidden" name="assignee" value={t.assignee ?? ''} />
                         <input type="hidden" name="priority" value={t.priority} />
                         <button formAction={updateTask} type="submit" className="btn btn-secondary btn-sm">
@@ -239,7 +343,7 @@ export default async function TasksPage({
               })
             ) : (
               <tr>
-                <td colSpan={6} className="empty-row">
+                <td colSpan={7} className="empty-row">
                   No tasks yet — add the first one above.
                 </td>
               </tr>

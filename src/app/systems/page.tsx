@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadProjectReadiness } from '@/lib/system-data'
 import { STAGES, stageLabel, readinessBadgeClass, readinessVerdict } from '@/lib/readiness'
@@ -112,6 +113,12 @@ export default async function SystemsPage({
           created from a tag list.
         </p>
         <div className="io-bar">
+          {/* Export first, template second — the same order as Equipment and
+              Equipment Types, so the three asset screens read as one screen
+              three times rather than three screens. */}
+          <a href="/systems/export" className="btn btn-secondary">
+            Download current systems (.xlsx)
+          </a>
           <a href="/systems/template" className="btn btn-secondary">
             Download a blank template
           </a>
@@ -124,6 +131,9 @@ export default async function SystemsPage({
           <a href="/qr?scope=system" className="btn btn-secondary">
             QR labels
           </a>
+          <Link href="/assets/report" className="btn btn-secondary">
+            Report
+          </Link>
         </div>
         <p className="io-note">
           If any row cannot be read, nothing is imported at all and the reason is shown here. A blank cell means

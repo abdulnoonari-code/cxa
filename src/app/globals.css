@@ -2404,3 +2404,176 @@ textarea.input {
   color: var(--color-text-secondary);
   max-width: 92ch;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   THE ASSET REGISTER REPORT
+   ═══════════════════════════════════════════════════════════════════
+
+   Meant to be printed and handed across a table, so the controls are
+   no-print and everything else is laid out to survive a page break. */
+
+.ar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.ar-table {
+  font-size: 12.5px;
+  /* The base .table carries min-width: 640px, which is right for a wide
+     register and wrong inside a 360px grid cell — it pushed the bar and
+     the percentage straight out through the side of the card. Found by
+     rendering the page and looking at it, not by a test. */
+  min-width: 0;
+  table-layout: fixed;
+}
+
+/* A long system name is truncated rather than allowed to widen the table
+   and shove the numbers off the edge. The full text is on the link. */
+.ar-table td:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-table td {
+  padding: 6px 10px;
+  vertical-align: middle;
+}
+
+.ar-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  width: 54px;
+}
+
+.ar-link {
+  color: var(--color-primary);
+  border-bottom: 1px solid transparent;
+}
+
+.ar-link:hover {
+  border-bottom-color: currentColor;
+}
+
+/* The absence of a value is not a category competing with the others, so
+   it is set apart rather than sorted among them. */
+.ar-blank {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.ar-bar {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--color-border-soft);
+  overflow: hidden;
+}
+
+.ar-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  /* A share of a register is a quantity, not a verdict. Never green. */
+  background: var(--color-progress);
+}
+
+.ar-dash {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+
+/* ── Findings ─────────────────────────────────────────────────────── */
+
+.ar-findings {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ar-finding {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-neutral-solid);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  /* Keep a finding and its examples on one page when printed. */
+  break-inside: avoid;
+}
+
+.ar-blocking {
+  border-left-color: var(--color-danger-solid);
+}
+
+.ar-warning {
+  border-left-color: var(--color-warning-solid);
+}
+
+.ar-note {
+  border-left-color: var(--color-neutral-solid);
+}
+
+.ar-finding-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ar-finding-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ar-finding-count {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  min-width: 38px;
+  text-align: right;
+}
+
+.ar-finding-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.ar-finding-what {
+  font-size: 12.5px;
+  margin: 8px 0 0;
+}
+
+/* What it COSTS, in the body colour rather than grey — this is the
+   sentence that decides whether anybody does anything about it. */
+.ar-finding-cost {
+  font-size: 12.5px;
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  max-width: 100ch;
+}
+
+.ar-sample {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border);
+}
+
+.ar-sample-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 5px;
+}
+
+.ar-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--color-neutral-bg);
+  color: var(--color-neutral);
+}

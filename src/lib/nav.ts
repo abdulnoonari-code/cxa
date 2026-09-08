@@ -89,6 +89,12 @@ export const NAV: NavSection[] = [
         note: 'The whole tree in one place — site, area, system, subsystem, equipment, part — and what is recorded against each.',
       },
       {
+        href: '/assets/report',
+        label: 'Asset Report',
+        icon: 'validity',
+        note: 'What is in the register and whether it can be trusted — counts by system, discipline, status and type, and the rows that will make another screen wrong.',
+      },
+      {
         href: '/qr',
         label: 'QR Labels',
         icon: 'qr',

@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import { STAGES } from '@/lib/readiness'
+import { SYSTEM_SHEET_COLUMNS, SYSTEM_GUIDE_SHEET } from '@/lib/system-sheet'
 
 // A blank system list with three worked rows, so a new project has something
 // to type over rather than a format to guess at.
@@ -9,18 +10,9 @@ export async function GET() {
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Systems')
-  sheet.columns = [
-    { header: 'System ID', key: 'system_id', width: 22 },
-    { header: 'System name', key: 'name', width: 40 },
-    { header: 'Discipline', key: 'discipline', width: 20 },
-    { header: 'Building', key: 'building', width: 16 },
-    { header: 'Area', key: 'area', width: 22 },
-    { header: 'Floor', key: 'floor', width: 12 },
-    { header: 'Boundary', key: 'boundary', width: 52 },
-    { header: 'Responsible', key: 'responsible', width: 22 },
-    { header: 'Stage', key: 'stage', width: 22 },
-    { header: 'Notes', key: 'description', width: 40 },
-  ]
+  // Shared with /systems/export, so the file you download full of your own
+  // systems has exactly the columns this blank one has.
+  sheet.columns = SYSTEM_SHEET_COLUMNS.map((c) => ({ ...c }))
   sheet.getRow(1).font = { bold: true }
   sheet.views = [{ state: 'frozen', ySplit: 1 }]
 
@@ -55,7 +47,7 @@ export async function GET() {
     stage: 'Construction',
   })
 
-  const guide = wb.addWorksheet('Guide')
+  const guide = wb.addWorksheet(SYSTEM_GUIDE_SHEET)
   guide.columns = [
     { header: 'Column', key: 'col', width: 22 },
     { header: 'What to put in it', key: 'meaning', width: 100 },

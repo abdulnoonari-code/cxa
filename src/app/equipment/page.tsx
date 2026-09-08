@@ -164,6 +164,9 @@ export default async function EquipmentPage({
           <a href="/equipment/export" className="btn btn-secondary">
             Download current tags (.xlsx)
           </a>
+          <Link href="/assets/report" className="btn btn-secondary">
+            Report
+          </Link>
           <a href="/equipment/template" className="btn btn-secondary">
             Download a blank template
           </a>

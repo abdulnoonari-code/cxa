@@ -123,6 +123,9 @@ export default async function EquipmentTypesPage({
           <a href="/equipment-types/export" className="btn btn-secondary">
             Download current types (.xlsx)
           </a>
+          <Link href="/assets/report" className="btn btn-secondary">
+            Report
+          </Link>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/equipment-types/template" className="btn btn-secondary">
             Download a blank template

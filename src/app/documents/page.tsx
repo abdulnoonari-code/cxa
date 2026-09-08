@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
 import { uploadDocument, deleteDocument } from './actions'
+import { viewUrl } from '@/lib/file-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -255,7 +256,7 @@ export default async function DocumentsPage({
                     </td>
                     <td>{item?.item ?? '—'}</td>
                     <td>
-                      <a href={a.file_url} target="_blank" rel="noopener noreferrer" className="link">
+                      <a href={viewUrl(a) ?? '#'} target="_blank" rel="noopener noreferrer" className="link">
                         {a.file_name}
                       </a>
                     </td>

@@ -14,6 +14,7 @@ import {
   effectiveRevision,
 } from '@/lib/requirements'
 import { addDocument, addRevision, deleteDocument, attachRevisionFile, readRevisionObligations, readRevisionRequirements } from './actions'
+import { viewUrl } from '@/lib/file-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -278,8 +279,8 @@ export default async function DocumentControlPage({
                         <td style={{ fontSize: 12.5 }}>
                           {rev.file_name ? (
                             <>
-                              {rev.file_url ? (
-                                <a href={rev.file_url} className="link" target="_blank" rel="noreferrer">
+                              {viewUrl(rev) ? (
+                                <a href={viewUrl(rev) ?? '#'} className="link" target="_blank" rel="noreferrer">
                                   {rev.file_name}
                                 </a>
                               ) : (

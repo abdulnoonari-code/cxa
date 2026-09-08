@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { generateAttachmentReview, generateCheckComment } from '@/lib/review'
 import { parseChecklistWorkbook } from '@/lib/checklist-io'
+import { FILE_ROUTE, encodePath } from '@/lib/file-url'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -80,7 +81,8 @@ export async function uploadAttachment(formData: FormData) {
   const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
   if (uploadError) return
 
-  const { data: publicUrlData } = supabase.storage.from('documents').getPublicUrl(path)
+  // NOT getPublicUrl — see src/lib/file-url.ts.
+  const publicUrlData = { publicUrl: `${FILE_ROUTE}/${encodePath(path)}` }
 
   const { data: equipment } = await supabase.from('equipment').select('tag_id').eq('id', equipment_id).single()
   const review = generateAttachmentReview(file.name, file.size, equipment?.tag_id ?? null)

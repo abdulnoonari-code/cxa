@@ -12,6 +12,7 @@ import { createMilestone } from '@/app/milestones/actions'
 import { LEVELS, STATUSES, statusBadgeClass } from './styles'
 import { SEVERITIES, CATEGORIES, severityBadgeClass, categoryBadgeClass, issueStatusBadgeClass } from '@/lib/issues'
 import { MILESTONE_STATUSES, milestoneBadgeClass } from '@/lib/milestones'
+import { viewUrl } from '@/lib/file-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -264,10 +265,10 @@ export default async function ChecklistPage({
                     {attachmentsFor(it.id).map((a) => (
                       <li key={a.id} style={{ fontSize: 13 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <a href={a.file_url} target="_blank" rel="noopener noreferrer" className="link">
+                          <a href={viewUrl(a) ?? '#'} target="_blank" rel="noopener noreferrer" className="link">
                             {a.file_name}
                           </a>
-                          <a href={a.file_url} download={a.file_name} className="link" style={{ fontSize: 12 }}>
+                          <a href={viewUrl(a) ?? '#'} download={a.file_name} className="link" style={{ fontSize: 12 }}>
                             Download
                           </a>
                           {a.review_status && (

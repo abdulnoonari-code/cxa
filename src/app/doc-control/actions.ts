@@ -9,6 +9,7 @@ import { extractDocument, paragraphsFromText } from '@/lib/doc-extract'
 import { readObligations, refSeries } from '@/lib/obligations'
 import { readRequirements, requirementRefSeries } from '@/lib/requirement-reader'
 import { loadObligationKeys, loadObligationRefs, dedupeKey } from '@/data/obligations'
+import { FILE_ROUTE, encodePath } from '@/lib/file-url'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -198,7 +199,10 @@ export async function attachRevisionFile(formData: FormData) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `revisions/${revisionId}/${Date.now()}-${safeName}`
   const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
-  const publicUrl = uploadError ? null : supabase.storage.from('documents').getPublicUrl(path).data.publicUrl
+  // NOT getPublicUrl. That returns an address anybody holding the link can
+  // open — no sign-in, no cookie, nothing. Everything now goes through the
+  // /file route, which asks who is calling before it signs anything.
+  const publicUrl = uploadError ? null : `${FILE_ROUTE}/${encodePath(path)}`
 
   await supabase
     .from('document_revisions')

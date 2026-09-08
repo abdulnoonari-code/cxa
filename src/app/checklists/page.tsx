@@ -8,6 +8,7 @@ import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence, deleteC
 import ScriptImport from '@/components/ScriptImport'
 import CheckDetail from '@/components/CheckDetail'
 import { loadProjectLinkContext, contextFor } from '@/data/check-links'
+import { viewUrl } from '@/lib/file-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,10 +121,10 @@ export default async function ChecklistsPage({
     itemIds.length > 0
       ? await supabase
           .from('attachments')
-          .select('id, checklist_item_id, file_name, file_url, review_status')
+          .select('id, checklist_item_id, file_name, file_url, file_path, review_status')
           .in('checklist_item_id', itemIds)
           .order('created_at', { ascending: true })
-      : { data: [] as { id: string; checklist_item_id: string; file_name: string; file_url: string; review_status: string | null }[] }
+      : { data: [] as { id: string; checklist_item_id: string; file_name: string; file_url: string; file_path: string | null; review_status: string | null }[] }
 
   const attachments = attachmentsRaw ?? []
   const filesFor = (itemId: string) => attachments.filter((a) => a.checklist_item_id === itemId)
@@ -580,7 +581,7 @@ export default async function ChecklistsPage({
                       <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 10px 0', display: 'grid', gap: 6 }}>
                         {filesFor(it.id).map((a) => (
                           <li key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
-                            <a href={a.file_url} target="_blank" rel="noopener noreferrer" className="link">
+                            <a href={viewUrl(a) ?? '#'} target="_blank" rel="noopener noreferrer" className="link">
                               {a.file_name}
                             </a>
                             {a.review_status && (

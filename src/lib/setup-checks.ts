@@ -29,8 +29,23 @@ export type SetupStep = {
   title: string
   /** What stops working without it, in the words of somebody using the app. */
   matters: string
-  /** How to check it: a table, and the columns that step adds. */
-  probe: { table: string; columns: string[] }
+  /**
+   * How to check it.
+   *
+   * Usually a table and the columns that step adds. Step 38 is different:
+   * it does not add a column, it closes the file store, so the only honest
+   * check is to ask the bucket whether it is still public. A step whose
+   * effect cannot be probed should not be on this list at all — a row that
+   * always says "in place" is worse than no row.
+   */
+  probe: { table: string; columns: string[] } | { bucket: string; mustBePrivate: boolean }
+}
+
+/** Which kind of probe this is. */
+export function isBucketProbe(
+  probe: SetupStep['probe']
+): probe is { bucket: string; mustBePrivate: boolean } {
+  return 'bucket' in probe
 }
 
 export const SETUP_STEPS: SetupStep[] = [
@@ -133,6 +148,62 @@ export const SETUP_STEPS: SetupStep[] = [
     matters:
       'Makes and models, so forty identical breakers are forty tags and one type carrying the rating, the manual and the spec. Without it the Equipment Types screen says it is not installed, and a Type column in a tag spreadsheet is read and then thrown away.',
     probe: { table: 'equipment_types', columns: ['id', 'type_code'] },
+  },
+  {
+    id: 'part36',
+    source: 'week5-part36-task-levels.sql',
+    title: 'Task levels',
+    matters:
+      'Which commissioning level a task belongs to. Without it every task lands in the "No level recorded" row on the Level Summary, so the screen can tell you about defects at L3 and nothing at all about the work somebody was asked to do about them.',
+    probe: { table: 'tasks', columns: ['level'] },
+  },
+  {
+    id: 'part37',
+    source: 'week5-part37-project-config.sql',
+    title: 'Project configuration',
+    matters:
+      'Which levels and disciplines this job actually commissions, and the standards it is commissioned against. Without it the Configuration screen cannot save anything, and every project is scored against all five levels whether it runs them or not.',
+    probe: { table: 'projects', columns: ['config'] },
+  },
+  {
+    id: 'part38',
+    source: 'week5-part38-private-files.sql',
+    title: 'The file store is closed',
+    matters:
+      'THIS IS THE ONE THAT MATTERS MOST. Until it is run, every photograph and every document in this project can be opened by anybody holding the link — no sign-in, no cookie, nothing. A link forwarded in an email or sitting in a browser history is a working key to that file for the whole internet.',
+    probe: { bucket: 'documents', mustBePrivate: true },
+  },
+]
+
+/**
+ * SQL files that ship with the application and deliberately have no row
+ * on the Setup page, each with the reason.
+ *
+ * This list exists because the alternative is silence. A file sitting in
+ * the repository with nothing anywhere explaining why it is not on the
+ * checklist is indistinguishable from one somebody forgot to add — which
+ * is exactly what happened to steps 36, 37 and 38, and step 38 was the one
+ * that leaves every photograph open to the internet.
+ *
+ * An assertion reads the repository and fails if a SQL file is neither a
+ * step above nor named here, so a new file cannot go unaccounted for.
+ */
+export const NOT_PROBED: { source: string; why: string }[] = [
+  {
+    source: 'week5-part23-fix-rls.sql',
+    why: 'Superseded by part 27, which switched row level security on for every table. Whatever this set, part 27 decides now.',
+  },
+  {
+    source: 'week5-part24-audit-outlives-project.sql',
+    why: 'Changes a trigger so the audit trail survives a deleted project. There is no column to look for — the effect only shows the day somebody deletes a project.',
+  },
+  {
+    source: 'week5-part27-lock-the-database.sql',
+    why: 'Checked by the "Who can reach the data" panel above, which asks the browser key directly instead of looking for a column. A better check than this list could make.',
+  },
+  {
+    source: 'week5-part27-ROLLBACK.sql',
+    why: 'An undo, not a step. It reopens the database to the browser key and must never appear as something to run.',
   },
 ]
 

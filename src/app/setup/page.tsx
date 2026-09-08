@@ -1,6 +1,6 @@
 import { supabase, USING_SERVICE_ROLE } from '@/lib/supabase'
 import { runSetupProbes } from '@/data/setup-checks'
-import { countStates, setupHeadline } from '@/lib/setup-checks'
+import { countStates, setupHeadline, NOT_PROBED } from '@/lib/setup-checks'
 import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { accessVerdict as whoMayUseApp } from '@/data/gate'
 import { parseOwners } from '@/lib/gate'
@@ -90,9 +90,30 @@ export default async function SetupPage() {
                   <td style={{ fontWeight: 600 }}>{r.step.title}</td>
                   <td style={{ color: STATE[r.state].color, fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {STATE[r.state].word}
+                    {/* 'unknown' carries the DATABASE's own words, which are
+                        long and technical, so they are trimmed. 'missing'
+                        carries ours, written to be read — and the public
+                        bucket warning is the most urgent line on this page.
+                        Trimming that one to sixty characters would have cut
+                        it off mid-sentence, which is how it was until this
+                        was looked at. */}
                     {r.state === 'unknown' && r.detail && (
                       <div className="text-secondary mono" style={{ fontSize: 10, fontWeight: 400 }}>
                         {r.detail.slice(0, 60)}
+                      </div>
+                    )}
+                    {r.state === 'missing' && r.detail && (
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 400,
+                          marginTop: 4,
+                          color: 'var(--color-danger)',
+                          whiteSpace: 'normal',
+                          maxWidth: '34ch',
+                        }}
+                      >
+                        {r.detail}
                       </div>
                     )}
                   </td>
@@ -109,8 +130,35 @@ export default async function SetupPage() {
         </div>
         <p className="text-secondary" style={{ margin: '10px 0 0', fontSize: 11.5, fontStyle: 'italic' }}>
           Each step is checked by selecting the exact columns it adds, not by looking for the table. A table
-          that exists with none of its new columns would otherwise report as done.
+          that exists with none of its new columns would otherwise report as done. Closing the file store adds
+          no column, so that one asks storage whether the bucket is still public.
         </p>
+
+        {/* Every SQL file that ships is either a row above or named here.
+            A file sitting in the repository with nothing anywhere saying
+            why it is not on the checklist is indistinguishable from one
+            somebody forgot — which is exactly what happened to steps 36,
+            37 and 38, and 38 is the one that leaves the files open. */}
+        {NOT_PROBED.length > 0 && (
+          <details style={{ marginTop: 14 }}>
+            <summary className="text-secondary" style={{ fontSize: 12, cursor: 'pointer' }}>
+              {NOT_PROBED.length} other SQL files ship with this application and are deliberately not checked
+              here — why
+            </summary>
+            <dl style={{ marginTop: 10, display: 'grid', gap: 8, fontSize: 12 }}>
+              {NOT_PROBED.map((x) => (
+                <div key={x.source}>
+                  <dt className="mono" style={{ fontSize: 11.5, fontWeight: 600 }}>
+                    {x.source}
+                  </dt>
+                  <dd className="text-secondary" style={{ maxWidth: '92ch' }}>
+                    {x.why}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        )}
       </div>
 
       <div

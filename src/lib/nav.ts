@@ -65,6 +65,10 @@ export const NAV: NavSection[] = [
       },
       { href: '/dashboard', label: 'Dashboard', icon: 'dashboard', note: 'What needs attention today, across the whole project.' },
       { href: '/setup', label: 'Setup', icon: 'settings', note: 'Which SQL steps are actually in place, who can reach the data, and whether AI is on.' },
+      // Last in the group and last in the rail's first section on purpose: it
+      // is read once at the start and then returned to when something is
+      // surprising, which is not often enough to compete with the work.
+      { href: '/manual', label: 'Manual', icon: 'document', note: 'How to use every screen, every spreadsheet format, and the rules the application applies to your records.' },
     ],
   },
   {

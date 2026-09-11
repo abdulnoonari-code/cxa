@@ -34,7 +34,11 @@ export async function loadAssetReport(projectId: string | null): Promise<AssetRe
 
   const [sysRes, typeRes, tagRes] = await Promise.all([
     selectWithFallback<SystemRow>(
-      ['id', 'system_id', 'name', 'discipline', 'building', 'area', 'floor'],
+      // 'area' is NOT in this list. See the note on SystemRow: a system's area
+      // is systems.area_id into the areas table, and no column called "area"
+      // has ever existed on systems. Asking for one made the fallback drop it
+      // and the page advertise a missing SQL step that nobody can run.
+      ['id', 'system_id', 'name', 'discipline', 'building', 'floor'],
       async (cols) => {
         const r = await supabase.from('systems').select(cols.join(', ')).eq('project_id', projectId)
         return { data: r.data as unknown as SystemRow[] | null, error: r.error }

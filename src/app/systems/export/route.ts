@@ -4,6 +4,7 @@ import { getCurrentProject } from '@/lib/project'
 import { selectWithFallback } from '@/lib/pg-columns'
 import { STAGES } from '@/lib/readiness'
 import { SYSTEM_SHEET_COLUMNS, SYSTEM_GUIDE_SHEET } from '@/lib/system-sheet'
+import { requireAccess } from '@/data/require-access'
 
 /**
  * The system list, in the SAME shape as the template.
@@ -21,18 +22,28 @@ import { SYSTEM_SHEET_COLUMNS, SYSTEM_GUIDE_SHEET } from '@/lib/system-sheet'
  * assertion holds the two lists together.
  */
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 
-  // building / area / floor arrive with later SQL steps. Asking for a
-  // column this database has not got fails the WHOLE query, which would
-  // hand back an empty workbook for a project full of systems.
+  // building / floor arrive with later SQL steps. Asking for a column this
+  // database has not got fails the WHOLE query, which would hand back an
+  // empty workbook for a project full of systems.
+  //
+  // AREA IS NOT ONE OF THEM. There is no systems.area column and no SQL step
+  // adds one — an area is a row in the areas table and a system points at it
+  // with area_id. Asking for "area" here meant the fallback dropped it and
+  // EVERY export carried an "INCOMPLETE EXPORT — do NOT re-import this"
+  // warning naming an outstanding SQL step that nobody could ever run. That
+  // warning is the one thing standing between somebody and the round trip
+  // this file exists to provide, so it had better be true.
   type SystemExportRow = {
     system_id?: string | null
     name?: string | null
     discipline?: string | null
     building?: string | null
-    area?: string | null
+    area_id?: string | null
     floor?: string | null
     boundary?: string | null
     responsible?: string | null
@@ -41,7 +52,7 @@ export async function GET() {
   }
 
   const res = await selectWithFallback<SystemExportRow>(
-    ['system_id', 'name', 'discipline', 'building', 'area', 'floor', 'boundary', 'responsible', 'stage', 'description'],
+    ['system_id', 'name', 'discipline', 'building', 'area_id', 'floor', 'boundary', 'responsible', 'stage', 'description'],
     async (cols) => {
       const r = await supabase
         .from('systems')
@@ -51,6 +62,20 @@ export async function GET() {
       return { data: r.data as unknown as SystemExportRow[] | null, error: r.error }
     }
   )
+
+  // The sheet carries the area's NAME, because that is what the importer
+  // reads: it looks the name up and creates the area if it is new. Writing
+  // the id would export a value nobody can type and the importer would treat
+  // as the name of a brand-new area on the way back in.
+  const areaName = new Map<string, string>()
+  if (!res.missing.includes('area_id')) {
+    const { data: areas } = await supabase
+      .from('areas')
+      .select('id, name, code')
+      .eq('project_id', project.id)
+    for (const a of (areas ?? []) as { id: string; name: string | null; code: string | null }[])
+      areaName.set(a.id, a.name ?? a.code ?? '')
+  }
 
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
@@ -72,7 +97,7 @@ export async function GET() {
       name: row.name ?? '',
       discipline: row.discipline ?? '',
       building: row.building ?? '',
-      area: row.area ?? '',
+      area: (row.area_id ? areaName.get(row.area_id) : '') ?? '',
       floor: row.floor ?? '',
       boundary: row.boundary ?? '',
       responsible: row.responsible ?? '',

@@ -32,13 +32,24 @@
 //
 // Pure. No database, no clock.
 
+// No `area` here, deliberately.
+//
+// A system's area is a FOREIGN KEY — systems.area_id, pointing at a row in
+// the areas table — because an area is a node in the asset tree with its own
+// children, not a word typed on a system. There is no systems.area column,
+// no SQL step adds one, and asking for it made this screen print "run the
+// outstanding SQL step" forever, about a step that does not exist. A warning
+// that sends somebody looking for a file nobody will ever write is worse than
+// no warning: it spends their afternoon and teaches them to ignore the banner.
+//
+// If a "tags by area" breakdown is ever wanted, read areas by area_id and
+// join. Do not re-add a text column here.
 export type SystemRow = {
   id: string
   system_id: string | null
   name: string | null
   discipline?: string | null
   building?: string | null
-  area?: string | null
   floor?: string | null
 }
 

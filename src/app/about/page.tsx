@@ -124,10 +124,20 @@ export default function AboutPage() {
           against equipment that was never installed is worse than a check that was never imported.
         </p>
 
-        <p style={{ fontSize: 13.5, margin: 0 }}>
+        <p style={{ fontSize: 13.5, margin: '0 0 14px' }}>
           <strong>Getting your work out.</strong> The handover pack is generated from the records — the levels, the
           registers, the open items and what the automatic checks found. A pack that hides what is missing gets
           found out; one that names it gets negotiated.
+        </p>
+
+        <p style={{ fontSize: 13.5, margin: 0, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+          That is the shape of it. The{' '}
+          <Link href="/manual" className="link">
+            <strong>full manual</strong>
+          </Link>{' '}
+          goes through every screen one at a time — what you see, what you can do, what it works out for you and
+          what it needs first — with the spreadsheet formats, the five levels, who may do what, and block diagrams
+          of how the parts fit together. It needs no account to read.
         </p>
       </Section>
 

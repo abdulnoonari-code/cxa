@@ -72,7 +72,7 @@ export const NAV: NavSection[] = [
       // Engineering reference rather than project data — it belongs beside the
       // Manual for the same reason: read when something is being planned or is
       // surprising, not part of the daily round.
-      { href: '/knowledge', label: 'Load Bank Testing', icon: 'validity', note: 'Sizing, NFPA 110 and ISO 8528 test regimes, UPS and battery, heat rejection, and a room layout planner.' },
+      { href: '/knowledge', label: 'Technical Design', icon: 'validity', note: 'Fifteen commissioning calculators — load bank, insulation resistance, earth, volt drop, CT burden, harmonics, white space cooling, containment, chilled water, pump laws and a room planner.' },
     ],
   },
   {

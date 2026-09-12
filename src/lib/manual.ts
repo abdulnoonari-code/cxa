@@ -121,14 +121,14 @@ export const MANUAL_GROUPS: ManualGroup[] = [
       },
       {
         href: '/knowledge',
-        title: 'Load Bank Testing',
-        lede: 'Engineering reference and working calculators. It holds no project data, so it needs no sign-in.',
+        title: 'Technical Design',
+        lede: 'Fifteen commissioning calculators, each carrying the formula and the standard behind its answer. It holds no project data, so it needs no sign-in.',
         facts: [
-          { label: 'You see', text: 'Six tabs: load bank sizing, the test regimes, UPS and battery, heat rejection and airflow, a room layout planner, and the reference behind every number.' },
-          { label: 'You can', text: 'Enter a nameplate rating and get both legs of the load bank — the kW resistive leg and the kVAR reactive one — with the formula printed under each answer.' },
-          { label: 'It works out', text: 'Derated output for altitude and ambient, full-load and breaker current, the step table for whichever standard you pick, battery end-of-discharge voltage and watts per cell, heat in BTU and tons, and the airflow needed corrected for air density.' },
-          { label: 'Room plan', text: 'Place load banks, panels, generators and UPS to scale in a room and it shades every intake and discharge zone, then names any unit whose hot exhaust is feeding another one\u2019s intake.' },
-          { label: 'Careful', text: 'Every derate, clearance and load acceptance figure is indicative. The page says so where sources disagree, and it deliberately does not size cables \u2014 it gives the design current and stops there.' },
+          { label: 'You see', text: 'A grid of tool cards in three groups \u2014 electrical, white space and cooling, and planning. Open one and it takes the whole screen, with the headline answers pinned to the top as you type.' },
+          { label: 'Electrical', text: 'Load bank sizing, the generator test regimes, UPS and battery, insulation resistance, earth and soil resistivity, cable volt drop, CT burden and accuracy limit factor, and harmonic limits.' },
+          { label: 'Cooling', text: 'White space airflow and cooling capacity factor, containment measured as Rack Cooling Index and Return Temperature Index, heat rejection corrected for altitude, chilled water flow, and the pump and fan laws.' },
+          { label: 'Planning', text: 'A room layout planner you drag equipment around, which flags any unit whose hot discharge is feeding another one\u2019s intake, and a reference page of air balance tolerances.' },
+          { label: 'Careful', text: 'Where two standards genuinely disagree \u2014 on insulation temperature correction, the affinity laws, balance tolerances and load bank clearances \u2014 the page says so rather than picking one quietly, and where there is no limit at all it says that too.' },
         ],
       },
       {

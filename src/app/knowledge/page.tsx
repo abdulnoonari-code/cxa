@@ -2,99 +2,143 @@
 
 import { useState, useRef, useMemo } from 'react'
 import {
-  sizeGenerator, REGIMES, regimeById, planSteps, totalMinutes,
-  sizeUps, heatAndAir, inletVerdict, ASHRAE,
-  KINDS, DIRS, zonesOf, rectOf, roomFindings, nameFor, clampToRoom,
-  ALT_DATUM_M, AMB_DATUM_C,
+  sizeGenerator, REGIMES, regimeById, planSteps, totalMinutes, sizeUps,
+  heatAndAir, inletVerdict, ASHRAE, KINDS, DIRS, zonesOf, rectOf,
+  roomFindings, nameFor, clampToRoom, ALT_DATUM_M, AMB_DATUM_C,
   type RatingUnit, type Phase, type KindId, type Dir, type Item,
 } from '@/lib/loadbank'
+import {
+  insulationResistance, VINTAGES, IEC60364_IR, IEEE43_EDITION,
+  soilResistivity, fallOfPotential, EARTH_TARGETS,
+  voltDrop, VD_GUIDANCE, ctBurden,
+  voltageLimitFor, tddLimits, VOLTAGE_LIMITS, IEEE519_WINDOWS, IEEE519_EDITION,
+  whiteSpace, rackCoolingIndex, rciVerdict, returnTemperatureIndex,
+  chilledWaterFlow, affinity, minimumUsefulSpeed, trimAccuracy, AFFINITY_MODES,
+  BALANCE_TOLERANCES,
+  type WindingVintage, type CorrectionMethod, type AffinityMode,
+} from '@/lib/techdesign'
 
-// Load bank testing — the engineering reference, in the application.
+// Technical Design — the commissioning calculations, as a tool hub.
 //
-// Every number on this screen comes from `src/lib/loadbank.ts`, which is pure
-// and carries its own assertion suite. Nothing is calculated in this file:
-// it is the form and the drawing, and nothing else. That split is the whole
-// reason the maths can be checked against a hand-worked example rather than
-// against whatever the screen happened to print.
+// Every number comes from src/lib/loadbank.ts or src/lib/techdesign.ts, both
+// pure and both carrying their own assertion suites. Nothing is calculated in
+// this file; it is the form and the drawing. That split is the whole reason
+// the maths can be checked against a hand-worked example rather than against
+// whatever the screen happened to print.
 //
-// Public, like the manual — it holds no project data, and an engineer standing
-// in a switchroom should not have to sign in to size a load bank.
+// ── Why a hub rather than a tab strip ────────────────────────────────────
+//
+// The first version was six tabs and a wall of form fields, and it was hard
+// to scan and hard to grow. A grid of tool cards scales to twenty tools
+// without a crowded bar, and opening one gives it the whole screen. The
+// headline answers pin to the top as you type so you never scroll to see what
+// changed — which is the thing you actually do on site.
 
 const STYLES = `
-.kb{max-width:1180px;margin:0 auto}
-.kb-tabs{position:sticky;top:0;z-index:30;background:var(--color-bg);display:flex;gap:2px;
-  flex-wrap:wrap;border-bottom:1.5px solid var(--color-text);padding-top:5px;margin-bottom:20px}
-.kb-tab{appearance:none;border:0;background:none;font-family:inherit;font-size:13.5px;font-weight:600;
-  color:var(--color-text-secondary);cursor:pointer;padding:9px 14px;border-radius:6px 6px 0 0;
-  border-bottom:2.5px solid transparent;margin-bottom:-1.5px}
-.kb-tab:hover{color:var(--color-primary);background:var(--color-primary-light)}
-.kb-tab.on{color:var(--color-primary-dark);border-bottom-color:var(--color-primary);background:var(--color-surface,#fff)}
-.kb-two{display:grid;grid-template-columns:minmax(0,330px) minmax(0,1fr);gap:15px;align-items:start}
-@media(max-width:820px){.kb-two{grid-template-columns:1fr}}
-.kb-f{display:grid;gap:3px;margin-bottom:11px}
-.kb-f label{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--color-text-secondary)}
-.kb-f .h{font-size:11.5px;color:var(--color-text-secondary);font-weight:400;letter-spacing:0;text-transform:none}
-.kb-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.kb-out{display:grid;gap:10px}
-.kb-res{border:1px solid var(--color-border);border-radius:7px;padding:12px 14px;background:var(--color-surface,#fff)}
-.kb-res.lead{border-color:var(--color-primary);background:var(--color-primary-light);border-width:1.5px}
-.kb-res.warn{border-color:var(--color-warning);background:var(--color-warning-bg)}
-.kb-res.stop{border-color:var(--color-danger);background:var(--color-danger-bg)}
-.kb-l{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--color-text-secondary);margin-bottom:2px}
-.kb-res.lead .kb-l{color:var(--color-primary-dark)}
-.kb-res.warn .kb-l{color:var(--color-warning)}
-.kb-res.stop .kb-l{color:var(--color-danger)}
-.kb-v{font-size:23px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
-.kb-res.lead .kb-v{color:var(--color-primary-dark)}
-.kb-res.stop .kb-v{font-size:15px;color:var(--color-danger)}
-.kb-res.warn .kb-v{font-size:14.5px;font-weight:600}
-.kb-fml{font-size:11.5px;color:var(--color-text-secondary);margin-top:5px;padding-top:5px;
-  border-top:1px dotted var(--color-border);word-break:break-word}
-.kb-n{font-size:12.5px;color:var(--color-text-secondary);margin-top:5px}
-.kb-g3{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px}
-.kb-note{border-left:3px solid var(--color-primary);background:var(--color-primary-light);
-  padding:11px 15px;margin:0 0 14px;font-size:13px;line-height:1.6;max-width:72ch;border-radius:0 5px 5px 0}
-.kb-note.warn{border-left-color:var(--color-warning);background:var(--color-warning-bg)}
-.kb-note.stop{border-left-color:var(--color-danger);background:var(--color-danger-bg)}
-.kb-note b{display:block;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+.td{max-width:1180px;margin:0 auto}
+.td-hero{display:flex;align-items:flex-start;gap:13px}
+.td-mark{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;
+  border-radius:9px;background:var(--color-primary);color:#fff;font-weight:700;font-size:12px;flex:none}
+.td-grp{font-size:10.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--color-text-secondary);margin:26px 0 9px}
+.td-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px}
+.td-card{display:block;text-align:left;width:100%;appearance:none;cursor:pointer;
+  background:var(--color-surface,#fff);border:1px solid var(--color-border);border-radius:9px;
+  padding:14px 15px;font-family:inherit;transition:border-color .12s,transform .12s}
+.td-card:hover{border-color:var(--color-primary);transform:translateY(-1px)}
+.td-card:focus-visible{outline:2px solid var(--color-primary);outline-offset:2px}
+.td-card-t{font-size:14.5px;font-weight:700;color:var(--color-text);margin:0 0 3px;letter-spacing:-.01em}
+.td-card-n{font-size:12px;color:var(--color-text-secondary);margin:0;line-height:1.5}
+.td-card-s{font-size:10.5px;font-weight:600;color:var(--color-primary);margin-top:8px;display:block}
+.td-back{appearance:none;border:0;background:none;font-family:inherit;font-size:12.5px;font-weight:600;
+  color:var(--color-primary);cursor:pointer;padding:5px 0;margin-bottom:4px}
+.td-back:hover{text-decoration:underline}
+.td-bar{position:sticky;top:0;z-index:30;background:var(--color-bg);
+  border-bottom:1.5px solid var(--color-text);padding:11px 0 12px;margin-bottom:16px;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.td-kpi-l{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--color-text-secondary);margin-bottom:1px}
+.td-kpi-v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.02em}
+.td-kpi-u{font-size:12.5px;font-weight:500;color:var(--color-text-secondary)}
+.td-kpi-n{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.td-kpi.good .td-kpi-v{color:var(--color-success)}
+.td-kpi.warn .td-kpi-v{color:var(--color-warning)}
+.td-kpi.bad .td-kpi-v{color:var(--color-danger)}
+.td-kpi.lead .td-kpi-v{color:var(--color-primary-dark)}
+.td-in{display:grid;grid-template-columns:repeat(auto-fit,minmax(146px,1fr));gap:11px;
+  background:var(--color-surface,#fff);border:1px solid var(--color-border);
+  border-radius:9px;padding:14px 15px;margin-bottom:16px}
+.td-f{display:grid;gap:3px;min-width:0}
+.td-f label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--color-text-secondary);line-height:1.35}
+.td-f .h{font-weight:400;letter-spacing:0;text-transform:none;font-size:11px;display:block}
+.td-work{background:var(--color-surface,#fff);border:1px solid var(--color-border);
+  border-radius:9px;padding:16px 18px;margin-bottom:14px}
+.td-work h3{font-size:14px;font-weight:700;margin:0 0 9px;letter-spacing:-.01em}
+.td-work h3:not(:first-child){margin-top:20px}
+.td-p{font-size:13px;line-height:1.62;margin:0 0 11px;max-width:72ch;color:var(--color-text)}
+.td-fml{font-size:12px;background:var(--color-bg);border:1px solid var(--color-border);
+  border-radius:6px;padding:10px 13px;margin:0 0 12px;overflow-x:auto;line-height:1.8;white-space:pre}
+.td-note{border-left:3px solid var(--color-primary);background:var(--color-primary-light);
+  padding:10px 14px;margin:0 0 13px;font-size:12.5px;line-height:1.6;max-width:74ch;border-radius:0 5px 5px 0}
+.td-note.warn{border-left-color:var(--color-warning);background:var(--color-warning-bg)}
+.td-note.stop{border-left-color:var(--color-danger);background:var(--color-danger-bg)}
+.td-note b{display:block;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
   margin-bottom:3px;color:var(--color-primary-dark)}
-.kb-note.warn b{color:var(--color-warning)}.kb-note.stop b{color:var(--color-danger)}
-.kb-note p{margin:0}.kb-note p+p{margin-top:7px}
-.kb-plan{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:start}
-@media(max-width:860px){.kb-plan{grid-template-columns:1fr}}
-.kb-pbtn{display:flex;align-items:center;gap:8px;text-align:left;width:100%;appearance:none;
+.td-note.warn b{color:var(--color-warning)}.td-note.stop b{color:var(--color-danger)}
+.td-note p{margin:0}.td-note p+p{margin-top:6px}
+.td-src{font-size:11px;color:var(--color-text-secondary);margin:-5px 0 12px}
+.td-plan{display:grid;grid-template-columns:196px minmax(0,1fr);gap:14px;align-items:start}
+@media(max-width:860px){.td-plan{grid-template-columns:1fr}}
+.td-pbtn{display:flex;align-items:center;gap:8px;text-align:left;width:100%;appearance:none;
   border:1px solid var(--color-border);background:var(--color-surface,#fff);color:var(--color-text);
-  font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:6px}
-.kb-pbtn:hover{border-color:var(--color-primary);background:var(--color-primary-light)}
-.kb-sw{width:14px;height:14px;border-radius:3px;flex:none}
-.kb-stage{width:100%;height:auto;background:var(--color-surface,#fff);border:1px solid var(--color-border);
-  border-radius:8px;touch-action:none}
-.kb-bar{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:10px}
-.kb-mini{appearance:none;border:1px solid var(--color-border);background:var(--color-surface,#fff);
+  font-family:inherit;font-size:12px;font-weight:600;padding:7px 9px;border-radius:6px;
+  cursor:pointer;margin-bottom:6px}
+.td-pbtn:hover{border-color:var(--color-primary);background:var(--color-primary-light)}
+.td-sw{width:13px;height:13px;border-radius:3px;flex:none}
+.td-stage{width:100%;height:auto;background:var(--color-surface,#fff);
+  border:1px solid var(--color-border);border-radius:8px;touch-action:none}
+.td-bar2{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:10px}
+.td-mini{appearance:none;border:1px solid var(--color-border);background:var(--color-surface,#fff);
   color:var(--color-text);font-family:inherit;font-size:12px;font-weight:600;padding:6px 11px;
   border-radius:5px;cursor:pointer}
-.kb-mini:hover{border-color:var(--color-primary);color:var(--color-primary)}
-.kb-mini.on{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
-.kb-seg{display:flex;border:1px solid var(--color-border);border-radius:6px;overflow:hidden}
-.kb-seg button{flex:1;appearance:none;border:0;background:var(--color-bg);color:var(--color-text-secondary);
-  font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 4px;cursor:pointer}
-.kb-seg button.on{background:var(--color-primary);color:#fff}
-.kb-seg button+button{border-left:1px solid var(--color-border)}
-.kb-ref h3{font-size:16px;font-weight:700;margin:24px 0 7px;letter-spacing:-.01em}
-.kb-ref h3:first-child{margin-top:0}
-.kb-ref p{margin:0 0 12px;max-width:70ch;font-size:13.5px;line-height:1.65}
-.kb-ref ul{max-width:70ch;padding-left:20px;margin:0 0 14px;font-size:13.5px;line-height:1.65}
-.kb-ref li{margin-bottom:5px}
-.kb-pre{font-size:12.5px;background:var(--color-bg);border:1px solid var(--color-border);
-  border-radius:6px;padding:11px 14px;margin:0 0 14px;overflow-x:auto;line-height:1.75;white-space:pre}
-.kb-src{font-size:11.5px;color:var(--color-text-secondary);margin:-7px 0 14px}
-@media print{.kb-tabs,.kb-bar,.kb-pbtn{display:none}.kb-res,.kb-note,.card{break-inside:avoid}}
+.td-mini:hover{border-color:var(--color-primary);color:var(--color-primary)}
+.td-mini.on{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+.td-seg{display:flex;border:1px solid var(--color-border);border-radius:6px;overflow:hidden}
+.td-seg button{flex:1;appearance:none;border:0;background:var(--color-bg);
+  color:var(--color-text-secondary);font-family:inherit;font-size:12px;font-weight:600;
+  padding:6px 4px;cursor:pointer}
+.td-seg button.on{background:var(--color-primary);color:#fff}
+.td-seg button+button{border-left:1px solid var(--color-border)}
+.td-tbl{min-width:0;table-layout:auto;font-size:12.5px}
+.td-hit{background:var(--color-primary-light)}
+@media print{.td-cards,.td-back,.td-bar2,.td-pbtn{display:none}
+  .td-bar{position:static}.td-work,.td-note,.td-in{break-inside:avoid}}
 `
 
-type Tab = 'size' | 'plan' | 'ups' | 'heat' | 'room' | 'ref'
-const TABS: [Tab, string][] = [
-  ['size', 'Sizing'], ['plan', 'Test regime'], ['ups', 'UPS & battery'],
-  ['heat', 'Heat & air'], ['room', 'Room layout'], ['ref', 'Reference'],
+// ── The registry. Adding a tool means adding a row here and a case below. ──
+type ToolId =
+  | 'loadbank' | 'regime' | 'ups' | 'ir' | 'earth' | 'vd' | 'ct' | 'harmonics'
+  | 'whitespace' | 'containment' | 'heat' | 'chw' | 'affinity' | 'room' | 'ref'
+
+type Tool = { id: ToolId; group: string; title: string; note: string; tag: string }
+
+const TOOLS: Tool[] = [
+  { id: 'loadbank', group: 'Electrical', title: 'Load bank sizing', note: 'Both legs of the bank from a nameplate, with site derating and the resistive-only warning.', tag: 'kW + kVAR' },
+  { id: 'regime', group: 'Electrical', title: 'Generator test regime', note: 'The step table for NFPA 110 acceptance, monthly, annual and triennial, or an ISO 8528 ladder.', tag: 'NFPA 110 · ISO 8528' },
+  { id: 'ups', group: 'Electrical', title: 'UPS and battery', note: 'Test load at any power factor, end-of-discharge volts, watts per cell, and the IST abort point.', tag: 'IEEE 450 · 1188' },
+  { id: 'ir', group: 'Electrical', title: 'Insulation resistance', note: 'Minimum by winding vintage, temperature correction both ways, PI and DAR.', tag: 'IEEE 43 · IEC 60364' },
+  { id: 'earth', group: 'Electrical', title: 'Earth and soil resistivity', note: 'Wenner four-pin, the 61.8 % probe position, and whether your current lead is long enough.', tag: 'IEEE 81 · IEEE 80' },
+  { id: 'vd', group: 'Electrical', title: 'Cable volt drop', note: 'Resistance and reactance, three-phase or single, against the IEC and NEC guidance figures.', tag: 'IEC 60364-5-52' },
+  { id: 'ct', group: 'Electrical', title: 'CT burden and ALF', note: 'Connected burden from leads and relay, and the effective accuracy limit factor it leaves you.', tag: 'IEC 61869-2' },
+  { id: 'harmonics', group: 'Electrical', title: 'Harmonics', note: 'Voltage distortion limits by bus voltage and the TDD table from Isc over IL.', tag: 'IEEE 519-2022' },
+  { id: 'whitespace', group: 'White space and cooling', title: 'White space cooling', note: 'Airflow per rack, cooling capacity factor, provisioning ratio and bypass.', tag: 'CCF · CFM/kW' },
+  { id: 'containment', group: 'White space and cooling', title: 'Containment — RCI and RTI', note: 'Rack Cooling Index against the ASHRAE class, and whether you have bypass or recirculation.', tag: 'ASHRAE TC 9.9' },
+  { id: 'heat', group: 'White space and cooling', title: 'Heat rejection and airflow', note: 'kW to BTU and tons, the air volume needed, corrected for altitude.', tag: 'CFM · m³/s' },
+  { id: 'chw', group: 'White space and cooling', title: 'Chilled water', note: 'Flow from load and ΔT in both unit systems, and pressure drop against flow.', tag: 'l/s · GPM' },
+  { id: 'affinity', group: 'White space and cooling', title: 'Pump and fan laws', note: 'Speed, impeller trim and machine scaling — which are three different laws.', tag: 'Affinity' },
+  { id: 'room', group: 'Planning', title: 'Room layout planner', note: 'Place equipment to scale and it flags hot discharge feeding another unit’s intake.', tag: 'Drag to place' },
+  { id: 'ref', group: 'Planning', title: 'Reference and tolerances', note: 'Air balance tolerances, the standards behind each tool, and what this page will not do.', tag: 'NEBB · AABC' },
 ]
 
 const TONE: Record<string, string> = {
@@ -112,33 +156,32 @@ function f(v: number, d?: number) {
   return v.toLocaleString('en-GB', { minimumFractionDigits: p, maximumFractionDigits: p })
 }
 
-function Res({ k, label, value, note, formula }: {
-  k?: 'lead' | 'warn' | 'stop'; label: string; value: React.ReactNode
-  note?: React.ReactNode; formula?: string
+type KpiTone = 'lead' | 'good' | 'warn' | 'bad' | undefined
+function Kpi({ label, value, unit, note, tone }: {
+  label: string; value: string; unit?: string; note?: string; tone?: KpiTone
 }) {
   return (
-    <div className={'kb-res' + (k ? ' ' + k : '')}>
-      <div className="kb-l">{label}</div>
-      <div className="kb-v mono">{value}</div>
-      {note ? <div className="kb-n">{note}</div> : null}
-      {formula ? <div className="kb-fml mono">{formula}</div> : null}
+    <div className={'td-kpi' + (tone ? ' ' + tone : '')}>
+      <div className="td-kpi-l">{label}</div>
+      <div className="td-kpi-v mono">{value}{unit ? <span className="td-kpi-u"> {unit}</span> : null}</div>
+      {note ? <div className="td-kpi-n">{note}</div> : null}
     </div>
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function F({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="kb-f">
-      <label>{label}{hint ? <span className="h"> {hint}</span> : null}</label>
+    <div className="td-f">
+      <label>{label}{hint ? <span className="h">{hint}</span> : null}</label>
       {children}
     </div>
   )
 }
 
-export default function KnowledgePage() {
-  const [tab, setTab] = useState<Tab>('size')
+export default function TechnicalDesignPage() {
+  const [tool, setTool] = useState<ToolId | null>(null)
 
-  // ── generator ──
+  // ── load bank ──
   const [rating, setRating] = useState(1000)
   const [unit, setUnit] = useState<RatingUnit>('kva')
   const [pf, setPf] = useState(0.8)
@@ -148,12 +191,10 @@ export default function KnowledgePage() {
   const [ambC, setAmbC] = useState(30)
   const [rAlt, setRAlt] = useState(1)
   const [rAmb, setRAmb] = useState(3)
-
   const size = useMemo(() => sizeGenerator({
     rating, unit, pf, volts, phase, altitudeM: altM, ambientC: ambC,
     pctPer100m: rAlt, pctPer5C: rAmb,
   }), [rating, unit, pf, volts, phase, altM, ambC, rAlt, rAmb])
-  const d = size.derate
 
   // ── regime ──
   const [regimeId, setRegimeId] = useState('nfpa-accept')
@@ -161,12 +202,10 @@ export default function KnowledgePage() {
   const [applyDerate, setApplyDerate] = useState(false)
   const regime = regimeById(regimeId)
   const planKw = baseKw ?? Math.round(size.rated.kW)
-  const steps = planSteps(regime, planKw, applyDerate ? d.factor : 1)
-  const mins = totalMinutes(steps)
+  const steps = planSteps(regime, planKw, applyDerate ? size.derate.factor : 1)
 
   // ── ups ──
   const [uRating, setURating] = useState(500)
-  const [uUnit, setUUnit] = useState<RatingUnit>('kva')
   const [uPf, setUPf] = useState(1)
   const [uLoad, setULoad] = useState(100)
   const [cells, setCells] = useState(240)
@@ -174,21 +213,117 @@ export default function KnowledgePage() {
   const [autonomy, setAutonomy] = useState(10)
   const [eff, setEff] = useState(95)
   const ups = useMemo(() => sizeUps({
-    rating: uRating, unit: uUnit, pf: uPf, loadPct: uLoad,
+    rating: uRating, unit: 'kva', pf: uPf, loadPct: uLoad,
     cells, voltsPerCell: vpc, autonomyMin: autonomy, efficiencyPct: eff,
-  }), [uRating, uUnit, uPf, uLoad, cells, vpc, autonomy, eff])
+  }), [uRating, uPf, uLoad, cells, vpc, autonomy, eff])
+
+  // ── insulation resistance ──
+  const [ir1, setIr1] = useState(400)
+  const [ir10, setIr10] = useState(900)
+  const [ir30s, setIr30s] = useState(0)
+  const [ir60s, setIr60s] = useState(0)
+  const [windT, setWindT] = useState(25)
+  const [irMethod, setIrMethod] = useState<CorrectionMethod>('ieee')
+  const [vintage, setVintage] = useState<WindingVintage>('post1970')
+  const [ratedKV, setRatedKV] = useState(6.6)
+  const ir = useMemo(() => insulationResistance({
+    ir1min: ir1, ir10min: ir10, ir30s, ir60s,
+    windingTempC: windT, method: irMethod, vintage, ratedKV,
+  }), [ir1, ir10, ir30s, ir60s, windT, irMethod, vintage, ratedKV])
+
+  // ── earth ──
+  const [spacing, setSpacing] = useState(3)
+  const [pinDepth, setPinDepth] = useState(0.2)
+  const [soilR, setSoilR] = useState(2)
+  const [leadM, setLeadM] = useState(500)
+  const [diagM, setDiagM] = useState(85)
+  const soil = useMemo(() => soilResistivity(spacing, pinDepth, soilR), [spacing, pinDepth, soilR])
+  const fop = useMemo(() => fallOfPotential(leadM, diagM), [leadM, diagM])
+
+  // ── volt drop ──
+  const [vdI, setVdI] = useState(100)
+  const [vdL, setVdL] = useState(50)
+  const [vdCsa, setVdCsa] = useState(70)
+  const [vdMat, setVdMat] = useState<'copper' | 'aluminium'>('copper')
+  const [vdV, setVdV] = useState(400)
+  const [vdPh, setVdPh] = useState<1 | 3>(3)
+  const [vdPf, setVdPf] = useState(0.85)
+  const [vdX, setVdX] = useState(0.08)
+  const [vdGuide, setVdGuide] = useState('iec-a')
+  const vd = useMemo(() => voltDrop({
+    currentA: vdI, lengthM: vdL, csaMm2: vdCsa, material: vdMat,
+    voltage: vdV, phase: vdPh, powerFactor: vdPf, reactancePerKm: vdX,
+  }), [vdI, vdL, vdCsa, vdMat, vdV, vdPh, vdPf, vdX])
+  const guide = VD_GUIDANCE.find((g) => g.id === vdGuide) ?? VD_GUIDANCE[0]
+
+  // ── CT ──
+  const [ctIs, setCtIs] = useState(5)
+  const [ctVA, setCtVA] = useState(15)
+  const [ctRct, setCtRct] = useState(0.3)
+  const [ctLen, setCtLen] = useState(60)
+  const [ctCsa, setCtCsa] = useState(4)
+  const [ctRelay, setCtRelay] = useState(2.5)
+  const [ctAlf, setCtAlf] = useState(10)
+  const [ctConn, setCtConn] = useState<'single' | 'star' | 'delta'>('single')
+  const ct = useMemo(() => ctBurden({
+    secondaryA: ctIs, ratedVA: ctVA, rctOhm: ctRct, leadLengthM: ctLen,
+    leadCsaMm2: ctCsa, relayVA: ctRelay, alf: ctAlf, connection: ctConn,
+  }), [ctIs, ctVA, ctRct, ctLen, ctCsa, ctRelay, ctAlf, ctConn])
+
+  // ── harmonics ──
+  const [busKV, setBusKV] = useState(11)
+  const [isc, setIsc] = useState(20000)
+  const [il, setIl] = useState(500)
+  const vLimit = voltageLimitFor(busKV)
+  const tdd = tddLimits(isc, il, busKV)
+
+  // ── white space ──
+  const [racks, setRacks] = useState(40)
+  const [kwRack, setKwRack] = useState(10)
+  const [itDt, setItDt] = useState(11)
+  const [coolKw, setCoolKw] = useState(528)
+  const [suppLps, setSuppLps] = useState(36000)
+  const ws = useMemo(() => whiteSpace({
+    racks, kwPerRack: kwRack, itDeltaT: itDt,
+    coolingCapacityKw: coolKw, suppliedLps: suppLps,
+  }), [racks, kwRack, itDt, coolKw, suppLps])
+
+  // ── containment ──
+  const [tempsRaw, setTempsRaw] = useState('20, 22, 24, 26, 29, 23')
+  const [cls, setCls] = useState('A1')
+  const [ahuDt, setAhuDt] = useState(9)
+  const [itDt2, setItDt2] = useState(11)
+  const temps = useMemo(() =>
+    tempsRaw.split(/[,\s]+/).map(Number).filter((n) => isFinite(n) && n !== 0), [tempsRaw])
+  const band = ASHRAE[cls] ?? ASHRAE.A2
+  const rci = useMemo(() => rackCoolingIndex(temps, [18, 27], band), [temps, band])
+  const rti = useMemo(() => returnTemperatureIndex(ahuDt, itDt2), [ahuDt, itDt2])
 
   // ── heat ──
   const [hKw, setHKw] = useState(500)
   const [hDt, setHDt] = useState(11)
-  const [hDtU, setHDtU] = useState<'c' | 'f'>('c')
   const [hAlt, setHAlt] = useState(0)
   const [inlet, setInlet] = useState(24)
-  const [cls, setCls] = useState('A2')
-  const heat = useMemo(() => heatAndAir({ kW: hKw, deltaT: hDt, deltaUnit: hDtU, altitudeM: hAlt }),
-    [hKw, hDt, hDtU, hAlt])
-  const verdict = inletVerdict(inlet, cls)
-  const band = ASHRAE[cls] ?? ASHRAE.A2
+  const [hCls, setHCls] = useState('A2')
+  const heat = useMemo(() => heatAndAir({ kW: hKw, deltaT: hDt, deltaUnit: 'c', altitudeM: hAlt }),
+    [hKw, hDt, hAlt])
+  const hBand = ASHRAE[hCls] ?? ASHRAE.A2
+  const verdict = inletVerdict(inlet, hCls)
+
+  // ── chilled water ──
+  const [chwKw, setChwKw] = useState(400)
+  const [chwDt, setChwDt] = useState(6)
+  const chw = useMemo(() => chilledWaterFlow(chwKw, chwDt), [chwKw, chwDt])
+
+  // ── affinity ──
+  const [affMode, setAffMode] = useState<AffinityMode>('speed')
+  const [nPct, setNPct] = useState(80)
+  const [dPct, setDPct] = useState(100)
+  const [rpm, setRpm] = useState(1450)
+  const [hStatic, setHStatic] = useState(0)
+  const [hBep, setHBep] = useState(100)
+  const aff = useMemo(() => affinity(affMode, nPct / 100, dPct / 100), [affMode, nPct, dPct])
+  const minSpeed = minimumUsefulSpeed(rpm, hStatic, hBep)
 
   // ── room ──
   const [roomW, setRoomW] = useState(20)
@@ -204,7 +339,6 @@ export default function KnowledgePage() {
   const [showGrid, setShowGrid] = useState(true)
   const nextId = useRef(5)
   const stageRef = useRef<SVGSVGElement>(null)
-
   const findings = useMemo(() => roomFindings(items, roomW, roomD), [items, roomW, roomD])
   const selected = items.find((i) => i.id === sel) ?? null
 
@@ -216,25 +350,21 @@ export default function KnowledgePage() {
 
   function addItem(kind: KindId) {
     setItems((prev) => {
-      const pos = clampToRoom(1 + ((prev.length * 1.5) % 6), 1 + ((prev.length * 1.2) % 5), kind, roomW, roomD)
-      const it: Item = { id: nextId.current++, kind, x: pos.x, y: pos.y, dir: 'E', label: nameFor(kind, prev) }
+      const p = clampToRoom(1 + ((prev.length * 1.5) % 6), 1 + ((prev.length * 1.2) % 5), kind, roomW, roomD)
+      const it: Item = { id: nextId.current++, kind, x: p.x, y: p.y, dir: 'E', label: nameFor(kind, prev) }
       setSel(it.id)
       return [...prev, it]
     })
   }
 
   function onDown(e: React.PointerEvent, id: number) {
-    e.preventDefault()
-    setSel(id)
-    const svg = stageRef.current
-    if (!svg) return
-    const it = items.find((x) => x.id === id)
-    if (!it) return
+    e.preventDefault(); setSel(id)
+    const svg = stageRef.current; if (!svg) return
+    const it = items.find((x) => x.id === id); if (!it) return
     const pt = svg.createSVGPoint()
     const toM = (ev: { clientX: number; clientY: number }) => {
       pt.x = ev.clientX; pt.y = ev.clientY
-      const m = svg.getScreenCTM()
-      if (!m) return { x: 0, y: 0 }
+      const m = svg.getScreenCTM(); if (!m) return { x: 0, y: 0 }
       const p = pt.matrixTransform(m.inverse())
       return { x: (p.x - ox) / sc, y: (p.y - oy) / sc }
     }
@@ -245,573 +375,772 @@ export default function KnowledgePage() {
       setItems((prev) => prev.map((x) => (x.id === id ? { ...x, x: p.x, y: p.y } : x)))
     }
     const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
     }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
 
   const num = (v: number, set: (n: number) => void) => ({
     type: 'number' as const, className: 'input mono', value: String(v),
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-      const n = parseFloat(e.target.value)
-      set(isFinite(n) ? n : 0)
+      const n = parseFloat(e.target.value); set(isFinite(n) ? n : 0)
     },
   })
 
-  return (
-    <div className="kb">
-      <style>{STYLES}</style>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 5px', letterSpacing: '-0.02em' }}>
-          Load Bank Testing
-        </h1>
-        <p className="text-secondary" style={{ fontSize: 13.5, margin: 0, maxWidth: '64ch' }}>
-          Sizing, test regimes, heat rejection and room layout — with the formula and the standard behind
-          every number, so you can defend it to a client.
+  // ── the hub ───────────────────────────────────────────────────────────
+  if (tool === null) {
+    const groups = [...new Set(TOOLS.map((t) => t.group))]
+    return (
+      <div className="td">
+        <style>{STYLES}</style>
+        <div className="td-hero">
+          <span className="td-mark">CX</span>
+          <div>
+            <h1 style={{ fontSize: 23, fontWeight: 700, margin: '0 0 4px', letterSpacing: '-0.02em' }}>
+              Technical Design
+            </h1>
+            <p className="text-secondary" style={{ fontSize: 13.5, margin: 0, maxWidth: '66ch' }}>
+              The commissioning calculations, with the formula and the standard behind every number —
+              and an honest word where the standard does not actually set a limit.
+            </p>
+          </div>
+        </div>
+        {groups.map((g) => (
+          <div key={g}>
+            <div className="td-grp">{g}</div>
+            <div className="td-cards">
+              {TOOLS.filter((t) => t.group === g).map((t) => (
+                <button key={t.id} className="td-card" onClick={() => setTool(t.id)}>
+                  <div className="td-card-t">{t.title}</div>
+                  <p className="td-card-n">{t.note}</p>
+                  <span className="td-card-s mono">{t.tag}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <p className="text-secondary" style={{ fontSize: 11.5, marginTop: 26, maxWidth: '70ch' }}>
+          Every figure is indicative. Where two standards disagree — and on temperature correction,
+          the affinity laws and balance tolerances they do — this page says so rather than picking one
+          quietly. The engineer signing the test sheet is the authority.
         </p>
       </div>
+    )
+  }
 
-      <div className="kb-tabs">
-        {TABS.map(([id, label]) => (
-          <button key={id} className={'kb-tab' + (tab === id ? ' on' : '')} onClick={() => setTab(id)}>
-            {label}
-          </button>
-        ))}
-      </div>
+  const meta = TOOLS.find((t) => t.id === tool)!
 
-      {/* ── SIZING ─────────────────────────────────────────── */}
-      {tab === 'size' && (
-        <>
-          <div className="kb-note">
-            <b>The trap this page exists to avoid</b>
-            <p>Generators are rated in <strong>kVA at 0.8 power factor</strong>. Load banks are rated in{' '}
-            <strong>kW at unity</strong>. Size the bank against the kVA figure and you overload the set; size
-            it against kW alone and the alternator never sees its rated current. Both legs are given below.</p>
-          </div>
-          <div className="kb-two">
-            <div className="card">
-              <h2 className="section-title">The generator</h2>
-              <Field label="Nameplate rating">
-                <div className="kb-row">
-                  <input {...num(rating, setRating)} min={1} />
-                  <select className="input" value={unit} onChange={(e) => setUnit(e.target.value as RatingUnit)}>
-                    <option value="kva">kVA</option><option value="kw">kW</option>
-                  </select>
-                </div>
-              </Field>
-              <Field label="Rated power factor" hint="0.8 lagging is the industrial convention">
-                <input {...num(pf, setPf)} min={0.1} max={1} step={0.01} />
-              </Field>
-              <Field label="Voltage, line to line">
-                <div className="kb-row">
-                  <input {...num(volts, setVolts)} min={1} />
-                  <select className="input" value={phase} onChange={(e) => setPhase(Number(e.target.value) as Phase)}>
-                    <option value={3}>3-phase</option><option value={1}>1-phase</option>
-                  </select>
-                </div>
-              </Field>
-              <Field label="Site conditions" hint="metres · ambient °C">
-                <div className="kb-row">
-                  <input {...num(altM, setAltM)} aria-label="Altitude in metres" />
-                  <input {...num(ambC, setAmbC)} aria-label="Ambient in degrees C" />
-                </div>
-              </Field>
-              <Field label="Derate assumptions" hint="% per 100 m over 1000 m · % per 5 °C over 40 °C">
-                <div className="kb-row">
-                  <input {...num(rAlt, setRAlt)} step={0.1} aria-label="Percent per 100 m" />
-                  <input {...num(rAmb, setRAmb)} step={0.1} aria-label="Percent per 5 C" />
-                </div>
-              </Field>
-            </div>
+  return (
+    <div className="td">
+      <style>{STYLES}</style>
+      <button className="td-back" onClick={() => setTool(null)}>← All tools</button>
+      <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 2px', letterSpacing: '-0.02em' }}>
+        {meta.title}
+      </h1>
+      <p className="text-secondary mono" style={{ fontSize: 11.5, margin: '0 0 4px' }}>{meta.tag}</p>
 
-            <div className="kb-out">
-              <Res k="lead" label="Resistive load bank — the kW leg"
-                value={<>{f(size.derated.kW, 0)} <span style={{ fontSize: 14, fontWeight: 500 }}>kW</span></>}
-                note="This alone loads the engine to its rated output."
-                formula={`kW = kVA × PF = ${f(size.rated.kVA, 0)} × ${pf}${d.total > 0 ? `  then × ${f(d.factor, 3)} derate` : ''}`} />
-              <Res k="lead" label="Reactive load bank — the kVAR leg"
-                value={<>{f(size.derated.kVAR, 0)} <span style={{ fontSize: 14, fontWeight: 500 }}>kVAR</span></>}
-                note="Add this and the alternator sees its rated current and the AVR is tested."
-                formula={`kVAR = √(kVA² − kW²) = ${f(size.rated.kVAR, 0)}${d.total > 0 ? `  then × ${f(d.factor, 3)}` : ''}`} />
-              <div className="kb-g3">
-                <Res label="Apparent power" value={`${f(size.derated.kVA, 0)} kVA`} formula="kVA = √(kW² + kVAR²)" />
-                <Res label="Full-load current at rated PF" value={`${f(size.current, 0)} A`}
-                  formula={phase === 3 ? 'I = kVA×1000 ÷ (√3 × V)' : 'I = kVA×1000 ÷ V'} />
-                <Res label="Breaker / feeder design current" value={`${f(size.breaker, 0)} A`}
-                  formula="1.25 × I  (continuous load)" />
-              </div>
-              {size.resistivePct < 99.5 ? (
-                <Res k="warn" label="If you use resistive load only"
-                  value={`The set reaches ${f(size.resistivePct, 0)} % of rated current, not 100 %`}
-                  note={<>At {f(size.derated.kW, 0)} kW resistive the current is {f(size.resistiveCurrent, 0)} A
-                    against a rated {f(size.current, 0)} A. The windings, cables and connections never reach
-                    service temperature, so a thermal fault stays hidden. Record the test as having been done
-                    at unity power factor.</>}
-                  formula={`I(resistive) = kW×1000 ÷ (√3 × V) = ${f(size.resistiveCurrent, 0)} A`} />
-              ) : (
-                <Res label="Resistive load" value="Fully loads this machine"
-                  note="A unity-rated machine reaches 100 % of its rated current on resistance alone." />
-              )}
-              {d.total > 0 ? (
-                <Res k="warn" label="Site derating applied" value={`−${f(d.total, 1)} %`}
-                  note={<>Altitude term −{f(d.altitude, 1)} % (above {ALT_DATUM_M} m), ambient term −{f(d.ambient, 1)} %
-                    (above {AMB_DATUM_C} °C). <strong>The larger of the two is applied, not the sum</strong> — engine
-                    and alternator derate for different reasons. Indicative only: sign off against the
-                    manufacturer&rsquo;s derate table.</>} />
-              ) : (
-                <Res label="Site derating" value="None applied"
-                  note={`Below ${ALT_DATUM_M} m and ${AMB_DATUM_C} °C most sets hold full output.`} />
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ── REGIME ─────────────────────────────────────────── */}
-      {tab === 'plan' && (
-        <div className="kb-two">
-          <div className="card">
-            <h2 className="section-title">Which test</h2>
-            <Field label="Test regime">
-              <select className="input" value={regimeId} onChange={(e) => setRegimeId(e.target.value)}>
-                {REGIMES.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
-              </select>
-            </Field>
-            <Field label="Nameplate kW" hint="carried over from Sizing">
-              <input {...num(planKw, setBaseKw)} min={1} />
-            </Field>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5 }}>
-              <input type="checkbox" checked={applyDerate} onChange={(e) => setApplyDerate(e.target.checked)} />
-              Apply the site derating to each step
-            </label>
-          </div>
-          <div className="card">
-            <h2 className="section-title">{regime.title}</h2>
-            <p className="text-secondary mono" style={{ fontSize: 11.5, margin: '0 0 12px' }}>{regime.cite}</p>
-            <div className="kb-note"><p>{regime.before}</p></div>
-            <div className="table-wrap">
-              <table className="table" style={{ fontSize: 12.5, minWidth: 0, tableLayout: 'auto' }}>
-                <thead><tr>
-                  <th>#</th><th>Step</th><th>Load</th><th>Hold</th><th>Elapsed</th><th>What it is for</th>
-                </tr></thead>
-                <tbody>
-                  {steps.map((s, i) => (
-                    <tr key={i}>
-                      <td className="mono">{i + 1}</td>
-                      <td className="mono">{s.pct} %</td>
-                      <td className="mono"><strong>{f(s.kW, 0)} kW</strong></td>
-                      <td className="mono">{s.minutes} min</td>
-                      <td className="mono">{s.elapsed} min</td>
-                      <td className="text-secondary">{s.why}</td>
-                    </tr>
-                  ))}
-                  <tr><td /><td style={{ fontWeight: 700 }}>Total</td><td /><td className="mono" style={{ fontWeight: 700 }}>{mins} min</td>
-                    <td className="mono" style={{ fontWeight: 700 }}>{f(mins / 60, 2)} h</td><td /></tr>
-                </tbody>
-              </table>
-            </div>
-            {regime.after ? <div className="kb-note warn" style={{ marginTop: 13 }}><b>Also</b><p>{regime.after}</p></div> : null}
-            {applyDerate && d.total > 0 ? (
-              <div className="kb-note"><b>Derated</b><p>Each step is {f(d.total, 1)} % below nameplate for the site
-                conditions on the Sizing tab. NFPA 110 allows this explicitly — the acceptance load is nameplate
-                &ldquo;less applicable derating factors for site conditions&rdquo;.</p></div>
-            ) : null}
-          </div>
+      {/* ══ LOAD BANK ══ */}
+      {tool === 'loadbank' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Resistive leg" value={f(size.derated.kW, 0)} unit="kW" note="loads the engine" />
+          <Kpi tone="lead" label="Reactive leg" value={f(size.derated.kVAR, 0)} unit="kVAR" note="loads the alternator" />
+          <Kpi label="Full-load current" value={f(size.current, 0)} unit="A" note={`breaker ${f(size.breaker, 0)} A`} />
+          <Kpi tone={size.resistivePct < 99.5 ? 'warn' : 'good'} label="Resistive only reaches"
+            value={f(size.resistivePct, 0)} unit="% of rated current" note={`${f(size.resistiveCurrent, 0)} A`} />
         </div>
-      )}
-
-      {/* ── UPS ────────────────────────────────────────────── */}
-      {tab === 'ups' && (
-        <div className="kb-two">
-          <div className="card">
-            <h2 className="section-title">UPS and battery</h2>
-            <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 14px' }}>
-              Modern units are rated at unity. Older ones are 0.9 or 0.8, and that changes the bank you need.
-            </p>
-            <Field label="UPS rating">
-              <div className="kb-row">
-                <input {...num(uRating, setURating)} min={1} />
-                <select className="input" value={uUnit} onChange={(e) => setUUnit(e.target.value as RatingUnit)}>
-                  <option value="kva">kVA</option><option value="kw">kW</option>
-                </select>
-              </div>
-            </Field>
-            <Field label="Output power factor">
-              <select className="input" value={uPf} onChange={(e) => setUPf(Number(e.target.value))}>
-                <option value={1}>1.0 — modern, post ~2015</option>
-                <option value={0.9}>0.9 — 2000s to 2010s</option>
-                <option value={0.8}>0.8 — legacy</option>
-              </select>
-            </Field>
-            <Field label="Test load, % of rating"><input {...num(uLoad, setULoad)} min={1} max={125} /></Field>
-            <Field label="Battery string" hint="cells in series · end-of-discharge V/cell">
-              <div className="kb-row">
-                <input {...num(cells, setCells)} min={1} aria-label="Cells in series" />
-                <input {...num(vpc, setVpc)} min={0.5} step={0.01} aria-label="Volts per cell" />
-              </div>
-            </Field>
-            <Field label="Autonomy and efficiency" hint="minutes · inverter %">
-              <div className="kb-row">
-                <input {...num(autonomy, setAutonomy)} min={1} aria-label="Rated autonomy minutes" />
-                <input {...num(eff, setEff)} min={50} max={100} step={0.5} aria-label="Inverter efficiency" />
-              </div>
-            </Field>
-          </div>
-          <div className="kb-out">
-            <Res k="lead" label="Resistive load bank for the UPS"
-              value={<>{f(ups.testKW, 0)} <span style={{ fontSize: 14, fontWeight: 500 }}>kW</span></>}
-              note={`At ${f(uLoad, 0)} % of a ${f(ups.rated.kVA, 0)} kVA unit rated at ${uPf} power factor.`}
-              formula={`kW = kVA × PF × load% = ${f(ups.rated.kVA, 0)} × ${uPf} × ${f(uLoad, 0)}%`} />
-            {ups.needsReactive ? (
-              <Res k="warn" label="Resistive alone will not prove the kVA rating"
-                value={`You also need ${f(ups.testKVAR, 0)} kVAR`}
-                note={`This unit is rated at ${uPf} power factor, so a resistive-only bank tests it at unity and never reaches its apparent-power rating. A resistive-reactive bank is needed.`}
-                formula="kVAR = √(kVA² − kW²)" />
-            ) : (
-              <Res label="Reactive leg" value="Not required"
-                note="A unity-rated UPS is fully loaded by resistive load alone — kW and kVA are the same number." />
-            )}
-            <div className="kb-g3">
-              <Res label="End-of-discharge voltage" value={`${f(ups.endVolts, 1)} V`}
-                formula={`${cells} cells × ${vpc} V/cell`} />
-              <Res label="DC power from the string" value={`${f(ups.dcKW, 1)} kW`}
-                formula={`kW(ac) ÷ efficiency = ${f(ups.testKW, 0)} ÷ ${f(eff / 100, 3)}`} />
-              <Res label="Per cell" value={`${f(ups.wattsPerCell, 1)} W`}
-                formula="DC watts ÷ cells — match to the maker's constant-power table" />
-            </div>
-            <Res k="stop" label="Battery limit during an integrated systems test"
-              value={`Stop at ${f(ups.abortMin, 1)} minutes`}
-              note={<>Do not run the batteries below <strong>60 % of rated autonomy</strong> during an IST. If
-                generator start, synchronise and transfer has not completed by then, abort and re-evaluate rather
-                than pressing on — you are spending the plant&rsquo;s real ride-through to prove a point.</>}
-              formula={`0.6 × ${f(autonomy, 0)} min rated autonomy`} />
-            <Res label="Discharge test method" value="Constant power"
-              note={<>A UPS string is sized in watts per cell because the inverter draws constant kW while string
-                voltage sags and current rises. A constant-current test under-stresses the string exactly at end of
-                discharge. Temperature-correct to 25 °C using the temperature at the <em>start</em>, and because this
-                test is under an hour, use the <strong>rate-adjusted</strong> method, not the time-adjusted one.</>} />
-          </div>
+        <div className="td-in">
+          <F label="Rating"><div style={{ display: 'flex', gap: 6 }}>
+            <input {...num(rating, setRating)} />
+            <select className="input" value={unit} onChange={(e) => setUnit(e.target.value as RatingUnit)} style={{ width: 72 }}>
+              <option value="kva">kVA</option><option value="kw">kW</option>
+            </select></div></F>
+          <F label="Power factor" hint="0.8 is the convention"><input {...num(pf, setPf)} step={0.01} /></F>
+          <F label="Voltage"><div style={{ display: 'flex', gap: 6 }}>
+            <input {...num(volts, setVolts)} />
+            <select className="input" value={phase} onChange={(e) => setPhase(Number(e.target.value) as Phase)} style={{ width: 62 }}>
+              <option value={3}>3ph</option><option value={1}>1ph</option>
+            </select></div></F>
+          <F label="Altitude, m"><input {...num(altM, setAltM)} /></F>
+          <F label="Ambient, °C"><input {...num(ambC, setAmbC)} /></F>
+          <F label="Derate rates" hint="%/100 m · %/5 °C"><div style={{ display: 'flex', gap: 6 }}>
+            <input {...num(rAlt, setRAlt)} step={0.1} /><input {...num(rAmb, setRAmb)} step={0.1} /></div></F>
         </div>
-      )}
+        <div className="td-work">
+          <h3>The working</h3>
+          <div className="td-fml mono">{`kVA  = ${f(size.rated.kVA, 0)}        kW = kVA × PF = ${f(size.rated.kW, 0)}
+kVAR = √(kVA² − kW²) = ${f(size.rated.kVAR, 0)}
+I    = kVA×1000 ÷ (${phase === 3 ? '√3 × V' : 'V'}) = ${f(size.current, 0)} A
+I(resistive) = kW×1000 ÷ (${phase === 3 ? '√3 × V' : 'V'}) = ${f(size.resistiveCurrent, 0)} A${size.derate.total > 0 ? `
 
-      {/* ── HEAT ───────────────────────────────────────────── */}
-      {tab === 'heat' && (
-        <>
-          <div className="kb-note warn">
-            <b>The most common error in this calculation</b>
-            <p>For an IT or load bank load, heat rejected equals electrical power in — 1 kW electrical is 1 kW
-            thermal. A chiller&rsquo;s <em>tons</em> is its <strong>thermal capacity</strong>, not its electrical
-            draw. Never convert a chiller&rsquo;s input kW into tons.</p>
-          </div>
-          <div className="kb-two">
-            <div className="card">
-              <h2 className="section-title">Heat and airflow</h2>
-              <Field label="Load applied, kW"><input {...num(hKw, setHKw)} min={0} /></Field>
-              <Field label="Temperature rise across the air path">
-                <div className="kb-row">
-                  <input {...num(hDt, setHDt)} min={0} />
-                  <select className="input" value={hDtU} onChange={(e) => setHDtU(e.target.value as 'c' | 'f')}>
-                    <option value="c">°C</option><option value="f">°F</option>
-                  </select>
+derate = max(altitude ${f(size.derate.altitude, 1)} %, ambient ${f(size.derate.ambient, 1)} %) = ${f(size.derate.total, 1)} %` : ''}`}</div>
+          {size.resistivePct < 99.5 && (
+            <div className="td-note warn"><b>Resistive only</b>
+              <p>At {f(size.derated.kW, 0)} kW resistive the machine draws {f(size.resistiveCurrent, 0)} A against a rated {f(size.current, 0)} A.
+              The windings, cables and connections never reach service temperature, so a thermal fault stays hidden.
+              Record the test as having been done at unity power factor.</p></div>
+          )}
+          {size.derate.total > 0 && (
+            <div className="td-note warn"><b>Derating</b>
+              <p><strong>The larger of the two terms is applied, not the sum</strong> — engine and alternator derate
+              for different reasons. There is no standard figure; sign off against the manufacturer&rsquo;s table.
+              Below {ALT_DATUM_M} m and {AMB_DATUM_C} °C most sets hold full output.</p></div>
+          )}
+        </div>
+      </>)}
+
+      {/* ══ REGIME ══ */}
+      {tool === 'regime' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Steps" value={String(steps.length)} note={regime.cite} />
+          <Kpi label="Total time" value={f(totalMinutes(steps), 0)} unit="min" note={`${f(totalMinutes(steps) / 60, 2)} hours`} />
+          <Kpi label="Peak load" value={f(Math.max(...steps.map((s) => s.kW)), 0)} unit="kW" />
+        </div>
+        <div className="td-in">
+          <F label="Test regime"><select className="input" value={regimeId} onChange={(e) => setRegimeId(e.target.value)}>
+            {REGIMES.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}</select></F>
+          <F label="Nameplate kW"><input {...num(planKw, setBaseKw)} /></F>
+          <F label="Derate"><label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, paddingTop: 6 }}>
+            <input type="checkbox" checked={applyDerate} onChange={(e) => setApplyDerate(e.target.checked)} style={{ width: 'auto' }} />
+            Apply site derating</label></F>
+        </div>
+        <div className="td-work">
+          <div className="td-note"><p>{regime.before}</p></div>
+          <div className="table-wrap"><table className="table td-tbl">
+            <thead><tr><th>#</th><th>Step</th><th>Load</th><th>Hold</th><th>Elapsed</th><th>What it is for</th></tr></thead>
+            <tbody>{steps.map((s, i) => (
+              <tr key={i}><td className="mono">{i + 1}</td><td className="mono">{s.pct} %</td>
+                <td className="mono"><strong>{f(s.kW, 0)} kW</strong></td><td className="mono">{s.minutes} min</td>
+                <td className="mono">{s.elapsed} min</td><td className="text-secondary">{s.why}</td></tr>))}
+            </tbody></table></div>
+          {regime.after && <div className="td-note warn" style={{ marginTop: 12 }}><b>Also</b><p>{regime.after}</p></div>}
+        </div>
+      </>)}
+
+      {/* ══ UPS ══ */}
+      {tool === 'ups' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Resistive bank" value={f(ups.testKW, 0)} unit="kW" />
+          <Kpi tone={ups.needsReactive ? 'warn' : 'good'} label="Reactive leg"
+            value={ups.needsReactive ? f(ups.testKVAR, 0) : 'none'} unit={ups.needsReactive ? 'kVAR' : ''}
+            note={ups.needsReactive ? 'needed to prove kVA' : 'unity-rated'} />
+          <Kpi label="End of discharge" value={f(ups.endVolts, 1)} unit="V" note={`${f(ups.wattsPerCell, 0)} W per cell`} />
+          <Kpi tone="bad" label="Abort an IST at" value={f(ups.abortMin, 1)} unit="min" note="60 % of autonomy" />
+        </div>
+        <div className="td-in">
+          <F label="Rating, kVA"><input {...num(uRating, setURating)} /></F>
+          <F label="Power factor"><select className="input" value={uPf} onChange={(e) => setUPf(Number(e.target.value))}>
+            <option value={1}>1.0 — modern</option><option value={0.9}>0.9</option><option value={0.8}>0.8 — legacy</option></select></F>
+          <F label="Test load, %"><input {...num(uLoad, setULoad)} /></F>
+          <F label="Cells in series"><input {...num(cells, setCells)} /></F>
+          <F label="End V per cell"><input {...num(vpc, setVpc)} step={0.01} /></F>
+          <F label="Autonomy, min"><input {...num(autonomy, setAutonomy)} /></F>
+          <F label="Inverter eff, %"><input {...num(eff, setEff)} step={0.5} /></F>
+        </div>
+        <div className="td-work">
+          <div className="td-note stop"><b>The battery rule to script</b>
+            <p>Do not run the batteries below <strong>60 % of rated autonomy</strong> during an integrated systems test.
+            If generator start, synchronise and transfer has not completed by {f(ups.abortMin, 1)} minutes, abort and
+            re-evaluate — you are spending the plant&rsquo;s real ride-through to prove a point.</p></div>
+          <div className="td-note"><b>Constant power, not constant current</b>
+            <p>A UPS string is sized in watts per cell because the inverter draws constant kW while string voltage sags
+            and current rises. A constant-current test under-stresses the string exactly at end of discharge.
+            Temperature-correct to 25 °C using the temperature at the <em>start</em>, and because this test is under an
+            hour use the <strong>rate-adjusted</strong> method, not the time-adjusted one.</p></div>
+        </div>
+      </>)}
+
+      {/* ══ INSULATION RESISTANCE ══ */}
+      {tool === 'ir' && (<>
+        <div className="td-bar">
+          <Kpi tone={ir.passes ? 'good' : 'bad'} label="Corrected to 40 °C" value={f(ir.corrected, 0)} unit="MΩ"
+            note={`minimum ${f(ir.minimum, 1)} MΩ`} />
+          <Kpi label="Correction factor" value={f(ir.factor, 3)} note={irMethod === 'ieee' ? 'IEEE halving rule' : 'IEC 60034-27-4'} />
+          <Kpi tone={ir.piMeaningful ? undefined : 'warn'} label="Polarisation index"
+            value={ir.pi ? f(ir.pi, 2) : '—'} note={ir.piMeaningful ? 'meaningful' : 'not meaningful above 5000 MΩ'} />
+          <Kpi label="DAR" value={ir.dar ? f(ir.dar, 2) : '—'} note="60 s ÷ 30 s" />
+        </div>
+        <div className="td-in">
+          <F label="Winding type"><select className="input" value={vintage} onChange={(e) => setVintage(e.target.value as WindingVintage)}>
+            {VINTAGES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</select></F>
+          <F label="Rated kV" hint="line to line"><input {...num(ratedKV, setRatedKV)} step={0.1} /></F>
+          <F label="IR at 1 min, MΩ"><input {...num(ir1, setIr1)} /></F>
+          <F label="IR at 10 min, MΩ"><input {...num(ir10, setIr10)} /></F>
+          <F label="Winding °C"><input {...num(windT, setWindT)} /></F>
+          <F label="Correction"><select className="input" value={irMethod} onChange={(e) => setIrMethod(e.target.value as CorrectionMethod)}>
+            <option value="ieee">IEEE 43 — halve per 10 °C</option>
+            <option value="iec-thermoset">IEC 60034-27-4 — none, 10–40 °C</option></select></F>
+          <F label="30 s, MΩ" hint="for DAR"><input {...num(ir30s, setIr30s)} /></F>
+          <F label="60 s, MΩ"><input {...num(ir60s, setIr60s)} /></F>
+        </div>
+        <div className="td-work">
+          <h3>The working</h3>
+          <div className="td-fml mono">{`minimum  = ${VINTAGES.find((v) => v.id === vintage)!.note}  →  ${f(ir.minimum, 1)} MΩ
+K        = ${irMethod === 'ieee' ? `2^((${windT} − 40)/10)` : 'IEC: 1 within 10–40 °C'} = ${f(ir.factor, 4)}
+R₄₀      = ${f(ir1, 0)} × ${f(ir.factor, 4)} = ${f(ir.corrected, 1)} MΩ
+verdict  = ${ir.passes ? 'above minimum' : 'BELOW MINIMUM'}`}</div>
+          <div className="td-note stop"><b>The commonest misuse in the industry</b>
+            <p>&ldquo;One megohm per kV plus one&rdquo; is <strong>not</strong> the general rule — it is the pre-1970 and
+            field-winding row only. Applied to a modern form-wound 6.6 kV stator it gives 7.6 MΩ where IEEE 43 wants
+            100 MΩ, so a machine thirteen times worse than the limit would pass.</p></div>
+          <div className="td-note warn"><b>Two live standards disagree here</b>
+            <p>IEEE 43 halves insulation resistance for every 10 °C rise. <strong>IEC 60034-27-4 applies no correction at
+            all</strong> between 10 and 40 °C for modern synthetic-resin systems. They give different answers on the same
+            winding, and the halving rule comes from old asphaltic insulation, so on epoxy-mica it can over-correct badly.
+            Pick the one that matches the insulation, and record which you used.</p>
+            {ir.wideCorrection && <p><strong>Your reading is more than 20 °C from the 40 °C reference</strong>, which is
+            exactly where the two diverge most. Measure closer to 40 °C if you can.</p>}</div>
+          {!ir.piMeaningful && <div className="td-note warn"><b>PI is not meaningful here</b>
+            <p>IEEE 43 says that above 5000 MΩ at one minute the calculated PI may be disregarded. At gigohm level the
+            leakage current is in nanoamps and instrument noise dominates the ratio. Judge on the absolute resistance.</p></div>}
+          {ir.piSuspiciouslyHigh && <div className="td-note warn"><b>A very high PI is not necessarily good news</b>
+            <p>A PI above about 7 on old asphaltic or varnished-cambric windings can indicate thermal ageing and
+            brittleness rather than health.</p></div>}
+          <h3>Cables and installations — IEC 60364-6</h3>
+          <div className="table-wrap"><table className="table td-tbl">
+            <thead><tr><th>Circuit</th><th>Test voltage</th><th>Minimum</th></tr></thead>
+            <tbody>{IEC60364_IR.map((r) => (
+              <tr key={r.band}><td>{r.band}</td><td className="mono">{r.testV} V</td><td className="mono">{r.minMohm} MΩ</td></tr>))}
+            </tbody></table></div>
+          <p className="td-src">{IEEE43_EDITION} · IEC 60364-6:2016 Table 6.1 · IEC 60034-27-4:2018</p>
+        </div>
+      </>)}
+
+      {/* ══ EARTH ══ */}
+      {tool === 'earth' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Soil resistivity" value={f(soil.simpleValid ? soil.simple : soil.full, 1)} unit="Ω·m"
+            note={soil.simpleValid ? 'ρ = 2πaR' : 'full form — pins too deep'} />
+          <Kpi label="Depth sampled" value={f(soil.approxDepthM, 1)} unit="m" note="about the pin spacing" />
+          <Kpi label="Probe goes at" value={f(fop.probeAtM, 0)} unit="m" note="61.8 % of the lead" />
+          <Kpi tone={fop.longEnough ? (fop.marginal ? 'warn' : 'good') : 'bad'} label="Current lead"
+            value={fop.longEnough ? (fop.marginal ? 'marginal' : 'good') : 'too short'}
+            note={`needs ${f(fop.minimumLeadM, 0)}–${f(fop.comfortableLeadM, 0)} m`} />
+        </div>
+        <div className="td-in">
+          <F label="Pin spacing, m"><input {...num(spacing, setSpacing)} step={0.5} /></F>
+          <F label="Pin depth, m"><input {...num(pinDepth, setPinDepth)} step={0.1} /></F>
+          <F label="Measured Ω"><input {...num(soilR, setSoilR)} step={0.1} /></F>
+          <F label="Current lead, m"><input {...num(leadM, setLeadM)} /></F>
+          <F label="Grid diagonal, m"><input {...num(diagM, setDiagM)} /></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`ρ (simplified) = 2πaR = 2π × ${f(spacing, 1)} × ${f(soilR, 2)} = ${f(soil.simple, 1)} Ω·m
+ρ (full form)  = ${f(soil.full, 1)} Ω·m
+  simplified is valid when pin depth ≤ 0.1 × spacing  →  ${soil.simpleValid ? 'valid' : 'NOT valid here'}
+
+probe at 0.618 × ${f(leadM, 0)} = ${f(fop.probeAtM, 0)} m`}</div>
+          {!fop.longEnough && <div className="td-note stop"><b>This reading will be wrong</b>
+            <p>A {f(diagM, 0)} m grid diagonal needs a current lead of at least {f(fop.minimumLeadM, 0)} m — ideally
+            {' '}{f(fop.comfortableLeadM, 0)} m — for the 61.8 % point to land in the true resistance plateau. A short lead
+            gives a confident, repeatable and completely wrong answer. This is the single biggest source of bogus
+            substation earth readings.</p></div>}
+          <div className="td-note warn"><b>There is no maximum earth resistance</b>
+            <p>IEEE 80 sets none. Compliance is <strong>touch and step potential</strong>, not a resistance number — a
+            substation passing at 4 Ω can still fail the gradient calculation while one at 8 Ω passes. The figures below
+            are design targets from three different documents.</p></div>
+          <div className="table-wrap"><table className="table td-tbl">
+            <thead><tr><th>Application</th><th>Target</th><th>Where it comes from</th></tr></thead>
+            <tbody>{EARTH_TARGETS.map((t) => (
+              <tr key={t.label}><td>{t.label}</td><td className="mono">{t.range}</td>
+                <td className="text-secondary">{t.source}</td></tr>))}</tbody></table></div>
+          <p className="td-src">IEEE 81-2012 Annex C · IEEE 80 · IEEE 142 · NEC 250.53(A)(2)</p>
+        </div>
+      </>)}
+
+      {/* ══ VOLT DROP ══ */}
+      {tool === 'vd' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Volt drop" value={f(vd.volts, 2)} unit="V" />
+          <Kpi tone={vd.percent <= guide.lighting ? 'good' : vd.percent <= guide.other ? 'warn' : 'bad'}
+            label="As a percentage" value={f(vd.percent, 2)} unit="%"
+            note={`guidance ${guide.lighting} % lighting · ${guide.other} % other`} />
+          <Kpi label="Conductor R" value={f(vd.resistancePerKm, 3)} unit="Ω/km" note={`${vdMat} at operating temp`} />
+        </div>
+        <div className="td-in">
+          <F label="Current, A"><input {...num(vdI, setVdI)} /></F>
+          <F label="Length, m" hint="one way"><input {...num(vdL, setVdL)} /></F>
+          <F label="CSA, mm²"><input {...num(vdCsa, setVdCsa)} /></F>
+          <F label="Material"><select className="input" value={vdMat} onChange={(e) => setVdMat(e.target.value as 'copper' | 'aluminium')}>
+            <option value="copper">Copper</option><option value="aluminium">Aluminium</option></select></F>
+          <F label="Voltage"><div style={{ display: 'flex', gap: 6 }}>
+            <input {...num(vdV, setVdV)} />
+            <select className="input" value={vdPh} onChange={(e) => setVdPh(Number(e.target.value) as 1 | 3)} style={{ width: 62 }}>
+              <option value={3}>3ph</option><option value={1}>1ph</option></select></div></F>
+          <F label="Power factor"><input {...num(vdPf, setVdPf)} step={0.01} /></F>
+          <F label="Reactance, Ω/km"><input {...num(vdX, setVdX)} step={0.01} /></F>
+          <F label="Guidance"><select className="input" value={vdGuide} onChange={(e) => setVdGuide(e.target.value)}>
+            {VD_GUIDANCE.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}</select></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`ΔU = ${vdPh === 3 ? '√3' : '2'} × I × (R cos φ + X sin φ) × L
+
+   R = ${vdMat === 'copper' ? '23.7' : '37.6'} ÷ ${f(vdCsa, 0)} = ${f(vd.resistancePerKm, 4)} Ω/km
+   ΔU = ${vdPh === 3 ? '√3' : '2'} × ${f(vdI, 0)} × (${f(vd.resistancePerKm, 4)}×${vdPf} + ${vdX}×${f(Math.sqrt(1 - vdPf * vdPf), 4)}) × ${f(vdL / 1000, 3)} km
+      = ${f(vd.volts, 3)} V  =  ${f(vd.percent, 3)} %`}</div>
+          <div className="td-note warn"><b>These are guidance, not limits</b>
+            <p>IEC 60364-5-52 Annex G is <strong>informative</strong>. The NEC 3 % and 5 % are Informational Notes, and
+            NEC 90.5(C) says informational notes are not enforceable. Both are steady-state figures — motor starting and
+            other transients are excluded, and a greater drop is acceptable then provided the equipment standard is met.</p>
+            <p>The ×2 on single-phase and ×√3 on three-phase are the go-and-return and line-voltage factors. Both use the
+            <strong> one-way</strong> length; counting the return twice is the classic error in this calculation.</p></div>
+          <p className="td-src">IEC 60364-5-52 ed 3.1 Annex G · NEC 210.19(A), 215.2(A) informational notes</p>
+        </div>
+      </>)}
+
+      {/* ══ CT ══ */}
+      {tool === 'ct' && (<>
+        <div className="td-bar">
+          <Kpi tone={ct.overBurdened ? 'bad' : 'good'} label="Connected burden" value={f(ct.actualOhm, 3)} unit="Ω"
+            note={`rated ${f(ct.ratedOhm, 3)} Ω · ${f(ct.burdenUsedPct, 0)} % used`} />
+          <Kpi tone={ct.effectiveAlf < ctAlf ? 'warn' : 'good'} label="Effective ALF" value={f(ct.effectiveAlf, 1)}
+            note={`nameplate ${ctAlf}`} />
+          <Kpi label="Leads" value={f(ct.leadOhm, 3)} unit="Ω" note={`${f(ct.actualVA, 1)} VA total`} />
+          <Kpi label="Secondary limiting emf" value={f(ct.secondaryLimitingEmf, 0)} unit="V" />
+        </div>
+        <div className="td-in">
+          <F label="Secondary, A"><select className="input" value={ctIs} onChange={(e) => setCtIs(Number(e.target.value))}>
+            <option value={5}>5 A</option><option value={1}>1 A</option></select></F>
+          <F label="Rated VA"><input {...num(ctVA, setCtVA)} step={0.5} /></F>
+          <F label="Rct, Ω"><input {...num(ctRct, setCtRct)} step={0.05} /></F>
+          <F label="Lead, m" hint="one way"><input {...num(ctLen, setCtLen)} /></F>
+          <F label="Lead CSA, mm²"><input {...num(ctCsa, setCtCsa)} step={0.5} /></F>
+          <F label="Relay VA"><input {...num(ctRelay, setCtRelay)} step={0.1} /></F>
+          <F label="ALF" hint="the 10 in 5P10"><input {...num(ctAlf, setCtAlf)} /></F>
+          <F label="Paralleled"><select className="input" value={ctConn} onChange={(e) => setCtConn(e.target.value as 'single' | 'star' | 'delta')}>
+            <option value="single">Single / residual</option><option value="star">Star, shared neutral</option>
+            <option value="delta">Delta</option></select></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`Z(rated) = VA ÷ Is² = ${f(ctVA, 1)} ÷ ${ctIs}² = ${f(ct.ratedOhm, 4)} Ω
+Z(relay) = ${f(ctRelay, 1)} ÷ ${ctIs}² = ${f(ct.relayOhm, 4)} Ω
+R(leads) = ${ctConn === 'delta' ? '2√3' : '2'} × 0.0216 × ${f(ctLen, 0)} ÷ ${f(ctCsa, 1)} = ${f(ct.leadOhm, 4)} Ω
+Z(actual)= ${f(ct.actualOhm, 4)} Ω
+
+ALF(eff) = ALF × (Rct + Rb) ÷ (Rct + Zactual)
+         = ${ctAlf} × ${f(ctRct + ct.ratedOhm, 3)} ÷ ${f(ctRct + ct.actualOhm, 3)} = ${f(ct.effectiveAlf, 2)}`}</div>
+          {ct.overBurdened && <div className="td-note stop"><b>Over-burdened</b>
+            <p>The connected burden exceeds the CT rating, so the effective accuracy limit factor has collapsed from
+            {' '}{ctAlf} to {f(ct.effectiveAlf, 1)}. The CT will saturate earlier than the nameplate suggests and the
+            protection will under-reach.</p></div>}
+          <div className="td-note"><b>The one-amp lever</b>
+            <p>Burden scales with the <strong>square</strong> of secondary current, so a 1 A CT tolerates twenty-five times
+            the lead resistance of a 5 A one for the same VA. On long substation or data centre runs, 1 A secondaries are
+            usually the right answer. Try switching the secondary above and watch the burden.</p></div>
+          <div className="td-note warn"><b>Where the CTs are paralleled changes the lead factor</b>
+            <p>A single CT or a residual connection sees go-and-return, so twice the one-way run. A star group with a
+            shared neutral carries no return on a balanced three-phase fault but the full return on an earth fault — so the
+            worst case is still twice. Delta secondaries add √3. This is an input rather than a baked-in assumption
+            because references genuinely differ.</p></div>
+          <p className="td-src">IEC 61869-2:2012 · copper taken hot at 75 °C</p>
+        </div>
+      </>)}
+
+      {/* ══ HARMONICS ══ */}
+      {tool === 'harmonics' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Voltage THD limit" value={f(vLimit.thd, 1)} unit="%" note={vLimit.band} />
+          <Kpi label="Individual harmonic" value={f(vLimit.individual, 1)} unit="%" />
+          <Kpi tone="lead" label="TDD limit" value={tdd ? f(tdd.row.tdd, 1) : '—'} unit={tdd ? '%' : ''}
+            note={tdd ? `Isc/IL = ${f(tdd.ratio, 0)} — the "${tdd.row.label}" row` : 'above 69 kV — not implemented'} />
+        </div>
+        <div className="td-in">
+          <F label="Bus voltage, kV"><input {...num(busKV, setBusKV)} step={0.1} /></F>
+          <F label="Isc, A" hint="short circuit at the PCC"><input {...num(isc, setIsc)} /></F>
+          <F label="IL, A" hint="max demand load current"><input {...num(il, setIl)} /></F>
+        </div>
+        <div className="td-work">
+          <h3>Voltage distortion — Table 1</h3>
+          <div className="table-wrap"><table className="table td-tbl">
+            <thead><tr><th>Bus voltage</th><th>Individual</th><th>THD</th></tr></thead>
+            <tbody>{VOLTAGE_LIMITS.map((b) => (
+              <tr key={b.band} className={b === vLimit ? 'td-hit' : ''}>
+                <td>{b.band}</td><td className="mono">{b.individual} %</td><td className="mono">{b.thd} %</td></tr>))}
+            </tbody></table></div>
+          {tdd ? (<>
+            <h3>Current distortion — Table 2, as a percentage of I<sub>L</sub></h3>
+            <div className="td-fml mono">{`Isc ÷ IL = ${f(isc, 0)} ÷ ${f(il, 0)} = ${f(tdd.ratio, 1)}   →   the "${tdd.row.label}" row
+
+3 ≤ h < 11   ${f(tdd.row.h3_11, 1)} %
+11 ≤ h < 17  ${f(tdd.row.h11_17, 1)} %
+17 ≤ h < 23  ${f(tdd.row.h17_23, 1)} %
+23 ≤ h < 35  ${f(tdd.row.h23_35, 1)} %
+35 ≤ h ≤ 50  ${f(tdd.row.h35_50, 1)} %
+TDD          ${f(tdd.row.tdd, 1)} %`}</div>
+          </>) : (
+            <div className="td-note warn"><b>Above 69 kV is not implemented</b>
+              <p>Tables 3 and 4 use different Isc/IL breakpoints and cannot be derived by scaling Table 2. They could not
+              be verified from an open source, so this returns nothing rather than guessing. For a data centre the point
+              of common coupling is almost always at or below 69 kV.</p></div>
+          )}
+          <div className="td-note stop"><b>A single reading is not a failure</b>
+            <p>IEEE 519 compliance is a <strong>percentile over a measurement window</strong>, never a spot reading.
+            A calculator that stamps FAIL on one instrument snapshot generates false non-compliances — which is how a
+            real one stops being believed.</p></div>
+          <div className="table-wrap"><table className="table td-tbl">
+            <thead><tr><th>Assessment window</th><th>Allowed multiple of the table limit</th></tr></thead>
+            <tbody>{IEEE519_WINDOWS.map((w) => (
+              <tr key={w.label}><td>{w.label}</td><td className="mono">{w.multiple.toFixed(1)} ×</td></tr>))}</tbody></table></div>
+          <div className="td-note"><b>TDD is not THD</b>
+            <p>Total demand distortion is a percentage of the <strong>maximum demand current</strong>, not of the measured
+            fundamental. That is why a lightly loaded drive can show 80 % THD in current and still pass comfortably.</p></div>
+          <p className="td-src">{IEEE519_EDITION}. Even-harmonic treatment changed materially from the 2014 edition.</p>
+        </div>
+      </>)}
+
+      {/* ══ WHITE SPACE ══ */}
+      {tool === 'whitespace' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="IT load" value={f(ws.itKw, 0)} unit="kW" note={`${racks} racks at ${f(kwRack, 1)} kW`} />
+          <Kpi tone="lead" label="Airflow needed" value={f(ws.requiredLps, 0)} unit="L/s"
+            note={`${f(ws.requiredCfm, 0)} CFM · ${f(ws.perRackLps, 0)} L/s per rack`} />
+          <Kpi tone={ws.ccf < 1.15 ? 'bad' : ws.ccf <= 1.4 ? 'good' : 'warn'} label="Cooling capacity factor"
+            value={f(ws.ccf, 2)} note="target 1.2" />
+          <Kpi tone={ws.starved ? 'bad' : ws.provisioning <= 1.2 ? 'good' : 'warn'} label="Provisioning"
+            value={f(ws.provisioning, 2)} note={ws.starved ? 'starved — recirculation guaranteed' : `${f(ws.bypassPct, 0)} % bypass`} />
+        </div>
+        <div className="td-in">
+          <F label="Racks"><input {...num(racks, setRacks)} /></F>
+          <F label="kW per rack"><input {...num(kwRack, setKwRack)} step={0.5} /></F>
+          <F label="IT ΔT, K"><input {...num(itDt, setItDt)} step={0.5} /></F>
+          <F label="Cooling capacity, kW" hint="running, rated"><input {...num(coolKw, setCoolKw)} /></F>
+          <F label="Air supplied, L/s"><input {...num(suppLps, setSuppLps)} /></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`IT load     = ${racks} × ${f(kwRack, 1)} = ${f(ws.itKw, 0)} kW
+required    = 827.8 × kW ÷ ΔT = 827.8 × ${f(ws.itKw, 0)} ÷ ${f(itDt, 1)} = ${f(ws.requiredLps, 0)} L/s
+per rack    = ${f(ws.perRackLps, 0)} L/s  (${f(ws.perRackCfm, 0)} CFM)
+CCF         = capacity ÷ (1.10 × IT) = ${f(coolKw, 0)} ÷ ${f(1.1 * ws.itKw, 0)} = ${f(ws.ccf, 2)}
+provisioning= supplied ÷ required = ${f(suppLps, 0)} ÷ ${f(ws.requiredLps, 0)} = ${f(ws.provisioning, 2)}`}</div>
+          {ws.ccf > 1.5 && <div className="td-note warn"><b>Stranded capacity</b>
+            <p>A CCF of {f(ws.ccf, 2)} means roughly {f(ws.ccf / 1.2, 1)} times more cooling than the target. Across 45
+            assessed sites the average was 3.9 — most rooms run about four times the cooling they need. That is not
+            safety margin, it is capacity you have paid for and cannot sell.</p></div>}
+          {ws.starved && <div className="td-note stop"><b>Under-supplied</b>
+            <p>Supplying less air than the equipment draws guarantees recirculation: the shortfall is made up from the
+            hot aisle. Expect high inlet temperatures at the top of racks and at row ends.</p></div>}
+          <div className="td-note"><b>The 1.10 in the CCF</b>
+            <p>It covers the non-IT heat — lighting, envelope, people. The factor uses <em>nameplate</em> capacity, which
+            at raised supply-air temperatures understates what the units actually deliver, so treat CCF as a screen
+            rather than a measurement.</p></div>
+        </div>
+      </>)}
+
+      {/* ══ CONTAINMENT ══ */}
+      {tool === 'containment' && (<>
+        <div className="td-bar">
+          <Kpi tone={rciVerdict(rci.hi) === 'good' ? 'good' : rciVerdict(rci.hi) === 'acceptable' ? 'warn' : 'bad'}
+            label="RCI high" value={f(rci.hi, 1)} unit="%" note={`${rci.n} readings · worst ${f(rci.worstHigh ?? 0, 1)} °C`} />
+          <Kpi tone={rciVerdict(rci.lo) === 'good' ? 'good' : rciVerdict(rci.lo) === 'acceptable' ? 'warn' : 'bad'}
+            label="RCI low" value={f(rci.lo, 1)} unit="%" note={`coldest ${f(rci.worstLow ?? 0, 1)} °C`} />
+          <Kpi tone={rti.condition === 'balanced' ? 'good' : 'warn'} label="RTI" value={f(rti.rti, 1)} unit="%"
+            note={rti.condition} />
+        </div>
+        <div className="td-in">
+          <F label="Rack inlet temps, °C" hint="comma separated">
+            <input type="text" className="input mono" value={tempsRaw} onChange={(e) => setTempsRaw(e.target.value)} /></F>
+          <F label="ASHRAE class"><select className="input" value={cls} onChange={(e) => setCls(e.target.value)}>
+            {Object.entries(ASHRAE).map(([k, v]) => <option key={k} value={k}>{k} — {v[0]} to {v[1]} °C</option>)}</select></F>
+          <F label="Air handler ΔT, K"><input {...num(ahuDt, setAhuDt)} step={0.5} /></F>
+          <F label="IT equipment ΔT, K"><input {...num(itDt2, setItDt2)} step={0.5} /></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`RCI_HI = [1 − Σ(Tᵢ − 27)⁺ ÷ (n × (${band[1]} − 27))] × 100 = ${f(rci.hi, 1)} %
+RCI_LO = [1 − Σ(18 − Tᵢ)⁺ ÷ (n × (18 − ${band[0]}))] × 100 = ${f(rci.lo, 1)} %
+   recommended 18–27 °C for every class; allowable ${band[0]}–${band[1]} °C for ${cls}
+
+RTI    = handler ΔT ÷ IT ΔT × 100 = ${f(ahuDt, 1)} ÷ ${f(itDt2, 1)} × 100 = ${f(rti.rti, 1)} %`}</div>
+          <div className="td-note"><b>Reading RTI the right way round</b>
+            <p><strong>Under 100 % is bypass</strong> — supply air short-circuits to the return without passing a server,
+            so the handler sees a smaller rise than the kit does. <strong>Over 100 % is recirculation</strong> — hot
+            exhaust is re-entrained at the inlets. A widely mirrored source prints this ratio upside down, which flips
+            the two diagnoses entirely.</p></div>
+          <div className="td-note warn"><b>Only one side counts</b>
+            <p>Readings above the recommended maximum enter the HI sum; those below the minimum enter the LO sum. They
+            are two separate indices on purpose — a cold rack must not be allowed to cancel out a hot one, which is what
+            happens when the one-sided clamp is dropped.</p>
+            <p>The reference band must match the declared class. An RCI computed against A1 limits in an {cls} room means
+            nothing, which is why the class is an input.</p></div>
+          <div className="td-note stop"><b>The limit that usually fails</b>
+            <p>Not the absolute temperature — the rate of change. ASHRAE allows <strong>20 °C in an hour and no more than
+            5 °C in any 15 minutes</strong>. Log inlet temperatures at one-minute intervals through every transition so
+            you can prove the rate as well as the peak.</p></div>
+          <p className="td-src">ASHRAE TC 9.9 Thermal Guidelines 5th ed. · RCI after Herrlin · RTI per LBNL</p>
+        </div>
+      </>)}
+
+      {/* ══ HEAT ══ */}
+      {tool === 'heat' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Airflow, metric" value={f(heat.m3s, 2)} unit="m³/s" note={`${f(heat.m3h, 0)} m³/h`} />
+          <Kpi tone="lead" label="Airflow, imperial" value={f(heat.cfm, 0)} unit="CFM" note={`${f(heat.cfmPerKw, 0)} CFM per kW`} />
+          <Kpi label="Heat rejected" value={f(heat.btuPerHr, 0)} unit="BTU/hr" note={`${f(heat.tons, 1)} tons`} />
+          <Kpi tone={verdict === 'recommended' ? 'good' : verdict === 'allowable' ? 'warn' : 'bad'}
+            label="Inlet" value={f(inlet, 1)} unit="°C" note={verdict === 'outside' ? `outside ${hBand[0]}–${hBand[1]}` : verdict} />
+        </div>
+        <div className="td-in">
+          <F label="Load, kW"><input {...num(hKw, setHKw)} /></F>
+          <F label="ΔT, °C"><input {...num(hDt, setHDt)} step={0.5} /></F>
+          <F label="Altitude, m"><input {...num(hAlt, setHAlt)} /></F>
+          <F label="Inlet, °C"><input {...num(inlet, setInlet)} /></F>
+          <F label="ASHRAE class"><select className="input" value={hCls} onChange={(e) => setHCls(e.target.value)}>
+            {Object.entries(ASHRAE).map(([k, v]) => <option key={k} value={k}>{k} — {v[0]} to {v[1]} °C</option>)}</select></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`1 kW  = 3412.142 BTU/hr        1 ton = 3.516853 kW
+m³/s  = kW × 0.8278 ÷ ΔT(°C)${hAlt > 0 ? ` ÷ density ${f(heat.densityRatio, 3)}` : ''} = ${f(heat.m3s, 3)}
+CFM   = kW × 3159.4 ÷ ΔT(°F)${hAlt > 0 ? ` ÷ density ${f(heat.densityRatio, 3)}` : ''} = ${f(heat.cfm, 0)}
+air path: ${f(inlet, 1)} °C in → ${f(inlet + heat.deltaC, 1)} °C out`}</div>
+          {hAlt > 0 && <div className="td-note warn"><b>Altitude correction applied</b>
+            <p>At {f(hAlt, 0)} m the air is {f(heat.densityRatio * 100, 1)} % as dense as at sea level, so you need{' '}
+            <strong>{f((1 / heat.densityRatio - 1) * 100, 1)} % more volume</strong> to move the same heat. The 1.08 and
+            1.208 constants assume sea level — most airflow calculators miss this.</p></div>}
+          <div className="td-note warn"><b>The commonest error in this calculation</b>
+            <p>For an IT or load bank load, heat rejected equals power in — 1 kW electrical is 1 kW thermal. A
+            chiller&rsquo;s <em>tons</em> is its <strong>thermal capacity</strong>, not its electrical draw. Never convert
+            a chiller&rsquo;s input kW into tons.</p></div>
+          <div className="td-note"><b>A cross-check worth doing on site</b>
+            <p>Measured ΔT × measured airflow should reconcile to the applied kW. A significant mismatch means bypass air,
+            not a failing cooling unit — and that reconciliation is the most valuable number a commissioning engineer can
+            produce during a cooling test.</p></div>
+        </div>
+      </>)}
+
+      {/* ══ CHILLED WATER ══ */}
+      {tool === 'chw' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Flow" value={f(chw.lps, 2)} unit="L/s" note={`${f(chw.m3h, 1)} m³/h`} />
+          <Kpi tone="lead" label="Flow, imperial" value={f(chw.gpm, 1)} unit="GPM" note={`${f(chw.gpmPerTon, 2)} GPM per ton`} />
+          <Kpi label="Load" value={f(chw.tons, 1)} unit="tons" note={`${f(chwKw, 0)} kW`} />
+        </div>
+        <div className="td-in">
+          <F label="Load, kW"><input {...num(chwKw, setChwKw)} /></F>
+          <F label="ΔT, K"><input {...num(chwDt, setChwDt)} step={0.5} /></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`L/s = kW ÷ (4.19 × ΔT) = ${f(chwKw, 0)} ÷ (4.19 × ${f(chwDt, 1)}) = ${f(chw.lps, 3)}
+      4.19 = ρ × cp for water — 997 kg/m³ × 4.187 kJ/kg·K
+
+GPM = 24 × tons ÷ ΔT(°F) = 24 × ${f(chw.tons, 1)} ÷ ${f(chwDt * 9 / 5, 1)} = ${f(chw.gpm, 1)}
+      the 500 constant = 8.34 lb/gal × 60 min/hr × 1.0 BTU/lb·°F`}</div>
+          <div className="td-note"><b>Raising the chilled water temperature</b>
+            <p>Doubling ΔT halves the flow, which is the whole argument. Traditional practice was 7–10 °C supply with a
+            5–6 K rise; modern data centre practice is 18–20 °C supply with about a 10 K rise, cited at roughly 40 % of
+            cooling operating cost and several degrees more free-cooling ambient.</p></div>
+          <div className="td-note stop"><b>Not valid for glycol</b>
+            <p>Specific heat falls and density rises, so a 25–40 % mix needs roughly 5–15 % more flow, and more pressure
+            drop again. Take cp and ρ from the manufacturer&rsquo;s fluid tables rather than applying a guessed correction
+            factor to these numbers.</p></div>
+          <div className="td-note warn"><b>Pressure drop follows the square of flow</b>
+            <p>Double the flow, four times the drop. True for fully developed turbulent flow, which is most of a chilled
+            water circuit — but it breaks down through filters and strainers, at low flow, and in open systems where the
+            static lift does not scale at all.</p></div>
+        </div>
+      </>)}
+
+      {/* ══ AFFINITY ══ */}
+      {tool === 'affinity' && (<>
+        <div className="td-bar">
+          <Kpi tone="lead" label="Flow" value={f(aff.flow * 100, 1)} unit="%" />
+          <Kpi tone="lead" label="Head or pressure" value={f(aff.head * 100, 1)} unit="%" />
+          <Kpi tone="lead" label="Shaft power" value={f(aff.power * 100, 1)} unit="%"
+            note={`saves ${f((1 - aff.power) * 100, 0)} %`} />
+          {hStatic > 0 && <Kpi tone="warn" label="Stalls below" value={f(minSpeed, 0)} unit="rpm" note="static head floor" />}
+        </div>
+        <div className="td-in">
+          <F label="What is changing"><select className="input" value={affMode} onChange={(e) => setAffMode(e.target.value as AffinityMode)}>
+            {AFFINITY_MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></F>
+          <F label="Speed, % of rated"><input {...num(nPct, setNPct)} /></F>
+          <F label="Diameter, % of original"><input {...num(dPct, setDPct)} /></F>
+          <F label="Rated rpm"><input {...num(rpm, setRpm)} /></F>
+          <F label="Static head, m"><input {...num(hStatic, setHStatic)} /></F>
+          <F label="Head at BEP, m"><input {...num(hBep, setHBep)} /></F>
+        </div>
+        <div className="td-work">
+          <div className="td-fml mono">{`${AFFINITY_MODES.find((m) => m.id === affMode)!.note}
+
+flow  ${f(aff.flow * 100, 1)} %      head  ${f(aff.head * 100, 1)} %      power ${f(aff.power * 100, 1)} %`}</div>
+          <div className="td-note stop"><b>There are two different diameter laws</b>
+            <p>Trimming an impeller inside its existing casing gives Q∝D and P∝D³. Scaling to a genuinely different
+            machine gives Q∝ND³ and P∝N³D⁵. They disagree on flow and power — at 80 % diameter that is 80 % flow against
+            51 %. Both are correct in their own domain, which is why this is a choice rather than a constant.</p></div>
+          {dPct !== 100 && <div className="td-note warn"><b>Trim accuracy at {f(100 - dPct, 0)} %</b>
+            <p><strong>{trimAccuracy(100 - dPct).band}.</strong> {trimAccuracy(100 - dPct).note}</p></div>}
+          {hStatic > 0 && <div className="td-note warn"><b>Static head is where the laws stop working</b>
+            <p>With {f(hStatic, 0)} m of static head against {f(hBep, 0)} m at best efficiency, below about{' '}
+            <strong>{f(minSpeed, 0)} rpm</strong> the pump curve falls entirely under the system curve and you get no flow
+            at all. In a friction-dominated closed loop — most chilled water systems — this floor is near zero.</p></div>}
+          <div className="td-note"><b>The cube law is shaft power, not wire power</b>
+            <p>Motor and drive efficiency both fall at low load, and below roughly 25–30 % speed overall efficiency
+            degrades noticeably. Real savings are always less than the cube suggests.</p></div>
+        </div>
+      </>)}
+
+      {/* ══ ROOM ══ */}
+      {tool === 'room' && (<>
+        <div className="td-bar">
+          <Kpi label="Room" value={`${f(roomW, 1)} × ${f(roomD, 1)}`} unit="m" note={`${f(roomW * roomD, 0)} m²`} />
+          <Kpi label="Items placed" value={String(items.length)} />
+          <Kpi tone={findings.some((x) => x.severity === 'blocking') ? 'bad' : findings.length ? 'warn' : 'good'}
+            label="Findings" value={String(findings.length)}
+            note={findings.some((x) => x.severity === 'blocking') ? 'one will fail the test' : findings.length ? 'worth looking at' : 'nothing found'} />
+        </div>
+        <div className="td-bar2">
+          <input {...num(roomW, setRoomW)} style={{ width: 76 }} aria-label="Room width" />
+          <span className="text-secondary">×</span>
+          <input {...num(roomD, setRoomD)} style={{ width: 76 }} aria-label="Room depth" />
+          <span className="text-secondary" style={{ fontSize: 12 }}>m</span>
+          <button className={'td-mini' + (showZones ? ' on' : '')} onClick={() => setShowZones(!showZones)}>Clearance zones</button>
+          <button className={'td-mini' + (showGrid ? ' on' : '')} onClick={() => setShowGrid(!showGrid)}>Grid</button>
+          <button className="td-mini" onClick={() => { setItems([]); setSel(null) }}>Clear all</button>
+        </div>
+        <div className="td-plan">
+          <div>
+            {(Object.keys(KINDS) as KindId[]).map((k) => {
+              const K = KINDS[k]
+              return (
+                <button key={k} className="td-pbtn" onClick={() => addItem(k)}>
+                  <span className="td-sw" style={{ background: TONE[K.tone] }} />
+                  <span>{K.label}<br /><span className="mono text-secondary" style={{ fontWeight: 400, fontSize: 10.5 }}>
+                    {K.w} × {K.h} m</span></span>
+                </button>
+              )
+            })}
+            {selected && (() => {
+              const K = KINDS[selected.kind]
+              return (
+                <div className="card" style={{ padding: '12px 13px', marginTop: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 4 }}>{selected.label}</div>
+                  <div className="mono text-secondary" style={{ fontSize: 11, marginBottom: 8 }}>
+                    {K.w} × {K.h} m{K.discharge ? ` · in ${K.intake} m · out ${K.discharge} m` : ''}
+                  </div>
+                  {K.discharge > 0 && (
+                    <div className="td-seg">{DIRS.map((dir: Dir) => (
+                      <button key={dir} className={selected.dir === dir ? 'on' : ''}
+                        onClick={() => setItems((p) => p.map((x) => x.id === selected.id ? { ...x, dir } : x))}>{dir}</button>
+                    ))}</div>
+                  )}
+                  <button className="td-mini" style={{ marginTop: 8, borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
+                    onClick={() => { setItems((p) => p.filter((x) => x.id !== selected.id)); setSel(null) }}>Remove</button>
                 </div>
-              </Field>
-              <Field label="Altitude, metres" hint="air density correction"><input {...num(hAlt, setHAlt)} /></Field>
-              <Field label="Inlet air temperature, °C"><input {...num(inlet, setInlet)} /></Field>
-              <Field label="ASHRAE class">
-                <select className="input" value={cls} onChange={(e) => setCls(e.target.value)}>
-                  {Object.entries(ASHRAE).map(([k, v]) => (
-                    <option key={k} value={k}>{k} — {v[0]} to {v[1]} °C allowable</option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            <div className="kb-out">
-              <div className="kb-g3">
-                <Res label="Heat rejected" value={`${f(heat.btuPerHr, 0)} BTU/hr`} formula="kW × 3412.142" />
-                <Res label="In tons of refrigeration" value={`${f(heat.tons, 1)} TR`} formula="kW ÷ 3.516853" />
-                <Res label="Thermal load" value={`${f(hKw, 0)} kW`} formula="equal to the electrical load, 1:1" />
-              </div>
-              <Res k="lead" label="Airflow needed, metric"
-                value={<>{f(heat.m3s, 2)} <span style={{ fontSize: 14, fontWeight: 500 }}>m³/s</span> · {f(heat.m3h, 0)} <span style={{ fontSize: 14, fontWeight: 500 }}>m³/h</span></>}
-                note={`For ${f(hKw, 0)} kW at a ${f(heat.deltaC, 1)} °C rise.`}
-                formula={`m³/s = kW × 0.8278 ÷ ΔT(°C)${hAlt > 0 ? ` ÷ density ${f(heat.densityRatio, 3)}` : ''}`} />
-              <Res k="lead" label="Airflow needed, imperial"
-                value={<>{f(heat.cfm, 0)} <span style={{ fontSize: 14, fontWeight: 500 }}>CFM</span></>}
-                note={`That is ${f(heat.cfmPerKw, 0)} CFM per kW at this temperature rise.`}
-                formula={`CFM = kW × 3159.4 ÷ ΔT(°F)${hAlt > 0 ? ` ÷ density ${f(heat.densityRatio, 3)}` : ''}`} />
-              {hAlt > 0 ? (
-                <Res k="warn" label="Altitude correction applied"
-                  value={`Air density ${f(heat.densityRatio * 100, 1)} % of sea level`}
-                  note={<>The 1.08 and 1.208 constants assume standard air at sea level. At {f(hAlt, 0)} m you need{' '}
-                    <strong>{f((1 / heat.densityRatio - 1) * 100, 1)} % more volume</strong> to move the same heat,
-                    because each cubic metre carries less mass. Most airflow calculators miss this.</>} />
-              ) : null}
-              <Res label="Air path temperatures"
-                value={`${f(inlet, 1)} °C in → ${f(inlet + heat.deltaC, 1)} °C out`}
-                formula="outlet = inlet + ΔT" />
-              {verdict === 'outside' ? (
-                <Res k="stop" label={`Inlet outside the ASHRAE ${cls} allowable range`}
-                  value={`${f(inlet, 1)} °C is outside ${band[0]}–${band[1]} °C`}
-                  note="Recommended for all classes is 18–27 °C. This is the inlet to the equipment, not the room average." />
-              ) : verdict === 'allowable' ? (
-                <Res k="warn" label="Inside allowable but outside recommended"
-                  value={`${f(inlet, 1)} °C — recommended is 18–27 °C`}
-                  note={`Within the ${cls} allowable band of ${band[0]}–${band[1]} °C, so acceptable, but worth recording why.`} />
-              ) : (
-                <Res label="ASHRAE check" value="Inlet within recommended 18–27 °C"
-                  note={`Class ${cls} allowable is ${band[0]}–${band[1]} °C.`} />
-              )}
-              <Res k="warn" label="The limit that usually fails"
-                value="20 °C per hour, and 5 °C in any 15 minutes"
-                note="Rate of change, not absolute temperature, is what fails a thermal ride-through test. Log inlet temperatures at 1-minute intervals through every transition so you can prove the rate as well as the peak." />
-            </div>
+              )
+            })()}
           </div>
-        </>
-      )}
-
-      {/* ── ROOM ───────────────────────────────────────────── */}
-      {tab === 'room' && (
-        <>
-          <div className="kb-note">
-            <b>What this is for</b>
-            <p>Load banks fail their own test when hot discharge air finds its way back to an intake. Place the
-            equipment to scale and the plan shades each intake and discharge zone and tells you when one
-            overlaps another.</p>
-          </div>
-          <div className="kb-bar">
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.09em', textTransform: 'uppercase', color: 'var(--color-text-secondary)' }}>Room</span>
-            <input {...num(roomW, setRoomW)} min={2} max={120} step={0.5} style={{ width: 78 }} aria-label="Room width" />
-            <span className="text-secondary">×</span>
-            <input {...num(roomD, setRoomD)} min={2} max={120} step={0.5} style={{ width: 78 }} aria-label="Room depth" />
-            <span className="text-secondary" style={{ fontSize: 12 }}>m</span>
-            <button className={'kb-mini' + (showZones ? ' on' : '')} onClick={() => setShowZones(!showZones)}>Clearance zones</button>
-            <button className={'kb-mini' + (showGrid ? ' on' : '')} onClick={() => setShowGrid(!showGrid)}>Grid</button>
-            <button className="kb-mini" onClick={() => { setItems([]); setSel(null) }}>Clear all</button>
-          </div>
-
-          <div className="kb-plan">
-            <div>
-              {(Object.keys(KINDS) as KindId[]).map((k) => {
-                const K = KINDS[k]
+          <div>
+            <svg ref={stageRef} className="td-stage" viewBox={`0 0 ${VW} ${VH}`} role="img"
+              aria-label="Room layout plan showing equipment and clearance zones">
+              <rect x={X(0)} y={Y(0)} width={roomW * sc} height={roomD * sc}
+                fill="var(--color-bg)" stroke="var(--color-text)" strokeWidth={2} />
+              {showGrid && Array.from({ length: Math.max(0, Math.ceil(roomW) - 1) }, (_, i) => i + 1).map((m) => (
+                <line key={'v' + m} x1={X(m)} y1={Y(0)} x2={X(m)} y2={Y(roomD)}
+                  stroke="var(--color-border)" strokeWidth={m % 5 ? 0.5 : 1} opacity={m % 5 ? 0.5 : 0.9} />))}
+              {showGrid && Array.from({ length: Math.max(0, Math.ceil(roomD) - 1) }, (_, i) => i + 1).map((m) => (
+                <line key={'h' + m} x1={X(0)} y1={Y(m)} x2={X(roomW)} y2={Y(m)}
+                  stroke="var(--color-border)" strokeWidth={m % 5 ? 0.5 : 1} opacity={m % 5 ? 0.5 : 0.9} />))}
+              <text x={X(roomW / 2)} y={Y(0) - 16} textAnchor="middle" fontSize={13} fontWeight={600}
+                fill="var(--color-text-secondary)">{roomW} m</text>
+              <text x={X(0) - 16} y={Y(roomD / 2)} textAnchor="middle" fontSize={13} fontWeight={600}
+                fill="var(--color-text-secondary)" transform={`rotate(-90 ${X(0) - 16} ${Y(roomD / 2)})`}>{roomD} m</text>
+              {showZones && items.map((it) => {
+                const z = zonesOf(it); if (!z) return null
+                const K = KINDS[it.kind]
+                return (<g key={'z' + it.id}>
+                  {K.discharge > 0 && <rect x={X(z.discharge.x)} y={Y(z.discharge.y)} width={z.discharge.w * sc}
+                    height={z.discharge.h * sc} fill="var(--color-danger)" opacity={0.1}
+                    stroke="var(--color-danger)" strokeWidth={1} strokeDasharray="5 4" />}
+                  {K.intake > 0 && <rect x={X(z.intake.x)} y={Y(z.intake.y)} width={z.intake.w * sc}
+                    height={z.intake.h * sc} fill="var(--color-primary)" opacity={0.1}
+                    stroke="var(--color-primary)" strokeWidth={1} strokeDasharray="5 4" />}
+                </g>)
+              })}
+              {items.map((it) => {
+                const K = KINDS[it.kind], r = rectOf(it), isSel = it.id === sel
+                const cx = X(r.x + r.w / 2), cy = Y(r.y + r.h / 2)
+                const nm = /#(\d+)$/.exec(it.label)
+                const lbl = K.short + (nm ? ' #' + nm[1] : '')
+                const dx = it.dir === 'E' ? 1 : it.dir === 'W' ? -1 : 0
+                const dy = it.dir === 'S' ? 1 : it.dir === 'N' ? -1 : 0
                 return (
-                  <button key={k} className="kb-pbtn" onClick={() => addItem(k)}>
-                    <span className="kb-sw" style={{ background: TONE[K.tone] }} />
-                    <span>{K.label}<br />
-                      <span className="mono" style={{ fontWeight: 400, color: 'var(--color-text-secondary)', fontSize: 11 }}>
-                        {K.w} × {K.h} m
-                      </span>
-                    </span>
-                  </button>
+                  <g key={it.id} style={{ cursor: 'grab' }} onPointerDown={(e) => onDown(e, it.id)}>
+                    <rect x={X(r.x)} y={Y(r.y)} width={r.w * sc} height={r.h * sc} rx={3}
+                      fill={WASH[K.tone]} stroke={isSel ? 'var(--color-text)' : TONE[K.tone]} strokeWidth={isSel ? 3 : 1.8} />
+                    {r.w * sc > lbl.length * 6.4 + 10 && r.h * sc > 15 && (
+                      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11.5} fontWeight={700}
+                        fill="var(--color-text)">{lbl}</text>)}
+                    {K.discharge > 0 && (<>
+                      <line x1={cx} y1={cy} x2={cx + dx * (r.w * sc / 2 + 16)} y2={cy + dy * (r.h * sc / 2 + 16)}
+                        stroke="var(--color-danger)" strokeWidth={2.5} />
+                      <circle cx={cx + dx * (r.w * sc / 2 + 16)} cy={cy + dy * (r.h * sc / 2 + 16)} r={4.5}
+                        fill="var(--color-danger)" />
+                    </>)}
+                  </g>
                 )
               })}
-              <div className="card" style={{ padding: '13px 14px', marginTop: 10 }}>
-                <div className="kb-l">Selected</div>
-                {selected ? (() => {
-                  const K = KINDS[selected.kind]
-                  return (
-                    <>
-                      <div style={{ fontWeight: 700, fontSize: 13, margin: '5px 0 4px' }}>{selected.label}</div>
-                      <div className="mono text-secondary" style={{ fontSize: 11.5, marginBottom: 9 }}>
-                        {K.w} × {K.h} m{K.discharge ? ` · intake ${K.intake} m · discharge ${K.discharge} m` : ''}
-                      </div>
-                      {K.note ? <div className="text-secondary" style={{ fontSize: 11.5, marginBottom: 9 }}>{K.note}</div> : null}
-                      {K.discharge ? (
-                        <>
-                          <div className="kb-l" style={{ marginBottom: 5 }}>Discharges towards</div>
-                          <div className="kb-seg">
-                            {DIRS.map((dir: Dir) => (
-                              <button key={dir} className={selected.dir === dir ? 'on' : ''}
-                                onClick={() => setItems((p) => p.map((x) => x.id === selected.id ? { ...x, dir } : x))}>
-                                {dir}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      ) : null}
-                      <button className="kb-mini" style={{ marginTop: 10, borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
-                        onClick={() => { setItems((p) => p.filter((x) => x.id !== selected.id)); setSel(null) }}>
-                        Remove
-                      </button>
-                    </>
-                  )
-                })() : <div className="text-secondary" style={{ fontSize: 12.5, marginTop: 5 }}>Nothing selected. Click an item on the plan.</div>}
-              </div>
-            </div>
-
-            <div>
-              <svg ref={stageRef} className="kb-stage" viewBox={`0 0 ${VW} ${VH}`} role="img"
-                aria-label="Room layout plan showing load banks, panels and their clearance zones">
-                <rect x={X(0)} y={Y(0)} width={roomW * sc} height={roomD * sc}
-                  fill="var(--color-bg)" stroke="var(--color-text)" strokeWidth={2} />
-                {showGrid && Array.from({ length: Math.max(0, Math.ceil(roomW) - 1) }, (_, i) => i + 1).map((m) => (
-                  <line key={'v' + m} x1={X(m)} y1={Y(0)} x2={X(m)} y2={Y(roomD)}
-                    stroke="var(--color-border)" strokeWidth={m % 5 ? 0.5 : 1} opacity={m % 5 ? 0.5 : 0.9} />
-                ))}
-                {showGrid && Array.from({ length: Math.max(0, Math.ceil(roomD) - 1) }, (_, i) => i + 1).map((m) => (
-                  <line key={'h' + m} x1={X(0)} y1={Y(m)} x2={X(roomW)} y2={Y(m)}
-                    stroke="var(--color-border)" strokeWidth={m % 5 ? 0.5 : 1} opacity={m % 5 ? 0.5 : 0.9} />
-                ))}
-                <text x={X(roomW / 2)} y={Y(0) - 16} textAnchor="middle" fontSize={13} fontWeight={600}
-                  fill="var(--color-text-secondary)">{roomW} m</text>
-                <text x={X(0) - 16} y={Y(roomD / 2)} textAnchor="middle" fontSize={13} fontWeight={600}
-                  fill="var(--color-text-secondary)"
-                  transform={`rotate(-90 ${X(0) - 16} ${Y(roomD / 2)})`}>{roomD} m</text>
-
-                {showZones && items.map((it) => {
-                  const z = zonesOf(it); if (!z) return null
-                  const K = KINDS[it.kind]
-                  return (
-                    <g key={'z' + it.id}>
-                      {K.discharge > 0 && (
-                        <rect x={X(z.discharge.x)} y={Y(z.discharge.y)} width={z.discharge.w * sc} height={z.discharge.h * sc}
-                          fill="var(--color-danger)" opacity={0.1} stroke="var(--color-danger)" strokeWidth={1} strokeDasharray="5 4" />
-                      )}
-                      {K.intake > 0 && (
-                        <rect x={X(z.intake.x)} y={Y(z.intake.y)} width={z.intake.w * sc} height={z.intake.h * sc}
-                          fill="var(--color-primary)" opacity={0.1} stroke="var(--color-primary)" strokeWidth={1} strokeDasharray="5 4" />
-                      )}
-                    </g>
-                  )
-                })}
-
-                {items.map((it) => {
-                  const K = KINDS[it.kind], r = rectOf(it), isSel = it.id === sel
-                  const cx = X(r.x + r.w / 2), cy = Y(r.y + r.h / 2)
-                  const numSuffix = /#(\d+)$/.exec(it.label)
-                  const lbl = K.short + (numSuffix ? ' #' + numSuffix[1] : '')
-                  const dx = it.dir === 'E' ? 1 : it.dir === 'W' ? -1 : 0
-                  const dy = it.dir === 'S' ? 1 : it.dir === 'N' ? -1 : 0
-                  const tipx = cx + dx * (r.w * sc / 2 + 16), tipy = cy + dy * (r.h * sc / 2 + 16)
-                  return (
-                    <g key={it.id} style={{ cursor: 'grab' }} onPointerDown={(e) => onDown(e, it.id)}>
-                      <rect x={X(r.x)} y={Y(r.y)} width={r.w * sc} height={r.h * sc} rx={3}
-                        fill={WASH[K.tone]} stroke={isSel ? 'var(--color-text)' : TONE[K.tone]} strokeWidth={isSel ? 3 : 1.8} />
-                      {r.w * sc > lbl.length * 6.4 + 10 && r.h * sc > 15 && (
-                        <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--color-text)">{lbl}</text>
-                      )}
-                      {K.discharge > 0 && (
-                        <>
-                          <line x1={cx} y1={cy} x2={tipx} y2={tipy} stroke="var(--color-danger)" strokeWidth={2.5} />
-                          <circle cx={tipx} cy={tipy} r={4.5} fill="var(--color-danger)" />
-                        </>
-                      )}
-                    </g>
-                  )
-                })}
-              </svg>
-
-              <div style={{ marginTop: 12 }}>
-                {findings.length === 0 && items.length > 0 && (
-                  <div className="kb-note"><b>Nothing found</b><p>No discharge zone is feeding an intake and nothing is
-                    blocked. Clearances drawn are the conservative end of the manufacturer range — always check the
-                    manual for the actual unit.</p></div>
-                )}
-                {items.length === 0 && (
-                  <div className="kb-note"><b>Empty room</b><p>Add equipment from the list on the left, then drag it
-                    into place. Click an item to change which way it discharges.</p></div>
-                )}
-                {findings.map((x, i) => (
-                  <div key={i} className={'kb-note ' + (x.severity === 'blocking' ? 'stop' : 'warn')}>
-                    <b>{x.severity === 'blocking' ? 'Will fail the test' : 'Worth looking at'}</b>
-                    <p><strong>{x.title}.</strong> {x.detail}</p>
-                  </div>
-                ))}
-              </div>
+            </svg>
+            <div style={{ marginTop: 12 }}>
+              {items.length === 0 && <div className="td-note"><b>Empty room</b>
+                <p>Add equipment from the list, then drag it into place. Click an item to change which way it discharges.</p></div>}
+              {findings.length === 0 && items.length > 0 && <div className="td-note"><b>Nothing found</b>
+                <p>No discharge zone is feeding an intake and nothing is blocked. Clearances are the conservative end of
+                the manufacturer range — always check the manual for the actual unit.</p></div>}
+              {findings.map((x, i) => (
+                <div key={i} className={'td-note ' + (x.severity === 'blocking' ? 'stop' : 'warn')}>
+                  <b>{x.severity === 'blocking' ? 'Will fail the test' : 'Worth looking at'}</b>
+                  <p><strong>{x.title}.</strong> {x.detail}</p></div>
+              ))}
             </div>
           </div>
-        </>
-      )}
+        </div>
+      </>)}
 
-      {/* ── REFERENCE ──────────────────────────────────────── */}
-      {tab === 'ref' && (
-        <div className="card kb-ref">
-          <h3>Power, and why 0.8 matters</h3>
-          <p>A generator&rsquo;s nameplate kVA is apparent power — what the windings, cables and breakers actually
-          carry. Its kW is real power — what the engine has to produce.</p>
-          <div className="kb-pre mono">{`kVA  = √(kW² + kVAR²)
-kW   = kVA × PF
-kVAR = √(kVA² − kW²)
-PF   = kW ÷ kVA
+      {/* ══ REFERENCE ══ */}
+      {tool === 'ref' && (
+        <div className="td-work">
+          <h3>Air balance tolerances</h3>
+          <p className="td-p">The &ldquo;plus or minus ten per cent&rdquo; everybody half-remembers is NEBB&rsquo;s. AABC
+          is tighter and asymmetric, and data centre specifications routinely tighten further again. So the governing
+          standard is a choice on the job, not a constant.</p>
+          <div className="table-wrap"><table className="table td-tbl">
+            <thead><tr><th>Standard</th><th>Item</th><th>Tolerance</th></tr></thead>
+            <tbody>{BALANCE_TOLERANCES.map((t, i) => (
+              <tr key={i}><td className="mono">{t.standard}</td><td>{t.item}</td>
+                <td className="mono">{t.tolerance}</td></tr>))}</tbody></table></div>
 
-At PF 0.8:   kW = 0.80 × kVA     kVAR = 0.60 × kVA     kVAR = 0.75 × kW`}</div>
-          <p>A resistive load bank runs at unity. Load a set to 100 % of its <em>kW</em> rating with resistance alone
-          and it draws only <strong>80 % of rated current</strong> — the windings, cabling, breaker and every
-          connection never reach the temperature they will see in service. A reactive bank pulls current out of
-          phase, forcing the AVR to raise excitation, which tests the exciter, the winding thermal design at full
-          rated current, voltage regulation, and reactive load sharing between sets in parallel.</p>
-
-          <h3>NFPA 110 — what it actually requires</h3>
-          <p>Current edition 2025. Three figures are widely misquoted, so they are worth stating plainly.</p>
-          <ul>
-            <li><strong>Installation acceptance</strong> (§7.13.4): an operational run of not less than 1.5 hours,
-              then <strong>30 % for 30 min, 50 % for 30 min, 100 % for 60 min</strong> — two hours, less site derating.</li>
-            <li><strong>Routine monthly</strong> (§8.4.2): at least 30 minutes at the manufacturer&rsquo;s minimum
-              exhaust gas temperature or not less than 30 % of nameplate kW.</li>
-            <li><strong>Annual supplemental</strong>: <strong>50 % for 30 min then 75 % for 60 min</strong> — 1.5 hours.</li>
-            <li><strong>The four-hour test is triennial</strong> (§8.4.9): once within every 36 months, at not less than 30 %.</li>
-          </ul>
-          <div className="kb-note warn"><b>Two things the internet gets wrong</b>
-            <p>The annual sequence is <strong>50/75</strong>, not 25/50/75 — that was the pre-2010 wording. And the
-            4-hour run is on a <strong>36-month</strong> cycle, not yearly.</p></div>
-
-          <h3>Derating</h3>
-          <div className="kb-note stop"><b>There is no standard figure</b>
-            <p>Published rules of thumb vary by a factor of two to three. ISO 8528-1 says only that an adjustment
-            &ldquo;shall be made&rdquo;. Manufacturers publish a two-dimensional altitude × temperature grid, not a
-            linear rule. Use this to get an indication, then sign off against the manufacturer&rsquo;s curve.</p></div>
-          <p><strong>Engine and alternator derate separately, for different reasons</strong> — the engine for air
-          density and combustion, the alternator for insulation-class temperature rise. Whichever is limiting
-          governs. This page applies the larger, never the sum.</p>
-
-          <h3>Wet stacking</h3>
-          <p>Unburned fuel and carbon accumulating in the exhaust when a diesel runs too lightly to reach proper
-          combustion temperature. The risk threshold is <strong>below about 30 % of rated capacity</strong> — which
-          is where NFPA 110&rsquo;s 30 % figure comes from. To clear a set that has already wet stacked, run at about
-          75 % until exhaust temperature and smoke normalise. Engines with DPF or SCR behave differently: check the
-          manufacturer before applying a generic burn-off.</p>
-
-          <h3>Batteries</h3>
-          <ul>
-            <li><strong>IEEE 450-2020</strong> vented lead-acid · <strong>IEEE 1188-2025</strong> VRLA ·
-              IEEE 1106-2015 nickel-cadmium, now Inactive-Reserved — do not cite it as current.</li>
-            <li>Replace below <strong>80 %</strong> of rated capacity. A new battery is normally expected to reach 90 % on acceptance.</li>
-            <li><strong>Constant power for a UPS string</strong>, not constant current.</li>
-            <li>Temperature-correct to 25 °C using the temperature at the <em>start</em>. Use the rate-adjusted
-              method below an hour — which means most UPS tests.</li>
+          <h3>Where the standards genuinely disagree</h3>
+          <p className="td-p">These are not this page being vague. They are live conflicts between current documents, and
+          a tool that resolves them quietly on your behalf is making an engineering decision you did not see.</p>
+          <ul style={{ fontSize: 13, lineHeight: 1.65, maxWidth: '72ch', paddingLeft: 20 }}>
+            <li><strong>Insulation resistance temperature correction.</strong> IEEE 43 halves per 10 °C; IEC 60034-27-4
+              applies none at all between 10 and 40 °C for thermoset systems.</li>
+            <li><strong>The affinity laws.</strong> Trimming an impeller and scaling a machine are different laws with
+              different exponents for flow and power.</li>
+            <li><strong>Balance tolerances.</strong> NEBB and AABC differ materially, and AABC is asymmetric.</li>
+            <li><strong>Load bank clearances.</strong> Crestchic asks 2 m on the discharge, Avtron 5 m. The planner uses
+              the conservative figure.</li>
+            <li><strong>Derating.</strong> Published rules of thumb vary by a factor of two to three, and manufacturers
+              publish a grid rather than a linear rule.</li>
           </ul>
 
-          <h3>Heat and air</h3>
-          <div className="kb-pre mono">{`1 kW  = 3412.142 BTU/hr        (IT BTU — the HVAC convention)
-1 ton = 12 000 BTU/hr = 3.516853 kW
+          <h3>Where there is no limit at all</h3>
+          <ul style={{ fontSize: 13, lineHeight: 1.65, maxWidth: '72ch', paddingLeft: 20 }}>
+            <li><strong>Earth resistance.</strong> IEEE 80 sets no maximum. Compliance is touch and step potential.</li>
+            <li><strong>Volt drop.</strong> IEC Annex G is informative; the NEC figures are Informational Notes and
+              NEC 90.5(C) says those are not enforceable.</li>
+            <li><strong>Harmonics from one reading.</strong> IEEE 519 compliance is a percentile over a measurement
+              window, never a spot value.</li>
+            <li><strong>Bolt torque.</strong> Always manufacturer-first. And NFPA 70B caps a <em>verification</em> torque
+              at 90 % of the installation figure — re-checking at 100 % progressively over-stresses aluminium joints.</li>
+          </ul>
 
-Imperial:  CFM  = kW × 3159.4 ÷ ΔT(°F)      1.08 = 0.075 × 0.24 × 60
-Metric:    m³/s = kW × 0.8278 ÷ ΔT(°C)`}</div>
-          <p>Those constants assume standard air at sea level. Density is the term that changes with altitude, and
-          this page corrects for it automatically. A useful cross-check on site: <strong>measured ΔT × measured
-          airflow should reconcile to the applied load bank kW</strong>. A mismatch means bypass air, not a failing
-          cooling unit.</p>
-          <p>ASHRAE TC 9.9: recommended 18–27 °C; allowable A1 15–32, A2 10–35, A3 5–40, A4 5–45 °C. The limit that
-          usually fails is the rate of change — <strong>20 °C in an hour, 5 °C in any 15 minutes</strong>.</p>
-
-          <h3>Siting</h3>
-          <p>Manufacturers disagree on clearances — Crestchic asks 2 m on the discharge, Avtron 5 m, probably
-          horizontal against vertical discharge. The planner uses the conservative figures. Indoors: intake and
-          discharge in the same room; room inlet and outlet free area each at least twice the load bank outlet
-          area; inlet velocity under 3 m/s; plant room pressure differential under 10 Pa; inlets low, outlets high.</p>
-          <div className="kb-note stop"><b>Do not add your own ductwork</b>
-            <p>Added static pressure de-rates the fan and trips the unit. Ducting and attenuation must be engineered
-            for the specific load bank by its maker. Never point a discharge at a painted surface, a roof membrane
-            or a sprinkler head.</p></div>
-
-          <h3>What this page does not do</h3>
-          <p>It does not size cables. It gives the design current and the 125 % continuous figure, because cable
-          selection depends on installation method, grouping, ambient, run length and the standard you work to — and
-          a calculator that guesses at those produces a number somebody might install. Every derate, clearance and
-          load acceptance figure here is indicative. The engineer signing the test sheet is the authority, not this
-          page.</p>
+          <h3>What this page will not do</h3>
+          <p className="td-p">It does not size cables. It gives the design current and the 125 % continuous figure and
+          stops there, because cable selection depends on installation method, grouping, ambient, run length and the
+          standard you work to — and a calculator that guesses at those produces a number somebody might install.</p>
+          <p className="td-p">It does not implement IEEE 519 above 69 kV, because Tables 3 and 4 could not be verified
+          and cannot be derived by scaling. It does not carry the NETA insulation or torque tables, because open
+          transcriptions of those conflict with each other. Where a figure could not be confirmed, it is absent rather
+          than guessed.</p>
+          <p className="td-p">Every derate, clearance and acceptance figure here is indicative. The engineer signing the
+          test sheet is the authority, not this page.</p>
         </div>
       )}
     </div>

@@ -34,10 +34,21 @@ export async function proxy(request: NextRequest) {
   // what they have been invited to before typing a password into it, and a
   // link that bounces them back to the login screen they came from is worse
   // than no link.
+  //
+  // /manual is here for the same reason and one more: an engineer standing in
+  // a switchroom, or a client deciding whether to accept a handover pack,
+  // should be able to read how the thing works without an account. The manual
+  // describes the application; it holds no project data of any kind, so there
+  // is nothing on it to protect.
   const isPublic =
     request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/signup') ||
-    request.nextUrl.pathname.startsWith('/about')
+    request.nextUrl.pathname.startsWith('/about') ||
+    request.nextUrl.pathname.startsWith('/manual') ||
+    // Engineering reference. It holds no project data at all — it is arithmetic
+    // and standards — and somebody standing in a switchroom should not have to
+    // sign in to size a load bank.
+    request.nextUrl.pathname.startsWith('/knowledge')
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()

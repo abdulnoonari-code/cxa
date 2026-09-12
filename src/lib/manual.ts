@@ -120,6 +120,18 @@ export const MANUAL_GROUPS: ManualGroup[] = [
         ],
       },
       {
+        href: '/knowledge',
+        title: 'Load Bank Testing',
+        lede: 'Engineering reference and working calculators. It holds no project data, so it needs no sign-in.',
+        facts: [
+          { label: 'You see', text: 'Six tabs: load bank sizing, the test regimes, UPS and battery, heat rejection and airflow, a room layout planner, and the reference behind every number.' },
+          { label: 'You can', text: 'Enter a nameplate rating and get both legs of the load bank — the kW resistive leg and the kVAR reactive one — with the formula printed under each answer.' },
+          { label: 'It works out', text: 'Derated output for altitude and ambient, full-load and breaker current, the step table for whichever standard you pick, battery end-of-discharge voltage and watts per cell, heat in BTU and tons, and the airflow needed corrected for air density.' },
+          { label: 'Room plan', text: 'Place load banks, panels, generators and UPS to scale in a room and it shades every intake and discharge zone, then names any unit whose hot exhaust is feeding another one\u2019s intake.' },
+          { label: 'Careful', text: 'Every derate, clearance and load acceptance figure is indicative. The page says so where sources disagree, and it deliberately does not size cables \u2014 it gives the design current and stops there.' },
+        ],
+      },
+      {
         href: '/setup',
         title: 'Setup',
         lede: 'Diagnostics. Nothing on this page changes anything.',

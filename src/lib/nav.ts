@@ -69,6 +69,10 @@ export const NAV: NavSection[] = [
       // is read once at the start and then returned to when something is
       // surprising, which is not often enough to compete with the work.
       { href: '/manual', label: 'Manual', icon: 'document', note: 'How to use every screen, every spreadsheet format, and the rules the application applies to your records.' },
+      // Engineering reference rather than project data — it belongs beside the
+      // Manual for the same reason: read when something is being planned or is
+      // surprising, not part of the daily round.
+      { href: '/knowledge', label: 'Load Bank Testing', icon: 'validity', note: 'Sizing, NFPA 110 and ISO 8528 test regimes, UPS and battery, heat rejection, and a room layout planner.' },
     ],
   },
   {

@@ -127,8 +127,25 @@ export const MANUAL_GROUPS: ManualGroup[] = [
           { label: 'You see', text: 'A grid of tool cards in three groups \u2014 electrical, white space and cooling, and planning. Open one and it takes the whole screen, with the headline answers pinned to the top as you type.' },
           { label: 'Electrical', text: 'Load bank sizing, the generator test regimes, UPS and battery, insulation resistance, earth and soil resistivity, cable volt drop, CT burden and accuracy limit factor, and harmonic limits.' },
           { label: 'Cooling', text: 'White space airflow and cooling capacity factor, containment measured as Rack Cooling Index and Return Temperature Index, heat rejection corrected for altitude, chilled water flow, and the pump and fan laws.' },
-          { label: 'Planning', text: 'A room layout planner you drag equipment around, which flags any unit whose hot discharge is feeding another one\u2019s intake, and a reference page of air balance tolerances.' },
+          { label: 'Planning', text: 'The room layout planner, which has a page of its own, and a reference page of air balance tolerances.' },
           { label: 'Careful', text: 'Where two standards genuinely disagree \u2014 on insulation temperature correction, the affinity laws, balance tolerances and load bank clearances \u2014 the page says so rather than picking one quietly, and where there is no limit at all it says that too.' },
+        ],
+      },
+      {
+        href: '/knowledge/planner',
+        title: 'Room layout planner',
+        lede: 'Not a drawing tool with numbers bolted on \u2014 a calculation whose interface happens to be a drawing. Move a load bank and the cable lengthens, so its volt drop rises, so its colour changes.',
+        facts: [
+          { label: 'You see', text: 'A room drawn to scale with equipment in it and cables between them. Each cable carries its size, the current it must handle, its length measured off the drawing and its volt drop. Each box carries its rating and how hard it is working. Above the drawing, a bar that never scrolls away: source rating, connected load, spare capacity, worst volt drop, worst loaded cable and the number of findings.' },
+          { label: 'You can', text: 'Click an item in the palette to add it, or drag it onto the drawing. Drag it to move \u2014 it snaps to the quarter metre and cannot go through a wall. Arrow keys nudge the selection, Shift nudges by a metre, Delete removes it.' },
+          { label: 'Cables', text: 'Hover an item and four blue nubs appear on its edges. Press one and drag to the item it feeds. The direction matters: from is the supply. The cable then works out for itself what it carries, by adding up every load beneath it.' },
+          { label: 'Two views', text: 'Room plan and Single line, from one model. The plan carries position, scale and clearance; the single line carries the electrical structure, arranged automatically with sources at the top. The cables, sizes and colours are identical in both, because they are the same objects.' },
+          { label: 'Colour', text: 'One scale everywhere \u2014 green under 75 per cent, amber 75 to 90, orange 90 to 100, red over. Colour is never the only signal: every coloured thing also carries a number and a word. The red and blue hatching is physical, not electrical: hot discharge and air intake, which keep their meaning whatever the loading.' },
+          { label: 'It checks', text: 'Hot discharge landing in another unit\u2019s intake, discharge onto equipment or past the room boundary, a blocked intake, a cable over its derated capacity, volt drop past the guidance figure you chose, load exceeding a source\u2019s rating, and anything with no supply. When nothing is wrong it says so and lists what it checked, because silence is indistinguishable from a broken check.' },
+          { label: 'Careful', text: 'The suggested cable size is INDICATIVE and the page says so in as many words. It assumes BS 7671 Table 4E2A \u2014 copper, 90 \u00b0C thermosetting, multicore, Reference Method E on a perforated tray at 30 \u00b0C, one circuit. Installation method alone swings a rating by more than thirty per cent, and on any appreciable run volt drop governs before ampacity does. Take the current to your own cable schedule. It is not a specification.' },
+          { label: 'Careful', text: 'A cable cannot close a ring, because downstream load would then be undefined, and an item cannot have two supplies in this version, because the tool has no way to say how the two would share. Both are refused while you are still dragging, with the reason in words.' },
+          { label: 'Note', text: 'Parallel runs are part of the model. A 2 MVA load bank feeder at 400 V is 2887 A, which nothing in any tabulated size carries on one conductor \u2014 so the tool works in conductors per phase, and it counts them all when it applies the grouping factor. Six runs of 240 mm\u00b2 reach 2356 A, not six times 538.' },
+          { label: 'Note', text: 'Print for the method statement, or export a PNG. Saving a layout against a project is not built yet.' },
         ],
       },
       {
@@ -524,8 +541,17 @@ export function undocumented(navHrefs: string[]): string[] {
   return navHrefs.filter((h) => !known.has(h))
 }
 
-/** Entries pointing at a route the rail does not have — the other direction. */
+/**
+ * Entries pointing at a route the rail does not have — the other direction.
+ *
+ * A SUB-ROUTE of something in the rail is not a dead entry. The room layout
+ * planner lives at /knowledge/planner and is reached from the Technical Design
+ * page rather than from the rail itself; it is a real screen and it deserves
+ * its own section. What this is looking for is an entry describing a screen
+ * that has been removed, which is a manual quietly going out of date.
+ */
 export function documentsNothing(navHrefs: string[]): string[] {
   const real = new Set(navHrefs)
-  return documentedHrefs().filter((h) => !real.has(h))
+  const underNav = (h: string) => navHrefs.some((n) => n !== '/' && h.startsWith(n + '/'))
+  return documentedHrefs().filter((h) => !real.has(h) && !underNav(h))
 }

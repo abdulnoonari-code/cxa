@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   ITEMS, DIRS, RUN_OPTIONS, CSA_OPTIONS, AMPACITY_BASIS, AMPACITY_CAVEAT,
   rectOf, centreOf, zonesOf, wouldCycle, downstreamKva, suppliesOf, MAX_SUPPLIES,
+  ITEM_GROUPS, kindsInGroup,
   cableResult, bandFor, layoutFindings, summarise, nameFor, clampToRoom,
   singleLinePositions, describeCable, suggestCsa,
   type LayoutItem, type Cable, type ItemKind, type Dir, type LayoutOptions,
@@ -161,7 +162,11 @@ const STYLES = `
   overflow:hidden}
 .pl-panel-h{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
   color:var(--color-text-secondary);padding:9px 11px 6px}
-.pl-pal{display:flex;flex-direction:column;gap:5px;padding:0 8px 9px}
+.pl-pal{display:flex;flex-direction:column;gap:5px;padding:0 8px 9px;max-height:640px;overflow-y:auto}
+.pl-pal>div{display:flex;flex-direction:column;gap:5px}
+.pl-band{font-size:9px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--color-text-secondary);padding:9px 2px 2px;position:sticky;top:0;
+  background:var(--color-surface);z-index:1}
 .pl-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:grab;
   border:1px solid var(--color-border);border-radius:9px;background:var(--color-surface);
   padding:7px 8px;font:inherit;min-height:44px}
@@ -395,6 +400,8 @@ export default function PlannerPage() {
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [touched, setTouched] = useState(false)
   const [png, setPng] = useState<string | null>(null)
+  const [palQ, setPalQ] = useState('')
+  const [busyXlsx, setBusyXlsx] = useState(false)
 
   // ── The grid ──────────────────────────────────────────────────────────
   //
@@ -1174,6 +1181,97 @@ export default function PlannerPage() {
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml)
   }
 
+  /**
+   * The live SVG as a PNG, as a promise.
+   *
+   * The same serialise-and-draw the PNG button uses, because the picture in
+   * the workbook has to be the picture on the screen. Resolves to null rather
+   * than throwing — a workbook without its drawings is still worth having,
+   * and a failed export that produces nothing at all is not.
+   */
+  function snapshot(): Promise<string | null> {
+    return new Promise((resolve) => {
+      const svg = svgRef.current
+      if (!svg) { resolve(null); return }
+      const clone = svg.cloneNode(true) as SVGSVGElement
+      clone.setAttribute('width', String(VW * 2))
+      clone.setAttribute('height', String(VH * 2))
+      const xml = new XMLSerializer().serializeToString(clone)
+      const img = new Image()
+      const done = (v: string | null) => resolve(v)
+      img.onload = () => {
+        const cv = document.createElement('canvas')
+        cv.width = VW * 2; cv.height = VH * 2
+        const ctx = cv.getContext('2d')
+        if (!ctx) { done(null); return }
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, cv.width, cv.height)
+        ctx.drawImage(img, 0, 0)
+        try { done(cv.toDataURL('image/png')) } catch { done(null) }
+      }
+      img.onerror = () => done(null)
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml)
+    })
+  }
+
+  /**
+   * The workbook.
+   *
+   * Both views have to be photographed, so the canvas is switched to the one
+   * that is not showing, captured, and switched back. Two frames of the view
+   * flicking over is a fair price for a file that carries both drawings.
+   */
+  async function exportXlsx() {
+    if (busyXlsx) return
+    setBusyXlsx(true)
+    setSaying(null)
+    const wasView = view
+    try {
+      setView('plan')
+      await new Promise((r) => setTimeout(r, 120))
+      const planPng = await snapshot()
+      setView('single')
+      await new Promise((r) => setTimeout(r, 120))
+      const singlePng = await snapshot()
+      setView(wasView)
+      await new Promise((r) => setTimeout(r, 60))
+
+      const res = await fetch('/knowledge/planner/xlsx', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          drawingName: layoutName.trim() || 'Untitled drawing',
+          roomW, roomD, ambientC, vdGuidance: vdId,
+          items: itemsToStored(items),
+          cables: cablesToStored(cables),
+          planPng, singlePng,
+        }),
+      })
+      if (!res.ok) {
+        const why = res.status === 403
+          ? 'Sign in and open a project to download the workbook. Everything the planner calculates works without an account.'
+          : `The workbook could not be built (${res.status}).`
+        setSaying({ good: false, text: why })
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(layoutName.trim() || 'load bank plan').replace(/[^A-Za-z0-9 _-]/g, '')} - load bank plan.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+      setSaying({ good: true, text: 'Workbook downloaded — six sheets, with both drawings.' })
+    } catch {
+      setView(wasView)
+      setSaying({ good: false, text: 'The workbook did not download. Nothing on the drawing was changed — try again.' })
+    } finally {
+      setBusyXlsx(false)
+    }
+  }
+
   const worst = sum.blocking > 0 ? 'bad' : sum.advisory > 0 ? 'warn' : 'good'
 
   // ══════════════════════════════════════════════════════════════════════
@@ -1517,6 +1615,13 @@ export default function PlannerPage() {
         <span className="pl-spacer" />
         <button className="pl-mini" onClick={() => window.print()}>Print</button>
         <button className="pl-mini" onClick={exportPng}>PNG</button>
+        <button className="pl-go" onClick={() => void exportXlsx()}
+          disabled={busyXlsx || saveState?.canSave === false}
+          title={saveState?.canSave === false
+            ? saveState.reason
+            : 'A load bank plan workbook — basis, sizing, equipment, cable schedule, test plan, findings, and both drawings'}>
+          {busyXlsx ? 'Building…' : 'Excel'}
+        </button>
       </div>
 
       {/* ── 2 · the summary bar. Sticky, live. ── */}
@@ -1581,7 +1686,6 @@ export default function PlannerPage() {
                 ))}
               </select>
             )}
-            {saying && <span className={'pl-said ' + (saying.good ? 'good' : 'bad')}>{saying.text}</span>}
             {!saying && touched && layoutId && <span className="pl-said">Edited since it was saved.</span>}
           </div>
         ) : (
@@ -1590,6 +1694,13 @@ export default function PlannerPage() {
             <span className="why">{saveState.reason}</span>
           </div>
         )
+      )}
+
+      {saying && (
+        <div className={'pl-card ' + (saying.good ? 'clear' : 'warn')} style={{ marginBottom: 9 }}>
+          <b>{saying.good ? 'Done' : 'Could not do that'}</b>
+          <p>{saying.text}</p>
+        </div>
       )}
 
       {/* ── 3 · the control strip ── */}
@@ -1642,22 +1753,46 @@ export default function PlannerPage() {
         <div className="pl-panel">
           <div className="pl-panel-h">Equipment</div>
           <div className="pl-pal">
-            {(Object.keys(ITEMS) as ItemKind[]).map((k) => {
-              const s = ITEMS[k]
-              const t = TONE[s.tone]
+            <input type="search" className="pl-in" id="pl-palq" value={palQ} placeholder="Find equipment"
+              onChange={(e) => setPalQ(e.target.value)} aria-label="Search the equipment palette"
+              style={{ marginBottom: 6 }} />
+            {/* Banded, supply first. Twenty-one buttons in one column is a list
+                nobody reads to the bottom of, and the thing somebody wants is
+                always the one below the fold. */}
+            {ITEM_GROUPS.map((g) => {
+              const kinds = kindsInGroup(g).filter((k) => {
+                const q = palQ.trim().toLowerCase()
+                if (!q) return true
+                return `${ITEMS[k].label} ${ITEMS[k].short} ${g}`.toLowerCase().includes(q)
+              })
+              if (!kinds.length) return null
               return (
-                <button key={k} className="pl-item" draggable
-                  onDragStart={(e) => e.dataTransfer.setData('text/plain', k)}
-                  onClick={() => place(k)}
-                  title={`${s.label} — ${s.w} × ${s.h} m${s.discharge ? `, ${s.discharge} m discharge clearance` : ''}`}>
-                  <span className="pl-sw" style={{ background: t.wash, borderColor: t.c }} />
-                  <span>
-                    <span className="pl-item-t">{s.label}</span><br />
-                    <span className="pl-item-d mono">{s.w} × {s.h} m{s.discharge ? ` · ${s.discharge} m clear` : ''}</span>
-                  </span>
-                </button>
+                <div key={g}>
+                  <div className="pl-band">{g}</div>
+                  {kinds.map((k) => {
+                    const sp = ITEMS[k]
+                    const t = TONE[sp.tone]
+                    return (
+                      <button key={k} className="pl-item" draggable
+                        onDragStart={(e) => e.dataTransfer.setData('text/plain', k)}
+                        onClick={() => place(k)}
+                        title={`${sp.label} — ${sp.w} × ${sp.h} m${sp.discharge ? `, ${sp.discharge} m discharge clearance` : ''}${sp.note ? '. ' + sp.note : ''}`}>
+                        <span className="pl-sw" style={{ background: t.wash, borderColor: t.c }} />
+                        <span>
+                          <span className="pl-item-t">{sp.label}</span><br />
+                          <span className="pl-item-d mono">{sp.w} × {sp.h} m{sp.discharge ? ` · ${sp.discharge} m clear` : ''}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
               )
             })}
+            {palQ.trim() !== '' && ITEM_GROUPS.every((g) => kindsInGroup(g).every((k) =>
+              !`${ITEMS[k].label} ${ITEMS[k].short} ${g}`.toLowerCase().includes(palQ.trim().toLowerCase()))) && (
+              <p className="pl-note">Nothing called that. The palette has {Object.keys(ITEMS).length} types —
+              clear the search to see them all.</p>
+            )}
             <p className="pl-note">Click to add, or drag onto the drawing. Arrow keys nudge the
             selection by 0.25 m, Shift by a metre. Hold Shift while dragging to place off the grid.</p>
           </div>

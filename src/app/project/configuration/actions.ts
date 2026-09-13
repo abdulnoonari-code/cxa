@@ -10,7 +10,7 @@ import { saveProjectConfig } from '@/data/project-config'
 // query string, for the same reason the invite flow uses one — a result in
 // the URL survives a bookmark, a share and a history entry, and this one
 // should not.
-import { configFromForm, RESULT_COOKIE } from '@/lib/project-config'
+import { configFromForm, nextAfterSave, RESULT_COOKIE } from '@/lib/project-config'
 
 export async function saveConfiguration(formData: FormData) {
   const project = await getCurrentProject()
@@ -35,5 +35,11 @@ export async function saveConfiguration(formData: FormData) {
   revalidatePath('/levels')
   revalidatePath('/dashboard')
   revalidatePath('/readiness')
-  redirect('/project/configuration')
+  revalidatePath('/systems')
+  revalidatePath('/equipment')
+
+  // Either onward button at the bottom of the page lands here too — they are
+  // submit buttons, so the page is saved before anybody leaves it. Where they
+  // land next depends on whether the save actually took; see nextAfterSave.
+  redirect(nextAfterSave(formData.get('next'), outcome.state))
 }

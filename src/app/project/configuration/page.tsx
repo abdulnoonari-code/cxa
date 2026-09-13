@@ -201,7 +201,7 @@ export default async function ConfigurationPage() {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20 }}>
           <button type="submit" className="btn btn-primary" disabled={!project || columnMissing}>
             Save configuration
           </button>
@@ -209,6 +209,37 @@ export default async function ConfigurationPage() {
             {configNote(config)}
           </span>
         </div>
+
+        {/*
+          The next step, for somebody who has just made this project and does
+          not yet know what this application expects of them.
+
+          These are submit buttons and not links, and that is the whole point
+          of them. This card sits at the bottom of a long form; a link here
+          would be an invitation to throw away everything typed above it, one
+          click, no warning. A submit button saves the page and then moves on.
+          And if the save fails, it does not move on — see nextAfterSave.
+        */}
+        {project && !columnMissing && (
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h2 className="section-title" style={{ marginBottom: 4 }}>
+              Next: systems and equipment
+            </h2>
+            <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px', maxWidth: '84ch' }}>
+              This page settles what the job is measured against. Systems are the things being
+              commissioned; equipment and tags are what sits inside them. Either button saves this
+              page first, so nothing typed above is lost on the way.
+            </p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button type="submit" name="next" value="systems" className="btn btn-secondary">
+                Save and set up systems →
+              </button>
+              <button type="submit" name="next" value="equipment" className="btn btn-secondary">
+                Save and set up equipment →
+              </button>
+            </div>
+          </div>
+        )}
       </form>
     </>
   )

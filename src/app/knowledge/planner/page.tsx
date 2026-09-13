@@ -17,6 +17,10 @@ import {
   EMPTY_FILTER,
   type GridRow, type Column, type Filter, type Cell, type SortDir, type PasteResult,
 } from '@/lib/grid'
+import {
+  itemsToStored, cablesToStored, storedToItems, storedToCables, nextLocalIds,
+  type StoredItem, type StoredCable,
+} from '@/lib/layout-io'
 import { VD_GUIDANCE } from '@/lib/techdesign'
 
 // ════════════════════════════════════════════════════════════════════════
@@ -227,6 +231,17 @@ const STYLES = `
   color:var(--color-text-secondary)}
 .pl-lg i{width:13px;height:13px;border-radius:3px;border:2px solid;display:inline-block}
 
+/* ── Saving ── */
+.pl-save{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--color-surface);
+  border:1px solid var(--color-border);border-radius:10px;padding:7px 10px;margin-bottom:9px}
+.pl-save.off{background:var(--color-bg);color:var(--color-text-secondary)}
+.pl-save input[type=text]{flex:1 1 200px;min-width:0;padding:6px 9px;border:1px solid var(--color-border);
+  border-radius:7px;font:inherit;font-size:12.5px;background:var(--color-surface);color:var(--color-text);
+  min-height:32px}
+.pl-save .why{font-size:12px;line-height:1.5;max-width:86ch}
+.pl-said{font-size:12px;font-weight:650}
+.pl-said.good{color:var(--color-success)} .pl-said.bad{color:var(--color-danger)}
+
 /* ── The data grid — the equipment list, under the drawing ── */
 .pl-gridwrap{background:var(--color-surface);border:1px solid var(--color-border);border-radius:11px;
   margin-top:9px;overflow:hidden}
@@ -281,7 +296,7 @@ const STYLES = `
 .pl-mixed{color:var(--color-text-secondary);font-style:italic}
 
 @media print{
-  .pl-top,.pl-strip,.pl-panel-h,.pl-pal,.pl-props,.pl-legend,.pl-gridwrap{display:none!important}
+  .pl-top,.pl-strip,.pl-panel-h,.pl-pal,.pl-props,.pl-legend,.pl-gridwrap,.pl-save{display:none!important}
   .pl-stage{display:block}
   .pl-bar{position:static;box-shadow:none;page-break-inside:avoid}
   .pl-panel{border-color:#999}
@@ -399,6 +414,24 @@ export default function PlannerPage() {
   const [filter, setFilter] = useState<Filter>(EMPTY_FILTER)
   const [pending, setPending] = useState<{ plan: PasteResult; at: Cell } | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
+
+  // ── Saving ────────────────────────────────────────────────────────────
+  //
+  // The planner is public and works without an account, so the page has to
+  // ASK whether it may save before offering to. Three answers, three
+  // sentences: not signed in, no project open, or the SQL step has not been
+  // run. None of them is a broken Save button.
+  type SaveState = {
+    canSave: boolean
+    reason?: string
+    project?: { id: string; name: string }
+    layouts?: { id: string; name: string; updatedAt: string | null }[]
+  }
+  const [saveState, setSaveState] = useState<SaveState | null>(null)
+  const [layoutName, setLayoutName] = useState('')
+  const [layoutId, setLayoutId] = useState<string | null>(null)
+  const [saying, setSaying] = useState<{ good: boolean; text: string } | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const nextItem = useRef(6)
   const nextCable = useRef(4)
@@ -761,6 +794,80 @@ export default function PlannerPage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
+
+  useEffect(() => {
+    let alive = true
+    fetch('/knowledge/planner/save')
+      .then((r) => r.json())
+      .then((d) => { if (alive) setSaveState(d as SaveState) })
+      .catch(() => {
+        // A failed request is not "you may not save" — it is "I could not
+        // ask". Saying the wrong one of those sends somebody to the SQL
+        // editor to fix a network blip.
+        if (alive) setSaveState({ canSave: false, reason: 'Could not reach the server to ask whether this drawing can be saved. The planner still calculates everything.' })
+      })
+    return () => { alive = false }
+  }, [])
+
+  async function saveNow() {
+    if (!saveState?.canSave || saving) return
+    setSaving(true)
+    setSaying(null)
+    try {
+      const res = await fetch('/knowledge/planner/save', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          layoutId,
+          name: layoutName.trim(),
+          subjectType: 'project',
+          subjectId: saveState.project?.id ?? null,
+          roomW, roomD, ambientC, vdGuidance: vdId,
+          // The same two functions the round-trip assertions exercise. A
+          // second copy of this mapping written out here is how the saved
+          // drawing quietly stops matching the one on screen.
+          items: itemsToStored(items),
+          cables: cablesToStored(cables),
+        }),
+      })
+      const d = await res.json()
+      if (d.ok) {
+        setLayoutId(d.layoutId)
+        setTouched(false)
+        setSaying({ good: true, text: `Saved — ${d.items} items and ${d.cables} cables.` })
+      } else {
+        setSaying({ good: false, text: d.error ?? 'The save was refused.' })
+      }
+    } catch {
+      setSaying({ good: false, text: 'The save did not reach the server. Nothing was changed — try again.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function openLayout(id: string) {
+    const res = await fetch(`/knowledge/planner/save?open=${encodeURIComponent(id)}`)
+    const d = await res.json()
+    if (!d.bundle) { setSaying({ good: false, text: d.error ?? 'That layout could not be opened.' }); return }
+    remember()
+    const b = d.bundle as {
+      layout: { id: string; name: string; roomW: number; roomD: number; ambientC: number; vdGuidance: string }
+      items: StoredItem[]
+      cables: StoredCable[]
+    }
+    setItems(storedToItems(b.items))
+    setCables(storedToCables(b.cables))
+    setRoomW(b.layout.roomW); setRoomD(b.layout.roomD)
+    setAmbientC(b.layout.ambientC); setVdId(b.layout.vdGuidance)
+    setLayoutName(b.layout.name); setLayoutId(b.layout.id)
+    // Numbering continues past anything that came back, so a newly placed
+    // item can never collide with one that is already on the drawing.
+    const next = nextLocalIds(b.items, b.cables)
+    nextItem.current = next.item
+    nextCable.current = next.cable
+    select([]); setSel(null); setTouched(false)
+    setSaying({ good: true, text: `Opened ${b.layout.name}.` })
+  }
 
   // ── Panning on empty canvas ────────────────────────────────────────────
   function onStageDown(e: React.PointerEvent) {
@@ -1447,6 +1554,44 @@ export default function PlannerPage() {
         </div>
       </div>
 
+      {/* ── Saving. Present only when it can actually happen. ── */}
+      {saveState && (
+        saveState.canSave ? (
+          <div className="pl-save">
+            <span className="pl-lab">Save to {saveState.project?.name}</span>
+            <input type="text" id="pl-layout-name" value={layoutName}
+              placeholder="Name this drawing — IST block 2, MV switchroom, generator acceptance"
+              onChange={(e) => setLayoutName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveNow() }} />
+            <button className="pl-go" onClick={() => void saveNow()}
+              disabled={saving || layoutName.trim() === ''}>
+              {saving ? 'Saving…' : layoutId ? 'Save' : 'Save as new'}
+            </button>
+            {layoutId && (
+              <button className="pl-mini" onClick={() => { setLayoutId(null); setSaying({ good: true, text: 'The next save will create a new drawing rather than replacing the one you opened.' }) }}>
+                Detach
+              </button>
+            )}
+            {(saveState.layouts ?? []).length > 0 && (
+              <select className="pl-sel" value={layoutId ?? ''} aria-label="Open a saved layout"
+                onChange={(e) => { if (e.target.value) void openLayout(e.target.value) }}>
+                <option value="">Open a saved drawing…</option>
+                {(saveState.layouts ?? []).map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            )}
+            {saying && <span className={'pl-said ' + (saying.good ? 'good' : 'bad')}>{saying.text}</span>}
+            {!saying && touched && layoutId && <span className="pl-said">Edited since it was saved.</span>}
+          </div>
+        ) : (
+          <div className="pl-save off">
+            <span className="pl-lab">Saving</span>
+            <span className="why">{saveState.reason}</span>
+          </div>
+        )
+      )}
+
       {/* ── 3 · the control strip ── */}
       <div className="pl-strip">
         <div className="pl-seg" role="group" aria-label="View">
@@ -2031,8 +2176,10 @@ export default function PlannerPage() {
         judged against {guidance.label} at {guidance.other} %.
       </p>
       <p className="pl-basis">
-        Saving a layout against a project is not built yet — print it or export the PNG to put it in
-        a method statement. {touched ? 'This drawing has been edited; it is not the example any more.' : 'This is the worked example the page opens with, not your job.'}
+        A saved drawing keeps the conditions it was computed under — the ambient, the volt drop
+        guidance and the room — so a cable schedule printed from it stays defensible after somebody
+        changes the project&rsquo;s design ambient next month. Freezing a drawing as a numbered revision for
+        a handover pack is the next step and is not built yet. {touched ? 'This drawing has been edited; it is not the example any more.' : 'This is the worked example the page opens with, not your job.'}
       </p>
 
       {png && (

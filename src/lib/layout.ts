@@ -269,28 +269,61 @@ export function centreOf(it: LayoutItem): { x: number; y: number } {
   return { x: r.x + r.w / 2, y: r.y + r.h / 2 }
 }
 
-// ── The feed tree ───────────────────────────────────────────────────────
+// ── The feed network ────────────────────────────────────────────────────
+//
+// ── It is a DAG now, not a tree ──────────────────────────────────────────
+//
+// Rev A allowed one supply per item, so the network was a tree and every
+// question had a simple answer. Hyperscale distribution is dual-fed almost
+// everywhere: a PDU hangs off the A board and the B board, and the whole point
+// of the arrangement is that either one can carry it alone.
+//
+// So an item may now have TWO supplies, and the structure is a directed
+// acyclic graph. Three things change, and each of them is somewhere a diamond
+// would otherwise be counted twice or walked forever:
+//
+//   · a cycle check has to look DOWNSTREAM, not up a single chain
+//   · downstream load has to remember what it has already counted
+//   · depth is the LONGEST path from a source, so a dual-fed item sits below
+//     both of its supplies on the single line rather than jumping up beside one
+//
+// The sizing rule is the conservative one, and it is a decision, not a
+// default: EACH FEEDER CARRIES THE WHOLE LOAD. That is what you would install
+// in a 2N data centre, it is what the loss-of-one-feeder rehearsal needs, and
+// nothing is undersized by assuming a sharing that may not happen in the
+// field. A percentage split was the alternative and was rejected for exactly
+// that reason.
+
+/** How many supplies one item may have. Two is a dual feed; three is a mistake. */
+export const MAX_SUPPLIES = 2
+
+/** Everything feeding this item directly. */
+export function suppliesOf(cables: Cable[], id: number): number[] {
+  return cables.filter((c) => c.toId === id).map((c) => c.fromId)
+}
 
 /**
  * Would connecting these two close a loop?
  *
- * A cycle makes downstream load undefined — walking the tree would never
- * terminate and every figure on the drawing would be meaningless. Refused at
- * the point of drawing rather than detected afterwards.
+ * A cycle makes downstream load undefined — walking would never terminate and
+ * every figure on the drawing would be meaningless. Refused at the point of
+ * drawing rather than detected afterwards.
+ *
+ * With two supplies allowed, walking UP a single chain no longer finds every
+ * ring, because there is no longer a single chain. The question is asked the
+ * other way round: is the proposed supply already somewhere BELOW the proposed
+ * load? If it is, this cable closes the ring.
  */
 export function wouldCycle(cables: Cable[], fromId: number, toId: number): boolean {
   if (fromId === toId) return true
-  // Walk upstream from the proposed supply. If the proposed load is already
-  // above it, this cable closes a ring.
-  const supplyOf = new Map<number, number>()
-  for (const c of cables) supplyOf.set(c.toId, c.fromId)
-  let node: number | undefined = fromId
-  const seen = new Set<number>()
-  while (node !== undefined) {
-    if (node === toId) return true
-    if (seen.has(node)) return true // already a cycle in the existing data
-    seen.add(node)
-    node = supplyOf.get(node)
+  const seen = new Set<number>([toId])
+  const stack = [toId]
+  while (stack.length) {
+    const node = stack.pop() as number
+    for (const child of childrenOf(cables, node)) {
+      if (child === fromId) return true
+      if (!seen.has(child)) { seen.add(child); stack.push(child) }
+    }
   }
   return false
 }
@@ -298,6 +331,32 @@ export function wouldCycle(cables: Cable[], fromId: number, toId: number): boole
 /** Everything fed directly by this item. */
 export function childrenOf(cables: Cable[], id: number): number[] {
   return cables.filter((c) => c.fromId === id).map((c) => c.toId)
+}
+
+/**
+ * Every source that can reach this item, walking upstream.
+ *
+ * The point of a dual feed is that the two paths fail independently. Two
+ * cables that both trace back to the same generator are two cables and one
+ * point of failure, and on a drawing the two arrangements look identical —
+ * which is why this exists.
+ */
+export function rootSourcesOf(items: LayoutItem[], cables: Cable[], id: number): number[] {
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const found = new Set<number>()
+  const seen = new Set<number>([id])
+  const stack = [id]
+  while (stack.length) {
+    const node = stack.pop() as number
+    const supplies = suppliesOf(cables, node)
+    const it = byId.get(node)
+    // A source is a root. So is anything with nothing above it — an unfinished
+    // drawing should report what it has rather than nothing at all.
+    if (it && ITEMS[it.kind].role === 'source') { found.add(node); continue }
+    if (supplies.length === 0 && node !== id) { found.add(node); continue }
+    for (const s of supplies) if (!seen.has(s)) { seen.add(s); stack.push(s) }
+  }
+  return [...found].sort((a, b) => a - b)
 }
 
 /**
@@ -310,6 +369,15 @@ export function childrenOf(cables: Cable[], id: number): number[] {
  * No diversity is applied. A commissioning load bank test is the one case
  * where every load really does run at once, and applying a diversity factor
  * would under-size the very cable being proved.
+ *
+ * The `seen` set is what makes this correct on a dual-fed network. A PDU hung
+ * off the A board and the B board is reachable by two routes from the same
+ * incomer, and without `seen` it would be counted twice — a cable sized for
+ * double the load it carries, which nobody would ever notice on the drawing.
+ *
+ * Walked from a SOURCE, this deliberately returns the whole load under a
+ * dual-fed item rather than half of it. That is the 2N rule: either source has
+ * to be able to carry it alone.
  */
 export function downstreamKva(items: LayoutItem[], cables: Cable[], rootId: number): number {
   const byId = new Map(items.map((i) => [i.id, i]))
@@ -326,19 +394,28 @@ export function downstreamKva(items: LayoutItem[], cables: Cable[], rootId: numb
   return total
 }
 
-/** How many cables deep an item sits. Sources are zero. Used by the single line. */
+/**
+ * How many cables deep an item sits. Sources are zero. Used by the single line.
+ *
+ * The LONGEST path from a source, not the shortest. A PDU fed from the A board
+ * at depth 2 and from a generator at depth 1 belongs on row 2, below both of
+ * its supplies. Taking the shortest would draw it level with the A board it
+ * hangs off, and a single line with a cable running sideways between two boxes
+ * on the same row is a single line nobody will trust.
+ */
 export function depthOf(cables: Cable[], id: number): number {
-  const supplyOf = new Map<number, number>()
-  for (const c of cables) supplyOf.set(c.toId, c.fromId)
-  let d = 0
-  let node = supplyOf.get(id)
-  const seen = new Set<number>([id])
-  while (node !== undefined && !seen.has(node)) {
-    seen.add(node)
-    d += 1
-    node = supplyOf.get(node)
+  const walk = (node: number, path: Set<number>): number => {
+    const supplies = suppliesOf(cables, node)
+    let best = 0
+    for (const s of supplies) {
+      if (path.has(s)) continue // a ring in existing data — do not follow it
+      path.add(s)
+      best = Math.max(best, 1 + walk(s, path))
+      path.delete(s)
+    }
+    return best
   }
-  return d
+  return walk(id, new Set([id]))
 }
 
 // ── Route length ────────────────────────────────────────────────────────
@@ -498,8 +575,19 @@ export function layoutFindings(
 ): Finding[] {
   const out: Finding[] = []
   const seen = new Set<string>()
-  const push = (f: Finding) => {
-    const k = f.severity + f.title
+  /**
+   * Deduplicated, because a clash between two items is one clash and would
+   * otherwise be reported from both ends.
+   *
+   * `key` matters more than it looks. Deduplicating on the TITLE alone means
+   * two items that happen to share a name produce one finding between them —
+   * and two boards both called "MSB" is not a hypothetical on a real drawing,
+   * it is Tuesday. Per-item findings therefore key on the item's id, so each
+   * one is reported even when the names collide. The pairwise physical clashes
+   * keep the title key, which is what collapses a↔b and b↔a into one card.
+   */
+  const push = (f: Finding, key?: string) => {
+    const k = key ?? f.severity + f.title
     if (!seen.has(k)) { seen.add(k); out.push(f) }
   }
 
@@ -546,28 +634,69 @@ export function layoutFindings(
   }
 
   // ── structure ──
+  const dualFedAnywhere = items.some((i) => suppliesOf(cables, i.id).length > 1)
   for (const it of items) {
     const spec = ITEMS[it.kind]
     if (spec.role === 'passive') continue
-    const fed = cables.some((c) => c.toId === it.id)
-    if (!fed && spec.role !== 'source')
+    const supplies = suppliesOf(cables, it.id)
+    if (supplies.length === 0 && spec.role !== 'source')
       push({ severity: 'advisory', title: `${it.label} has no supply`,
-        detail: 'Nothing feeds it, so it contributes nothing to any cable calculation. Usually an unfinished drawing rather than a fault.' })
+        detail: 'Nothing feeds it, so it contributes nothing to any cable calculation. Usually an unfinished drawing rather than a fault.' },
+        `nosupply:${it.id}`)
+
+    // A dual feed whose two paths meet again upstream is two cables and one
+    // point of failure. On the drawing the two arrangements look the same.
+    if (supplies.length > 1) {
+      const roots = rootSourcesOf(items, cables, it.id)
+      if (roots.length < 2) {
+        const root = items.find((x) => x.id === roots[0])
+        push({ severity: 'advisory', title: `Both supplies to ${it.label} trace back to one source`,
+          detail: `A and B both come from ${root ? root.label : 'the same point'}. That is two cables, not two supplies — a fault there takes both. Each feeder is still sized for the whole load, so the cables are right; the resilience is not.` },
+          `onesource:${it.id}`)
+      }
+    }
     if (spec.role === 'source') {
       const carried = downstreamKva(items, cables, it.id)
       if (it.kva > 0 && carried > it.kva)
         push({ severity: 'blocking', title: `${it.label} is carrying more than its rating`,
-          detail: `${Math.round(carried)} kVA of load hung on a ${Math.round(it.kva)} kVA source.` })
+          detail: `${Math.round(carried)} kVA of load hung on a ${Math.round(it.kva)} kVA source.${dualFedAnywhere ? ' Each source has to carry the whole of a dual-fed load on its own, so this is not shared with the other one.' : ''}` },
+          `overrated:${it.id}`)
     }
   }
 
   return out
 }
 
+export type SourceLoad = {
+  id: number
+  label: string
+  kva: number
+  /** Everything hanging below it — the whole of a dual-fed load, not half. */
+  carried: number
+  /** null when the source has no rating entered; a percentage otherwise. */
+  pct: number | null
+}
+
 export type Summary = {
   sourceKva: number
   connectedKva: number
+  /**
+   * Spare on the WORST-LOADED SOURCE, not on the sum of every source.
+   *
+   * The sum is the wrong figure the moment anything is dual-fed. Two 2500 kVA
+   * sources feeding one 3000 kVA block sum to 5000 and look 40 % spare; under
+   * the 2N rule each of them has to carry 3000 alone, which is 20 % over. The
+   * sum is the number that reads reassuring and gets somebody in trouble.
+   *
+   * With one source, or with sources feeding separate loads, this is identical
+   * to what Rev A printed.
+   */
   sparePct: number
+  sources: SourceLoad[]
+  /** Which source that spare figure describes. Null when none is placed. */
+  worstSource: SourceLoad | null
+  /** True when any item has more than one supply, so the bar can say so. */
+  dualFed: boolean
   worstVoltDrop: { pct: number; label: string } | null
   worstLoading: { pct: number; label: string } | null
   blocking: number
@@ -577,11 +706,28 @@ export type Summary = {
 export function summarise(
   items: LayoutItem[], cables: Cable[], roomW: number, roomD: number, opts: LayoutOptions
 ): Summary {
-  const sources = items.filter((i) => ITEMS[i.kind].role === 'source')
-  const sourceKva = sources.reduce((t, s) => t + s.kva, 0)
+  const sourceItems = items.filter((i) => ITEMS[i.kind].role === 'source')
+  const sourceKva = sourceItems.reduce((t, s) => t + s.kva, 0)
   const connectedKva = items
     .filter((i) => ITEMS[i.kind].role === 'load')
     .reduce((t, i) => t + i.kva, 0)
+
+  const sources: SourceLoad[] = sourceItems.map((s) => {
+    const carried = downstreamKva(items, cables, s.id)
+    return {
+      id: s.id, label: s.label, kva: s.kva, carried,
+      pct: s.kva > 0 ? (carried / s.kva) * 100 : null,
+    }
+  })
+  // The worst is the one with the least headroom. A source with no rating
+  // entered is not the worst — it is unknown, and unknown is reported
+  // separately rather than being allowed to win a comparison.
+  let worstSource: SourceLoad | null = null
+  for (const s of sources)
+    if (s.pct !== null && (!worstSource || worstSource.pct === null || s.pct > worstSource.pct))
+      worstSource = s
+  if (!worstSource && sources.length) worstSource = sources[0]
+  const dualFed = items.some((i) => suppliesOf(cables, i.id).length > 1)
 
   let worstVd: { pct: number; label: string } | null = null
   let worstLd: { pct: number; label: string } | null = null
@@ -597,7 +743,10 @@ export function summarise(
   return {
     sourceKva,
     connectedKva,
-    sparePct: sourceKva > 0 ? ((sourceKva - connectedKva) / sourceKva) * 100 : 0,
+    sparePct: worstSource && worstSource.pct !== null ? 100 - worstSource.pct : 0,
+    sources,
+    worstSource,
+    dualFed,
     worstVoltDrop: worstVd,
     worstLoading: worstLd,
     blocking: f.filter((x) => x.severity === 'blocking').length,

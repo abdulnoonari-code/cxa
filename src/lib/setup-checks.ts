@@ -173,6 +173,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'THIS IS THE ONE THAT MATTERS MOST. Until it is run, every photograph and every document in this project can be opened by anybody holding the link — no sign-in, no cookie, nothing. A link forwarded in an email or sitting in a browser history is a working key to that file for the whole internet.',
     probe: { bucket: 'documents', mustBePrivate: true },
   },
+  {
+    id: 'part39',
+    source: 'week5-part39-layouts.sql',
+    title: 'Room layouts',
+    matters:
+      'Whether a drawing survives closing the tab. Without it the room layout planner still works and still calculates, but nothing you draw can be saved against a system, attached to a method statement or put in a handover pack — it is a calculator, not a record. The planner says so on itself rather than offering a Save button that does nothing.',
+    probe: { table: 'layouts', columns: ['name', 'room_w', 'ambient_c'] },
+  },
 ]
 
 /**

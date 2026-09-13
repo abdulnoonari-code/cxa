@@ -4,12 +4,19 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   ITEMS, DIRS, RUN_OPTIONS, CSA_OPTIONS, AMPACITY_BASIS, AMPACITY_CAVEAT,
-  rectOf, centreOf, zonesOf, wouldCycle, downstreamKva,
+  rectOf, centreOf, zonesOf, wouldCycle, downstreamKva, suppliesOf, MAX_SUPPLIES,
   cableResult, bandFor, layoutFindings, summarise, nameFor, clampToRoom,
   singleLinePositions, describeCable, suggestCsa,
   type LayoutItem, type Cable, type ItemKind, type Dir, type LayoutOptions,
   type LoadBand, type CableResult,
 } from '@/lib/layout'
+import {
+  PLANNER_COLUMNS, parseClipboard, toClipboard, fillSeries, coerce, duplicateTags,
+  normRect, inRect, selectionStats, planPaste, describePaste,
+  filterRows, isFiltering, sortRows, windowOf, applyCell, applyToMany, commonValue,
+  EMPTY_FILTER,
+  type GridRow, type Column, type Filter, type Cell, type SortDir, type PasteResult,
+} from '@/lib/grid'
 import { VD_GUIDANCE } from '@/lib/techdesign'
 
 // ════════════════════════════════════════════════════════════════════════
@@ -220,8 +227,61 @@ const STYLES = `
   color:var(--color-text-secondary)}
 .pl-lg i{width:13px;height:13px;border-radius:3px;border:2px solid;display:inline-block}
 
+/* ── The data grid — the equipment list, under the drawing ── */
+.pl-gridwrap{background:var(--color-surface);border:1px solid var(--color-border);border-radius:11px;
+  margin-top:9px;overflow:hidden}
+.pl-gbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:7px 9px;
+  border-bottom:1px solid var(--color-border);background:var(--color-bg)}
+.pl-gbar input[type=search]{flex:1 1 168px;min-width:0;padding:6px 9px;border:1px solid var(--color-border);
+  border-radius:7px;font:inherit;font-size:12.5px;background:var(--color-surface);color:var(--color-text);
+  min-height:32px}
+.pl-count{font-family:var(--font-mono,ui-monospace,monospace);font-size:11.5px;
+  color:var(--color-text-secondary);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pl-grip{height:9px;cursor:ns-resize;background:var(--color-bg);border-bottom:1px solid var(--color-border);
+  display:flex;align-items:center;justify-content:center;touch-action:none}
+.pl-grip i{display:block;width:44px;height:3px;border-radius:3px;background:var(--color-border)}
+.pl-grip:hover i{background:var(--color-primary)}
+.pl-scroll{overflow:auto;position:relative;outline:none}
+.pl-scroll:focus-visible{box-shadow:inset 0 0 0 2px var(--color-info)}
+.pl-head{display:flex;position:sticky;top:0;z-index:3;background:var(--color-surface);
+  border-bottom:1px solid var(--color-border)}
+.pl-th{flex:none;padding:7px 9px;font-size:9.5px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--color-text-secondary);border-right:1px solid var(--color-border-soft);
+  cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-th:hover{color:var(--color-primary)}
+.pl-th.calc{background:var(--color-bg);cursor:default}
+.pl-th.calc:hover{color:var(--color-text-secondary)}
+.pl-th .u{text-transform:none;letter-spacing:0;font-weight:500;opacity:.75}
+.pl-gr{display:flex;position:absolute;left:0;height:30px;align-items:stretch}
+.pl-gr.on{background:var(--color-primary-light)}
+.pl-gr.dup{box-shadow:inset 3px 0 0 var(--color-danger)}
+.pl-td{flex:none;padding:0 9px;font-size:12.5px;display:flex;align-items:center;
+  border-right:1px solid var(--color-border-soft);border-bottom:1px solid var(--color-border-soft);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:cell;
+  font-variant-numeric:tabular-nums}
+.pl-td.mono{font-family:var(--font-mono,ui-monospace,monospace)}
+.pl-td.calc{background:var(--color-bg);color:var(--color-text-secondary);cursor:default}
+.pl-td.inrect{background:var(--color-primary-light);box-shadow:inset 0 0 0 1px var(--color-primary)}
+.pl-td.bad{background:var(--color-danger-bg);box-shadow:inset 2px 0 0 var(--color-danger)}
+.pl-td input,.pl-td select{width:100%;border:0;outline:2px solid var(--color-primary);outline-offset:-2px;
+  font:inherit;font-size:12.5px;background:var(--color-surface);color:var(--color-text);padding:0 4px;
+  border-radius:2px}
+.pl-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;
+  border-top:1px solid var(--color-border);background:var(--color-bg);font-size:11.5px;
+  color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
+.pl-status b{color:var(--color-text);font-weight:650}
+.pl-paste{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 10px;
+  background:var(--color-warning-bg);border-top:1px solid var(--color-warning);font-size:12.5px}
+.pl-paste b{color:var(--color-warning)}
+.pl-err{padding:7px 10px;background:var(--color-danger-bg);border-top:1px solid var(--color-danger);
+  font-size:12px;color:var(--color-danger)}
+.pl-go{border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;border-radius:7px;
+  font:inherit;font-size:12px;font-weight:650;padding:6px 12px;cursor:pointer;min-height:32px}
+.pl-go:hover{background:var(--color-primary-dark)}
+.pl-mixed{color:var(--color-text-secondary);font-style:italic}
+
 @media print{
-  .pl-top,.pl-strip,.pl-panel-h,.pl-pal,.pl-props,.pl-legend{display:none!important}
+  .pl-top,.pl-strip,.pl-panel-h,.pl-pal,.pl-props,.pl-legend,.pl-gridwrap{display:none!important}
   .pl-stage{display:block}
   .pl-bar{position:static;box-shadow:none;page-break-inside:avoid}
   .pl-panel{border-color:#999}
@@ -292,6 +352,11 @@ function tw(s: string, size: number, bold: boolean): number {
   return s.length * size * (bold ? 0.575 : 0.535)
 }
 
+const COLS = PLANNER_COLUMNS
+const ROW_H = 30
+/** The full width of the grid, so the header and the rows cannot drift apart. */
+const GRID_W = COLS.reduce((t, c) => t + c.width, 0)
+
 /** Stroke width reads the size of the feeder — a big cable looks like one. */
 function strokeFor(csa: number, runs: number): number {
   const mm = csa * Math.max(1, runs)
@@ -315,6 +380,25 @@ export default function PlannerPage() {
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [touched, setTouched] = useState(false)
   const [png, setPng] = useState<string | null>(null)
+
+  // ── The grid ──────────────────────────────────────────────────────────
+  //
+  // One selection, two views of it. `selIds` is the shared truth: clicking a
+  // row selects the box, clicking the box selects the row, and the inspector
+  // edits whatever is in it. `sel` remains the PRIMARY selection — the one
+  // whose properties are shown when only one thing is selected, and the only
+  // way a cable can be selected at all.
+  const [selIds, setSelIds] = useState<number[]>([])
+  const [anchor, setAnchor] = useState<Cell | null>(null)
+  const [focusCell, setFocusCell] = useState<Cell | null>(null)
+  const [editing, setEditing] = useState<{ row: number; col: number; draft: string } | null>(null)
+  const [gridH, setGridH] = useState(268)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [sortKey, setSortKey] = useState<string>('')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [filter, setFilter] = useState<Filter>(EMPTY_FILTER)
+  const [pending, setPending] = useState<{ plan: PasteResult; at: Cell } | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
 
   const nextItem = useRef(6)
   const nextCable = useRef(4)
@@ -360,6 +444,92 @@ export default function PlannerPage() {
         if (fd.title.includes(it.label)) s.add(it.id)
     return s
   }, [findings, items])
+
+  // ── The equipment list, as rows ───────────────────────────────────────
+  //
+  // Built from the SAME items the canvas draws and the SAME cable results it
+  // colours. Not a copy, not an export — the grid is a second view of one
+  // model, which is the only reason the drawing and the schedule can never
+  // disagree.
+  const allRows: GridRow[] = useMemo(() => items.map((it) => {
+    const feeder = feederOf.get(it.id)
+    const supplies = suppliesOf(cables, it.id)
+      .map((sid) => items.find((x) => x.id === sid)?.label ?? '?')
+    return {
+      id: it.id, label: it.label, kind: it.kind, kva: it.kva, pf: it.pf,
+      volts: it.volts, dir: it.dir, x: it.x, y: it.y,
+      supply: supplies.join(' + '),
+      carried: downstreamKva(items, cables, it.id),
+      feeder: feeder
+        ? `${describeCable(feeder.cable.csa, feeder.runs)} · ${f(feeder.loadingPct, 0)} %`
+        : '',
+      band: feeder ? feeder.band : undefined,
+    }
+  }), [items, cables, feederOf])
+
+  const rows: GridRow[] = useMemo(() => {
+    const shown = filterRows(allRows, filter)
+    return sortKey ? sortRows(shown, sortKey, sortDir) : shown
+  }, [allRows, filter, sortKey, sortDir])
+
+  const dupes = useMemo(() => duplicateTags(rows), [rows])
+  const dupeRows = useMemo(() => {
+    const s2 = new Set<number>()
+    for (const list of dupes.values()) for (const i of list) s2.add(i)
+    return s2
+  }, [dupes])
+
+  const rowIndexById = useMemo(() => {
+    const m = new Map<number, number>()
+    rows.forEach((r, i) => m.set(r.id, i))
+    return m
+  }, [rows])
+
+  const win = windowOf(scrollTop, gridH - 36, ROW_H, rows.length)
+  const selRect = anchor && focusCell ? normRect(anchor, focusCell) : null
+
+  const selSet = useMemo(() => new Set(selIds), [selIds])
+
+  /**
+   * Select one or many, from either view.
+   *
+   * Everything that changes the selection comes through here, so the grid and
+   * the canvas cannot get out of step — which they would within a day if each
+   * kept its own idea of what was selected.
+   */
+  const select = useCallback((ids: number[], primary?: number) => {
+    setSelIds(ids)
+    setSel(ids.length ? { kind: 'item', id: primary ?? ids[0] } : null)
+  }, [])
+
+  /**
+   * Selecting from the DRAWING also collapses the grid's rectangle onto that
+   * row. Without it the status bar goes on describing the five cells the last
+   * grid drag covered while one box is highlighted — two views disagreeing
+   * about the same selection, which is the exact thing this design exists to
+   * prevent.
+   */
+  const selectOnCanvas = useCallback((id: number, add = false) => {
+    const ids = add && selIds.length ? [...new Set([...selIds, id])] : [id]
+    setSelIds(ids)
+    setSel({ kind: 'item', id })
+    const ri = rowIndexById.get(id)
+    if (ri !== undefined && !add) { setAnchor({ row: ri, col: 0 }); setFocusCell({ row: ri, col: 0 }) }
+  }, [selIds, rowIndexById])
+
+  // Selecting something on the drawing brings its row into view in the list
+  // below. Without this, clicking a load bank highlights a row four hundred
+  // rows down that nobody can see, and the two views look unconnected.
+  useEffect(() => {
+    if (sel?.kind !== 'item') return
+    const el = gridRef.current
+    if (!el) return
+    const ri = rowIndexById.get(sel.id)
+    if (ri === undefined) return
+    const top = ri * ROW_H
+    if (top < el.scrollTop || top + ROW_H > el.scrollTop + el.clientHeight - 36)
+      el.scrollTop = Math.max(0, top - el.clientHeight / 2 + ROW_H)
+  }, [sel, rowIndexById])
 
   const selItem = sel?.kind === 'item' ? items.find((i) => i.id === sel.id) ?? null : null
   const selCable = sel?.kind === 'cable' ? cables.find((c) => c.id === sel.id) ?? null : null
@@ -421,6 +591,7 @@ export default function PlannerPage() {
         pf: ITEMS[kind].role === 'load' ? 1 : 0.8,
         volts: 400,
       }
+      setSelIds([it.id])
       setSel({ kind: 'item', id: it.id })
       return [...prev, it]
     })
@@ -448,7 +619,9 @@ export default function PlannerPage() {
     if (view !== 'plan') { setSel({ kind: 'item', id }); return }
     e.preventDefault()
     e.stopPropagation()
-    setSel({ kind: 'item', id })
+    // Through select(), so the row in the grid below highlights with it and
+    // scrolls into view. One selection, two views of it.
+    selectOnCanvas(id, e.shiftKey)
     const it = items.find((x) => x.id === id)
     if (!it) return
     remember()
@@ -517,8 +690,14 @@ export default function PlannerPage() {
     if (!to) return 'No such item.'
     if (ITEMS[to.kind].role === 'passive') return 'A door is not an electrical item.'
     if (ITEMS[to.kind].role === 'source') return 'A source is fed by its prime mover, not by a cable on this drawing.'
-    if (cables.some((c) => c.toId === toId)) return 'It already has a supply. Dual-fed distribution is planned, not built — the tool cannot say how two supplies would share, so it will not pretend.'
-    if (cables.some((c) => c.fromId === fromId && c.toId === toId)) return 'That cable already exists.'
+    // Two supplies, not one. Dual-fed distribution is the hyperscale norm and
+    // EACH FEEDER IS SIZED FOR THE WHOLE LOAD — the conservative rule, and the
+    // one the loss-of-one-feeder case needs. A third is a mistake.
+    const already = suppliesOf(cables, toId)
+    if (already.length >= MAX_SUPPLIES)
+      return `It already has ${already.length} supplies, which is the limit. A third feeder into one board is almost always a drawing error; if it is not, split the board.`
+    if (cables.some((c) => c.fromId === fromId && c.toId === toId))
+      return 'That cable already exists. Two conductors on the same route are parallel runs — set the run count on the cable instead, or the load is counted twice.'
     if (wouldCycle(cables, fromId, toId)) return 'That would close a ring, and downstream load would then be undefined.'
     return null
   }
@@ -543,6 +722,7 @@ export default function PlannerPage() {
       csa = suggestCsa(current, ambientC, 1, runs)
     }
     setCables([...cables, { ...trial, runs, csa: csa ?? CSA_OPTIONS[CSA_OPTIONS.length - 1] }])
+    setSelIds([])
     setSel({ kind: 'cable', id })
   }
 
@@ -557,6 +737,9 @@ export default function PlannerPage() {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement | null
       if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) return
+      // The grid handles its own keys. Two handlers both moving a selection
+      // is how an arrow key nudges a load bank AND walks the grid at once.
+      if (t && t.closest('.pl-gridwrap')) return
       if (sel?.kind === 'cable' && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault(); removeCable(sel.id); return
       }
@@ -582,6 +765,9 @@ export default function PlannerPage() {
   // ── Panning on empty canvas ────────────────────────────────────────────
   function onStageDown(e: React.PointerEvent) {
     setSel(null)
+    setSelIds([])
+    setAnchor(null)
+    setFocusCell(null)
     if (zoom === 1) return
     const sx = e.clientX, sy = e.clientY
     const p0 = { ...pan }
@@ -593,6 +779,267 @@ export default function PlannerPage() {
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // GRID BEHAVIOUR
+  // ══════════════════════════════════════════════════════════════════════
+
+  function cellValue(r: GridRow, c: Column): string {
+    const v = (r as unknown as Record<string, unknown>)[c.key]
+    if (c.type === 'enum') {
+      const o = c.options?.find((x) => x.value === v)
+      return o ? o.label.split('—')[0].trim() : String(v ?? '')
+    }
+    // Decimals per column, not one rule for every number. A rating of 0 read
+    // as "0.00" and a position of 12 as "12.0" — each column has a precision
+    // an engineer would write, and it is not the same precision.
+    if (typeof v === 'number') {
+      if (c.key === 'pf') return v.toFixed(2)
+      if (c.key === 'x' || c.key === 'y') return f(v, 2)
+      return f(v, 0)
+    }
+    return String(v ?? '')
+  }
+
+  /** The raw value, for copying out and for the statistics. */
+  function rawValue(r: GridRow, c: Column): string | number {
+    const v = (r as unknown as Record<string, unknown>)[c.key]
+    return typeof v === 'number' ? v : String(v ?? '')
+  }
+
+  function startEdit(row: number, col: number) {
+    const c = COLS[col]
+    if (!c.editable || !rows[row]) return
+    const v = (rows[row] as unknown as Record<string, unknown>)[c.key]
+    setEditing({ row, col, draft: c.type === 'enum' ? String(v ?? '') : String(v ?? '') })
+  }
+
+  function commitEdit(move: 'down' | 'right' | 'none') {
+    if (!editing) return
+    const c = COLS[editing.col]
+    const r = rows[editing.row]
+    if (!r) { setEditing(null); return }
+    const got = coerce(c, editing.draft)
+    if (!got.ok) {
+      // Refused, and the cell keeps what it had. The message is the point:
+      // a silently coerced value is a record that reads as though somebody
+      // meant it.
+      setPending(null)
+      setEditing({ ...editing, draft: editing.draft })
+      setCellError({ row: editing.row, col: c.key, raw: editing.draft, reason: got.reason })
+      return
+    }
+    setCellError(null)
+    remember()
+    setItems((prev) => prev.map((it) => (it.id === r.id ? applyCell(it, c.key, got.value) : it)))
+    setTouched(true)
+    const next = move === 'down' ? { row: Math.min(rows.length - 1, editing.row + 1), col: editing.col }
+               : move === 'right' ? { row: editing.row, col: Math.min(COLS.length - 1, editing.col + 1) }
+               : null
+    setEditing(null)
+    if (next) { setAnchor(next); setFocusCell(next) }
+  }
+
+  /** One cell can be wrong at a time, and it says which and why. */
+  const [cellError, setCellError] = useState<{ row: number; col: string; raw: string; reason: string } | null>(null)
+
+  function onGridPointerDown(e: React.PointerEvent, row: number, col: number) {
+    const cell = { row, col }
+    if (e.shiftKey && anchor) {
+      setFocusCell(cell)
+      const r2 = normRect(anchor, cell)
+      const ids: number[] = []
+      for (let i = r2.top; i <= r2.bottom; i++) if (rows[i]) ids.push(rows[i].id)
+      select(ids, rows[row]?.id)
+      return
+    }
+    setAnchor(cell)
+    setFocusCell(cell)
+    setEditing(null)
+    setCellError(null)
+    if (e.metaKey || e.ctrlKey) {
+      const id = rows[row]?.id
+      if (id === undefined) return
+      const next = selSet.has(id) ? selIds.filter((x) => x !== id) : [...selIds, id]
+      select(next, id)
+      return
+    }
+    if (rows[row]) select([rows[row].id], rows[row].id)
+  }
+
+  /** Copy the rectangle out as Excel expects it. */
+  function copySelection() {
+    if (!selRect) return
+    const block: string[][] = []
+    for (let r = selRect.top; r <= selRect.bottom; r++) {
+      const line: string[] = []
+      for (let c = selRect.left; c <= selRect.right; c++)
+        line.push(rows[r] ? String(rawValue(rows[r], COLS[c])) : '')
+      block.push(line)
+    }
+    const text = toClipboard(block)
+    void navigator.clipboard?.writeText(text).catch(() => {})
+  }
+
+  /**
+   * Paste is planned, shown and only then applied.
+   *
+   * It is the one action here that can change a thousand records at once, and
+   * it is the one action nobody reads carefully — so it gets a sentence and a
+   * button rather than happening under the pointer.
+   */
+  function planFromClipboard(text: string) {
+    const at = selRect ? { row: selRect.top, col: selRect.left } : { row: 0, col: 0 }
+    const block = parseClipboard(text)
+    if (!block.length) return
+    setPending({ plan: planPaste(COLS, rows.length, at, block), at })
+  }
+
+  function applyPending() {
+    if (!pending) return
+    remember()
+    setItems((prev) => {
+      const byId = new Map(prev.map((i) => [i.id, i]))
+      for (const ch of pending.plan.changes) {
+        const r = rows[ch.row]
+        if (!r) continue
+        const it = byId.get(r.id)
+        if (it) byId.set(r.id, applyCell(it, ch.col, ch.value))
+      }
+      return prev.map((i) => byId.get(i.id) ?? i)
+    })
+    setTouched(true)
+    setPending(null)
+  }
+
+  /**
+   * Fill the top row of the selection down through the rest of it.
+   *
+   * A button rather than a drag handle on the corner. The handle is what
+   * Excel has and it is four pixels square — on a trackpad, and on a tablet
+   * in a plant room, it is the single most missed target in a spreadsheet.
+   */
+  function fillDown() {
+    if (!selRect || selRect.bottom === selRect.top) return
+    remember()
+    const count = selRect.bottom - selRect.top
+    setItems((prev) => {
+      const byId = new Map(prev.map((i) => [i.id, i]))
+      for (let c = selRect.left; c <= selRect.right; c++) {
+        const col = COLS[c]
+        if (!col.editable) continue
+        const seedRow = rows[selRect.top]
+        if (!seedRow) continue
+        const seed = [String(rawValue(seedRow, col))]
+        const series = fillSeries(seed, count)
+        series.forEach((raw, i) => {
+          const target = rows[selRect.top + 1 + i]
+          if (!target) return
+          const got = coerce(col, raw)
+          if (!got.ok) return
+          const it = byId.get(target.id)
+          if (it) byId.set(target.id, applyCell(it, col.key, got.value))
+        })
+      }
+      return prev.map((i) => byId.get(i.id) ?? i)
+    })
+    setTouched(true)
+  }
+
+  /** One value across everything selected, from the inspector. */
+  function bulkSet(key: string, raw: string) {
+    const col = COLS.find((c) => c.key === key)
+    if (!col) return
+    const got = coerce(col, raw)
+    if (!got.ok) { setCellError({ row: -1, col: key, raw, reason: got.reason }); return }
+    setCellError(null)
+    remember()
+    const r = applyToMany(items, selIds, key, got.value)
+    setItems(r.items)
+    setTouched(true)
+  }
+
+  function removeSelected() {
+    if (!selIds.length) return
+    remember()
+    const gone = new Set(selIds)
+    setItems((prev) => prev.filter((i) => !gone.has(i.id)))
+    setCables((prev) => prev.filter((c) => !gone.has(c.fromId) && !gone.has(c.toId)))
+    select([])
+    setAnchor(null); setFocusCell(null)
+  }
+
+
+  /**
+   * The keys a spreadsheet answers to.
+   *
+   * Handled on the scroll container rather than the window, so typing in the
+   * room-size field at the top of the page never moves the grid selection.
+   */
+  function onGridKey(e: React.KeyboardEvent) {
+    if (editing) return
+    const mod = e.metaKey || e.ctrlKey
+    if (mod && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelection(); return }
+    if (mod && e.key.toLowerCase() === 'a') {
+      e.preventDefault()
+      // Scoped to what is on screen, not to the whole project. Ctrl+A inside a
+      // filter that selects five thousand hidden rows is how somebody edits
+      // records they cannot see.
+      if (!rows.length) return
+      const a = { row: 0, col: 0 }, b = { row: rows.length - 1, col: COLS.length - 1 }
+      setAnchor(a); setFocusCell(b)
+      select(rows.map((r) => r.id))
+      return
+    }
+    if (!focusCell) return
+    if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); startEdit(focusCell.row, focusCell.col); return }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeSelected(); return }
+    const step: Record<string, [number, number]> = {
+      ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+    }
+    const d = step[e.key]
+    if (!d) {
+      // Typing a printable character starts an edit, the way a spreadsheet
+      // does — nobody double-clicks a cell before typing into it.
+      if (e.key.length === 1 && !mod && COLS[focusCell.col]?.editable) {
+        e.preventDefault()
+        setEditing({ row: focusCell.row, col: focusCell.col, draft: e.key })
+      }
+      return
+    }
+    e.preventDefault()
+    const next = {
+      row: Math.max(0, Math.min(rows.length - 1, focusCell.row + d[0])),
+      col: Math.max(0, Math.min(COLS.length - 1, focusCell.col + d[1])),
+    }
+    setFocusCell(next)
+    if (e.shiftKey && anchor) {
+      const r2 = normRect(anchor, next)
+      const ids: number[] = []
+      for (let i = r2.top; i <= r2.bottom; i++) if (rows[i]) ids.push(rows[i].id)
+      select(ids)
+    } else {
+      setAnchor(next)
+      if (rows[next.row]) select([rows[next.row].id])
+    }
+    // Keep the cursor on screen.
+    const el = gridRef.current
+    if (el) {
+      const top = next.row * ROW_H
+      if (top < el.scrollTop) el.scrollTop = top
+      else if (top + ROW_H > el.scrollTop + el.clientHeight - 36)
+        el.scrollTop = top + ROW_H - el.clientHeight + 36
+    }
+  }
+
+  const stats = useMemo(() => {
+    if (!selRect) return null
+    const vals: (string | number)[] = []
+    for (let r = selRect.top; r <= selRect.bottom; r++)
+      for (let c = selRect.left; c <= selRect.right; c++)
+        if (rows[r]) vals.push(rawValue(rows[r], COLS[c]))
+    return selectionStats(vals)
+  }, [selRect, rows])
 
   // ── PNG export ─────────────────────────────────────────────────────────
   //
@@ -682,8 +1129,8 @@ export default function PlannerPage() {
       const band = BAND[r.band]
       const on = sel?.kind === 'cable' && sel.id === r.cable.id
       return (
-        <g key={r.cable.id} onPointerDown={(e) => { e.stopPropagation(); setSel({ kind: 'cable', id: r.cable.id }) }}
-          style={{ cursor: 'pointer' }}>
+        <g key={r.cable.id} style={{ cursor: 'pointer' }}
+          onPointerDown={(e) => { e.stopPropagation(); setSelIds([]); setSel({ kind: 'cable', id: r.cable.id }) }}>
           <path d={g.d} fill="none" stroke="transparent" strokeWidth={16} />
           {on && <path d={g.d} fill="none" stroke={C.sel} strokeWidth={strokeFor(r.cable.csa, r.runs) + 5}
             strokeLinejoin="round" opacity={0.28} />}
@@ -729,7 +1176,7 @@ export default function PlannerPage() {
       const s = ITEMS[it.kind]
       const r = rectOf(it)
       const px = X(r.x), py = Y(r.y), pw = r.w * sc, ph = r.h * sc
-      const on = sel?.kind === 'item' && sel.id === it.id
+      const on = selSet.has(it.id)
       const feeder = feederOf.get(it.id)
       const carried = downstreamKva(items, cables, it.id)
       let tone = TONE[s.tone]
@@ -750,7 +1197,7 @@ export default function PlannerPage() {
       return (
         <g key={it.id} tabIndex={0} role="button"
           aria-label={`${it.label}, ${f(r.w, 1)} by ${f(r.h, 1)} metres at ${f(it.x, 1)}, ${f(it.y, 1)}${pctLabel ? ', ' + pctLabel : ''}`}
-          onFocus={() => setSel({ kind: 'item', id: it.id })}
+          onFocus={() => selectOnCanvas(it.id)}
           onPointerDown={(e) => onItemDown(e, it.id)}
           onPointerEnter={() => setHover(it.id)}
           onPointerLeave={() => setHover((h) => (h === it.id ? null : h))}
@@ -911,8 +1358,8 @@ export default function PlannerPage() {
           }
           return (
             <g key={it.id} tabIndex={0} role="button" aria-label={`${it.label}${pctLabel ? ', ' + pctLabel : ''}`}
-              onFocus={() => setSel({ kind: 'item', id: it.id })}
-              onPointerDown={(e) => { e.stopPropagation(); setSel({ kind: 'item', id: it.id }) }}
+              onFocus={() => selectOnCanvas(it.id)}
+              onPointerDown={(e) => { e.stopPropagation(); selectOnCanvas(it.id) }}
               style={{ cursor: 'pointer' }}>
               {on && <rect x={p.x - BW / 2 - 4} y={p.y - BH / 2 - 4} width={BW + 8} height={BH + 8} rx={7}
                 fill="none" stroke={C.sel} strokeWidth={2.5} />}
@@ -1142,7 +1589,57 @@ export default function PlannerPage() {
               and drag to the item it feeds. The direction matters — <b>from</b> is the supply.</p>
             )}
 
-            {selItem && (() => {
+            {/* MANY SELECTED — one value set across all of them. The fields
+                show "— mixed —" where they differ, because showing the first
+                item's value makes an editor that silently flattens the other
+                eleven the moment somebody touches it. */}
+            {selIds.length > 1 && (() => {
+              const mixed = (k: string) => commonValue(items, selIds, k)
+              const field = (k: string, label: string, hint?: string) => {
+                const m = mixed(k)
+                return (
+                  <div className="pl-f" key={k}>
+                    <label>{label}{hint ? <span className="h">{hint}</span> : null}</label>
+                    <input className="pl-in mono" type="text"
+                      placeholder={m.mixed ? '— mixed —' : ''}
+                      defaultValue={m.mixed ? '' : String(m.value ?? '')}
+                      key={k + ':' + selIds.join(',') + ':' + String(m.value)}
+                      onBlur={(e) => { if (e.target.value.trim() !== '') bulkSet(k, e.target.value) }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />
+                  </div>
+                )
+              }
+              const kinds = new Set(selIds.map((id) => items.find((i) => i.id === id)?.kind))
+              const totalKva = selIds.reduce((t, id) => t + (items.find((i) => i.id === id)?.kva ?? 0), 0)
+              return (
+                <>
+                  <div className="pl-fact"><span>Selected</span><b>{selIds.length} items</b></div>
+                  <div className="pl-fact"><span>Types</span>
+                    <b>{kinds.size === 1 ? ITEMS[[...kinds][0] as ItemKind].label : `${kinds.size} different`}</b></div>
+                  <div className="pl-fact"><span>Ratings add up to</span><b>{f(totalKva, 0)} kVA</b></div>
+                  <p className="pl-note" style={{ marginTop: 9 }}>
+                    Type a value and press Enter to set it on <b>all {selIds.length}</b>. Leave a field
+                    blank to leave it alone.
+                  </p>
+                  {field('kva', 'Rating', 'kVA')}
+                  {field('volts', 'Voltage', 'line to line')}
+                  {field('pf', 'Power factor')}
+                  <div className="pl-f">
+                    <label>Discharge faces</label>
+                    <div className="pl-dirs">
+                      {DIRS.map((d) => (
+                        <button key={d} onClick={() => bulkSet('dir', d)}>{d}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="pl-danger" onClick={removeSelected}>
+                    Remove all {selIds.length}
+                  </button>
+                </>
+              )
+            })()}
+
+            {selIds.length <= 1 && selItem && (() => {
               const s = ITEMS[selItem.kind]
               const carried = downstreamKva(items, cables, selItem.id)
               return (
@@ -1270,6 +1767,194 @@ export default function PlannerPage() {
         <span className="pl-lg"><i style={{ background: C.overWash, borderColor: C.over }} />red hatch — hot discharge</span>
         <span className="pl-lg"><i style={{ background: C.infoWash, borderColor: C.info }} />blue hatch — air intake</span>
         <span className="pl-lg"><i style={{ background: '#fff', borderColor: C.sel }} />violet — selected</span>
+      </div>
+
+      {/* ══ THE DATA GRID — the same list, as a spreadsheet ══ */}
+      <div className="pl-gridwrap">
+        <div className="pl-gbar">
+          <span className="pl-lab">Equipment list</span>
+          <input type="search" id="pl-q" value={filter.q} placeholder="Search tag, type or what feeds it"
+            onChange={(e) => setFilter({ ...filter, q: e.target.value })} aria-label="Search the equipment list" />
+          <button className={'pl-mini' + (filter.unsuppliedOnly ? ' on' : '')}
+            onClick={() => setFilter({ ...filter, unsuppliedOnly: !filter.unsuppliedOnly })}>
+            No supply
+          </button>
+          {(['over', 'limit', 'watch'] as LoadBand[]).map((b) => (
+            <button key={b} className={'pl-mini' + (filter.bands.includes(b) ? ' on' : '')}
+              style={filter.bands.includes(b) ? { borderColor: BAND[b].c, color: BAND[b].c, background: BAND[b].wash } : undefined}
+              onClick={() => setFilter({
+                ...filter,
+                bands: filter.bands.includes(b) ? filter.bands.filter((x) => x !== b) : [...filter.bands, b],
+              })}>
+              {BAND[b].word}
+            </button>
+          ))}
+          {isFiltering(filter) && (
+            <button className="pl-mini" onClick={() => setFilter(EMPTY_FILTER)}>Clear filter</button>
+          )}
+          <span className="pl-spacer" />
+          <span className="pl-count">
+            {isFiltering(filter) ? `${rows.length} of ${allRows.length}` : `${rows.length}`} row{rows.length === 1 ? '' : 's'}
+          </span>
+          <button className="pl-mini" onClick={copySelection} disabled={!selRect}>Copy</button>
+          <button className="pl-mini" onClick={fillDown}
+            disabled={!selRect || selRect.top === selRect.bottom}>Fill down</button>
+          <button className="pl-mini" onClick={removeSelected} disabled={!selIds.length}>
+            Remove {selIds.length > 1 ? selIds.length : ''}
+          </button>
+        </div>
+
+        {/* Drag the bar to give the grid more of the screen, or less. */}
+        <div className="pl-grip" role="separator" aria-label="Resize the equipment list"
+          onPointerDown={(e) => {
+            e.preventDefault()
+            const y0 = e.clientY, h0 = gridH
+            const move = (ev: PointerEvent) => setGridH(Math.max(96, Math.min(760, h0 + (ev.clientY - y0))))
+            const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+            window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+          }}><i /></div>
+
+        <div className="pl-scroll" ref={gridRef} style={{ height: gridH }} tabIndex={0}
+          onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
+          onPaste={(e) => {
+            const text = e.clipboardData?.getData('text/plain') ?? ''
+            if (!text) return
+            e.preventDefault()
+            planFromClipboard(text)
+          }}
+          onKeyDown={onGridKey}>
+
+          <div className="pl-head" style={{ width: GRID_W }}>
+            {COLS.map((c, ci) => (
+              <div key={c.key} className={'pl-th' + (c.editable ? '' : ' calc')} style={{ width: c.width }}
+                title={c.hint ?? (c.editable ? '' : 'Worked out from the drawing — not typed')}
+                onClick={() => {
+                  if (sortKey === c.key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+                  else { setSortKey(c.key); setSortDir('asc') }
+                }}
+                role="columnheader" aria-sort={sortKey === c.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                {c.label}{c.unit ? <span className="u"> · {c.unit}</span> : null}
+                {sortKey === c.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                {ci === 0 && dupes.size > 0 ? <span style={{ color: 'var(--color-danger)' }}> · {dupes.size} duplicated</span> : null}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ height: win.totalHeight, position: 'relative', width: GRID_W }}>
+            {rows.slice(win.start, win.end).map((r, i) => {
+              const ri = win.start + i
+              const on = selSet.has(r.id)
+              return (
+                <div key={r.id} className={'pl-gr' + (on ? ' on' : '') + (dupeRows.has(ri) ? ' dup' : '')}
+                  style={{ top: ri * ROW_H, width: GRID_W }}>
+                  {COLS.map((c, ci) => {
+                    const isEdit = editing && editing.row === ri && editing.col === ci
+                    const bad = cellError && cellError.row === ri && cellError.col === c.key
+                    const cls = 'pl-td'
+                      + (c.editable ? '' : ' calc')
+                      + (c.type === 'number' || c.key === 'label' ? ' mono' : '')
+                      + (selRect && inRect(selRect, ri, ci) ? ' inrect' : '')
+                      + (bad ? ' bad' : '')
+                    if (isEdit && c.type === 'enum') {
+                      return (
+                        <div key={c.key} className={cls} style={{ width: c.width }}>
+                          <select autoFocus value={editing.draft}
+                            onChange={(e) => setEditing({ ...editing, draft: e.target.value })}
+                            onBlur={() => commitEdit('none')}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitEdit('down'); if (e.key === 'Escape') setEditing(null) }}>
+                            {c.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                      )
+                    }
+                    if (isEdit) {
+                      return (
+                        <div key={c.key} className={cls} style={{ width: c.width }}>
+                          <input autoFocus value={editing.draft}
+                            onChange={(e) => setEditing({ ...editing, draft: e.target.value })}
+                            onBlur={() => commitEdit('none')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); commitEdit('down') }
+                              else if (e.key === 'Tab') { e.preventDefault(); commitEdit('right') }
+                              else if (e.key === 'Escape') { setEditing(null); setCellError(null) }
+                            }} />
+                        </div>
+                      )
+                    }
+                    return (
+                      <div key={c.key} className={cls} style={{ width: c.width }}
+                        onPointerDown={(e) => onGridPointerDown(e, ri, ci)}
+                        onDoubleClick={() => startEdit(ri, ci)}
+                        title={c.key === 'feeder' && r.band ? BAND[r.band as LoadBand].word : undefined}>
+                        {c.key === 'feeder' && r.band
+                          ? <span style={{ color: BAND[r.band as LoadBand].c, fontWeight: 650 }}>{cellValue(r, c)}</span>
+                          : cellValue(r, c)}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+            {rows.length === 0 && (
+              <div style={{ padding: 14, fontSize: 12.5, color: 'var(--color-text-secondary)' }}>
+                {isFiltering(filter)
+                  ? 'Nothing matches that filter. The drawing still has everything on it — a filter narrows what you are looking at, it never removes anything.'
+                  : 'Nothing placed yet. Click an item in the palette above.'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* A paste is shown before it is applied. It is the one action here
+            that can change a thousand records at once. */}
+        {pending && (
+          <div className="pl-paste">
+            <b>Paste</b>
+            <span>{describePaste(pending.plan)}</span>
+            {pending.plan.errors.length > 0 && (
+              <span style={{ color: 'var(--color-danger)' }}>
+                — first problem: row {pending.plan.errors[0].row + 1}, {pending.plan.errors[0].reason}
+              </span>
+            )}
+            <span className="pl-spacer" />
+            <button className="pl-go" onClick={applyPending} disabled={pending.plan.changes.length === 0}>
+              Apply {pending.plan.changes.length}
+            </button>
+            <button className="pl-mini" onClick={() => setPending(null)}>Cancel</button>
+          </div>
+        )}
+
+        {cellError && (
+          <div className="pl-err">
+            <b>Refused.</b> {cellError.reason}. The cell keeps what it had — nothing here guesses at
+            what you meant, because a guessed value reads afterwards as though somebody typed it.
+          </div>
+        )}
+
+        <div className="pl-status">
+          {selRect && stats ? (
+            <>
+              <span><b>{stats.cells}</b> cell{stats.cells === 1 ? '' : 's'} selected</span>
+              <span><b>{selIds.length}</b> item{selIds.length === 1 ? '' : 's'}</span>
+              {stats.numbers > 0 && (
+                <>
+                  <span>sum <b>{f(stats.sum, 0)}</b></span>
+                  <span>mean <b>{f(stats.mean ?? 0, 1)}</b></span>
+                  <span>min <b>{f(stats.min ?? 0, 1)}</b> · max <b>{f(stats.max ?? 0, 1)}</b></span>
+                </>
+              )}
+            </>
+          ) : (
+            <span>Click a cell to select. Double-click to edit. Shift-click for a range, Ctrl-click to add one.</span>
+          )}
+          <span className="pl-spacer" />
+          {dupes.size > 0 && (
+            <span style={{ color: 'var(--color-danger)', fontWeight: 650 }}>
+              {dupes.size} tag{dupes.size === 1 ? '' : 's'} used more than once
+            </span>
+          )}
+          <span>Paste from Excel with Ctrl+V — you will see what it would do first.</span>
+        </div>
       </div>
 
       {/* ── 5 · findings ── */}

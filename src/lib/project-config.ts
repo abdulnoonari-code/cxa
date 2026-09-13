@@ -221,3 +221,37 @@ export function isUnconfigured(config: ProjectConfig): boolean {
     config.readyMeans === ''
   )
 }
+
+/**
+ * Where the Configuration page goes once a save has been attempted.
+ *
+ * The onward buttons at the bottom of that page are submit buttons, not
+ * links. Clicking one saves what is on the screen and then moves on, so a
+ * page of typing is never lost on the way to the next step. That only holds
+ * if the destination depends on the SAVE and not on the click: a save the
+ * database refused has to leave you looking at the banner that says so,
+ * rather than standing on a different screen believing the work went in.
+ *
+ * The destination is chosen from a fixed list rather than taken as given.
+ * It arrives from a form, and a form is a thing anybody can post at this
+ * application from anywhere; a redirect that echoes back whatever it was
+ * handed is how a site ends up forwarding its own signed-in users somewhere
+ * else. There are two onward steps and they are both written down here.
+ *
+ * A Map and not a plain object, deliberately. Looking a name up in an object
+ * finds what every object inherits as well as what was put there: 'toString'
+ * answers with a function and '__proto__' with Object.prototype, and either
+ * one reaches redirect() as something that is not a path at all. A Map holds
+ * only what was put in it.
+ */
+const NEXT_AFTER_SAVE = new Map<string, string>([
+  ['systems', '/systems'],
+  ['equipment', '/equipment'],
+])
+
+export function nextAfterSave(next: unknown, state: string): string {
+  const stay = '/project/configuration'
+  if (state !== 'saved') return stay
+  if (typeof next !== 'string') return stay
+  return NEXT_AFTER_SAVE.get(next) ?? stay
+}

@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import {
   sizeGenerator, REGIMES, regimeById, planSteps, totalMinutes, sizeUps,
-  heatAndAir, inletVerdict, ASHRAE, KINDS, DIRS, zonesOf, rectOf,
-  roomFindings, nameFor, clampToRoom, ALT_DATUM_M, AMB_DATUM_C,
-  type RatingUnit, type Phase, type KindId, type Dir, type Item,
+  heatAndAir, inletVerdict, ASHRAE, ALT_DATUM_M, AMB_DATUM_C,
+  type RatingUnit, type Phase,
 } from '@/lib/loadbank'
 import {
   insulationResistance, VINTAGES, IEC60364_IR, IEEE43_EDITION,
@@ -121,7 +121,7 @@ type ToolId =
   | 'loadbank' | 'regime' | 'ups' | 'ir' | 'earth' | 'vd' | 'ct' | 'harmonics'
   | 'whitespace' | 'containment' | 'heat' | 'chw' | 'affinity' | 'room' | 'ref'
 
-type Tool = { id: ToolId; group: string; title: string; note: string; tag: string }
+type Tool = { id: ToolId; group: string; title: string; note: string; tag: string; href?: string }
 
 const TOOLS: Tool[] = [
   { id: 'loadbank', group: 'Electrical', title: 'Load bank sizing', note: 'Both legs of the bank from a nameplate, with site derating and the resistive-only warning.', tag: 'kW + kVAR' },
@@ -137,18 +137,9 @@ const TOOLS: Tool[] = [
   { id: 'heat', group: 'White space and cooling', title: 'Heat rejection and airflow', note: 'kW to BTU and tons, the air volume needed, corrected for altitude.', tag: 'CFM · m³/s' },
   { id: 'chw', group: 'White space and cooling', title: 'Chilled water', note: 'Flow from load and ΔT in both unit systems, and pressure drop against flow.', tag: 'l/s · GPM' },
   { id: 'affinity', group: 'White space and cooling', title: 'Pump and fan laws', note: 'Speed, impeller trim and machine scaling — which are three different laws.', tag: 'Affinity' },
-  { id: 'room', group: 'Planning', title: 'Room layout planner', note: 'Place equipment to scale and it flags hot discharge feeding another unit’s intake.', tag: 'Drag to place' },
+  { id: 'room', group: 'Planning', title: 'Room layout planner', note: 'Place equipment to scale, drag cables between it, and every cable sizes itself from the load below it. Room plan and single line from one model.', tag: 'Drag to connect', href: '/knowledge/planner' },
   { id: 'ref', group: 'Planning', title: 'Reference and tolerances', note: 'Air balance tolerances, the standards behind each tool, and what this page will not do.', tag: 'NEBB · AABC' },
 ]
-
-const TONE: Record<string, string> = {
-  primary: 'var(--color-primary)', neutral: 'var(--color-text-secondary)',
-  warning: 'var(--color-warning)', success: 'var(--color-success)',
-}
-const WASH: Record<string, string> = {
-  primary: 'var(--color-primary-light)', neutral: 'var(--color-bg)',
-  warning: 'var(--color-warning-bg)', success: 'var(--color-success-bg)',
-}
 
 function f(v: number, d?: number) {
   if (!isFinite(v)) return '—'
@@ -325,61 +316,6 @@ export default function TechnicalDesignPage() {
   const aff = useMemo(() => affinity(affMode, nPct / 100, dPct / 100), [affMode, nPct, dPct])
   const minSpeed = minimumUsefulSpeed(rpm, hStatic, hBep)
 
-  // ── room ──
-  const [roomW, setRoomW] = useState(20)
-  const [roomD, setRoomD] = useState(14)
-  const [items, setItems] = useState<Item[]>(() => [
-    { id: 1, kind: 'lb', x: 2, y: 2, dir: 'E', label: 'Load bank 1 MW' },
-    { id: 2, kind: 'lb', x: 2, y: 8.5, dir: 'E', label: 'Load bank 1 MW #2' },
-    { id: 3, kind: 'panel', x: 0.2, y: 5.6, dir: 'E', label: 'Distribution panel' },
-    { id: 4, kind: 'door', x: 17.5, y: 0, dir: 'E', label: 'Door / opening' },
-  ])
-  const [sel, setSel] = useState<number | null>(null)
-  const [showZones, setShowZones] = useState(true)
-  const [showGrid, setShowGrid] = useState(true)
-  const nextId = useRef(5)
-  const stageRef = useRef<SVGSVGElement>(null)
-  const findings = useMemo(() => roomFindings(items, roomW, roomD), [items, roomW, roomD])
-  const selected = items.find((i) => i.id === sel) ?? null
-
-  const VW = 1000, VH = 700, PAD = 54
-  const sc = Math.min((VW - PAD * 2) / roomW, (VH - PAD * 2) / roomD)
-  const ox = (VW - roomW * sc) / 2, oy = (VH - roomD * sc) / 2
-  const X = (m: number) => ox + m * sc
-  const Y = (m: number) => oy + m * sc
-
-  function addItem(kind: KindId) {
-    setItems((prev) => {
-      const p = clampToRoom(1 + ((prev.length * 1.5) % 6), 1 + ((prev.length * 1.2) % 5), kind, roomW, roomD)
-      const it: Item = { id: nextId.current++, kind, x: p.x, y: p.y, dir: 'E', label: nameFor(kind, prev) }
-      setSel(it.id)
-      return [...prev, it]
-    })
-  }
-
-  function onDown(e: React.PointerEvent, id: number) {
-    e.preventDefault(); setSel(id)
-    const svg = stageRef.current; if (!svg) return
-    const it = items.find((x) => x.id === id); if (!it) return
-    const pt = svg.createSVGPoint()
-    const toM = (ev: { clientX: number; clientY: number }) => {
-      pt.x = ev.clientX; pt.y = ev.clientY
-      const m = svg.getScreenCTM(); if (!m) return { x: 0, y: 0 }
-      const p = pt.matrixTransform(m.inverse())
-      return { x: (p.x - ox) / sc, y: (p.y - oy) / sc }
-    }
-    const start = toM(e), ix = it.x, iy = it.y
-    const move = (ev: PointerEvent) => {
-      const m = toM(ev)
-      const p = clampToRoom(ix + (m.x - start.x), iy + (m.y - start.y), it.kind, roomW, roomD)
-      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, x: p.x, y: p.y } : x)))
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
-    }
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
-  }
-
   const num = (v: number, set: (n: number) => void) => ({
     type: 'number' as const, className: 'input mono', value: String(v),
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -409,13 +345,21 @@ export default function TechnicalDesignPage() {
           <div key={g}>
             <div className="td-grp">{g}</div>
             <div className="td-cards">
-              {TOOLS.filter((t) => t.group === g).map((t) => (
-                <button key={t.id} className="td-card" onClick={() => setTool(t.id)}>
-                  <div className="td-card-t">{t.title}</div>
-                  <p className="td-card-n">{t.note}</p>
-                  <span className="td-card-s mono">{t.tag}</span>
-                </button>
-              ))}
+              {TOOLS.filter((t) => t.group === g).map((t) => {
+                const body = (
+                  <>
+                    <div className="td-card-t">{t.title}</div>
+                    <p className="td-card-n">{t.note}</p>
+                    <span className="td-card-s mono">{t.tag}</span>
+                  </>
+                )
+                // The planner is its own route, not a panel on this page. It
+                // needs the whole screen, its own print stylesheet and its own
+                // URL so a layout can be linked to from a method statement.
+                return t.href
+                  ? <Link key={t.id} href={t.href} className="td-card">{body}</Link>
+                  : <button key={t.id} className="td-card" onClick={() => setTool(t.id)}>{body}</button>
+              })}
             </div>
           </div>
         ))}
@@ -975,123 +919,6 @@ flow  ${f(aff.flow * 100, 1)} %      head  ${f(aff.head * 100, 1)} %      power 
         </div>
       </>)}
 
-      {/* ══ ROOM ══ */}
-      {tool === 'room' && (<>
-        <div className="td-bar">
-          <Kpi label="Room" value={`${f(roomW, 1)} × ${f(roomD, 1)}`} unit="m" note={`${f(roomW * roomD, 0)} m²`} />
-          <Kpi label="Items placed" value={String(items.length)} />
-          <Kpi tone={findings.some((x) => x.severity === 'blocking') ? 'bad' : findings.length ? 'warn' : 'good'}
-            label="Findings" value={String(findings.length)}
-            note={findings.some((x) => x.severity === 'blocking') ? 'one will fail the test' : findings.length ? 'worth looking at' : 'nothing found'} />
-        </div>
-        <div className="td-bar2">
-          <input {...num(roomW, setRoomW)} style={{ width: 76 }} aria-label="Room width" />
-          <span className="text-secondary">×</span>
-          <input {...num(roomD, setRoomD)} style={{ width: 76 }} aria-label="Room depth" />
-          <span className="text-secondary" style={{ fontSize: 12 }}>m</span>
-          <button className={'td-mini' + (showZones ? ' on' : '')} onClick={() => setShowZones(!showZones)}>Clearance zones</button>
-          <button className={'td-mini' + (showGrid ? ' on' : '')} onClick={() => setShowGrid(!showGrid)}>Grid</button>
-          <button className="td-mini" onClick={() => { setItems([]); setSel(null) }}>Clear all</button>
-        </div>
-        <div className="td-plan">
-          <div>
-            {(Object.keys(KINDS) as KindId[]).map((k) => {
-              const K = KINDS[k]
-              return (
-                <button key={k} className="td-pbtn" onClick={() => addItem(k)}>
-                  <span className="td-sw" style={{ background: TONE[K.tone] }} />
-                  <span>{K.label}<br /><span className="mono text-secondary" style={{ fontWeight: 400, fontSize: 10.5 }}>
-                    {K.w} × {K.h} m</span></span>
-                </button>
-              )
-            })}
-            {selected && (() => {
-              const K = KINDS[selected.kind]
-              return (
-                <div className="card" style={{ padding: '12px 13px', marginTop: 8 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12.5, marginBottom: 4 }}>{selected.label}</div>
-                  <div className="mono text-secondary" style={{ fontSize: 11, marginBottom: 8 }}>
-                    {K.w} × {K.h} m{K.discharge ? ` · in ${K.intake} m · out ${K.discharge} m` : ''}
-                  </div>
-                  {K.discharge > 0 && (
-                    <div className="td-seg">{DIRS.map((dir: Dir) => (
-                      <button key={dir} className={selected.dir === dir ? 'on' : ''}
-                        onClick={() => setItems((p) => p.map((x) => x.id === selected.id ? { ...x, dir } : x))}>{dir}</button>
-                    ))}</div>
-                  )}
-                  <button className="td-mini" style={{ marginTop: 8, borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
-                    onClick={() => { setItems((p) => p.filter((x) => x.id !== selected.id)); setSel(null) }}>Remove</button>
-                </div>
-              )
-            })()}
-          </div>
-          <div>
-            <svg ref={stageRef} className="td-stage" viewBox={`0 0 ${VW} ${VH}`} role="img"
-              aria-label="Room layout plan showing equipment and clearance zones">
-              <rect x={X(0)} y={Y(0)} width={roomW * sc} height={roomD * sc}
-                fill="var(--color-bg)" stroke="var(--color-text)" strokeWidth={2} />
-              {showGrid && Array.from({ length: Math.max(0, Math.ceil(roomW) - 1) }, (_, i) => i + 1).map((m) => (
-                <line key={'v' + m} x1={X(m)} y1={Y(0)} x2={X(m)} y2={Y(roomD)}
-                  stroke="var(--color-border)" strokeWidth={m % 5 ? 0.5 : 1} opacity={m % 5 ? 0.5 : 0.9} />))}
-              {showGrid && Array.from({ length: Math.max(0, Math.ceil(roomD) - 1) }, (_, i) => i + 1).map((m) => (
-                <line key={'h' + m} x1={X(0)} y1={Y(m)} x2={X(roomW)} y2={Y(m)}
-                  stroke="var(--color-border)" strokeWidth={m % 5 ? 0.5 : 1} opacity={m % 5 ? 0.5 : 0.9} />))}
-              <text x={X(roomW / 2)} y={Y(0) - 16} textAnchor="middle" fontSize={13} fontWeight={600}
-                fill="var(--color-text-secondary)">{roomW} m</text>
-              <text x={X(0) - 16} y={Y(roomD / 2)} textAnchor="middle" fontSize={13} fontWeight={600}
-                fill="var(--color-text-secondary)" transform={`rotate(-90 ${X(0) - 16} ${Y(roomD / 2)})`}>{roomD} m</text>
-              {showZones && items.map((it) => {
-                const z = zonesOf(it); if (!z) return null
-                const K = KINDS[it.kind]
-                return (<g key={'z' + it.id}>
-                  {K.discharge > 0 && <rect x={X(z.discharge.x)} y={Y(z.discharge.y)} width={z.discharge.w * sc}
-                    height={z.discharge.h * sc} fill="var(--color-danger)" opacity={0.1}
-                    stroke="var(--color-danger)" strokeWidth={1} strokeDasharray="5 4" />}
-                  {K.intake > 0 && <rect x={X(z.intake.x)} y={Y(z.intake.y)} width={z.intake.w * sc}
-                    height={z.intake.h * sc} fill="var(--color-primary)" opacity={0.1}
-                    stroke="var(--color-primary)" strokeWidth={1} strokeDasharray="5 4" />}
-                </g>)
-              })}
-              {items.map((it) => {
-                const K = KINDS[it.kind], r = rectOf(it), isSel = it.id === sel
-                const cx = X(r.x + r.w / 2), cy = Y(r.y + r.h / 2)
-                const nm = /#(\d+)$/.exec(it.label)
-                const lbl = K.short + (nm ? ' #' + nm[1] : '')
-                const dx = it.dir === 'E' ? 1 : it.dir === 'W' ? -1 : 0
-                const dy = it.dir === 'S' ? 1 : it.dir === 'N' ? -1 : 0
-                return (
-                  <g key={it.id} style={{ cursor: 'grab' }} onPointerDown={(e) => onDown(e, it.id)}>
-                    <rect x={X(r.x)} y={Y(r.y)} width={r.w * sc} height={r.h * sc} rx={3}
-                      fill={WASH[K.tone]} stroke={isSel ? 'var(--color-text)' : TONE[K.tone]} strokeWidth={isSel ? 3 : 1.8} />
-                    {r.w * sc > lbl.length * 6.4 + 10 && r.h * sc > 15 && (
-                      <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11.5} fontWeight={700}
-                        fill="var(--color-text)">{lbl}</text>)}
-                    {K.discharge > 0 && (<>
-                      <line x1={cx} y1={cy} x2={cx + dx * (r.w * sc / 2 + 16)} y2={cy + dy * (r.h * sc / 2 + 16)}
-                        stroke="var(--color-danger)" strokeWidth={2.5} />
-                      <circle cx={cx + dx * (r.w * sc / 2 + 16)} cy={cy + dy * (r.h * sc / 2 + 16)} r={4.5}
-                        fill="var(--color-danger)" />
-                    </>)}
-                  </g>
-                )
-              })}
-            </svg>
-            <div style={{ marginTop: 12 }}>
-              {items.length === 0 && <div className="td-note"><b>Empty room</b>
-                <p>Add equipment from the list, then drag it into place. Click an item to change which way it discharges.</p></div>}
-              {findings.length === 0 && items.length > 0 && <div className="td-note"><b>Nothing found</b>
-                <p>No discharge zone is feeding an intake and nothing is blocked. Clearances are the conservative end of
-                the manufacturer range — always check the manual for the actual unit.</p></div>}
-              {findings.map((x, i) => (
-                <div key={i} className={'td-note ' + (x.severity === 'blocking' ? 'stop' : 'warn')}>
-                  <b>{x.severity === 'blocking' ? 'Will fail the test' : 'Worth looking at'}</b>
-                  <p><strong>{x.title}.</strong> {x.detail}</p></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </>)}
-
       {/* ══ REFERENCE ══ */}
       {tool === 'ref' && (
         <div className="td-work">
@@ -1132,9 +959,16 @@ flow  ${f(aff.flow * 100, 1)} %      head  ${f(aff.head * 100, 1)} %      power 
           </ul>
 
           <h3>What this page will not do</h3>
-          <p className="td-p">It does not size cables. It gives the design current and the 125 % continuous figure and
-          stops there, because cable selection depends on installation method, grouping, ambient, run length and the
-          standard you work to — and a calculator that guesses at those produces a number somebody might install.</p>
+          <p className="td-p">The calculators on this page do not size cables. They give the design current and the
+          125 % continuous figure and stop there, because cable selection depends on installation method, grouping,
+          ambient, run length and the standard you work to — and a calculator that guesses at those produces a number
+          somebody might install.</p>
+          <p className="td-p">The <strong>room layout planner</strong> does suggest a size, and it is the one place on
+          this page that does. It is labelled <em>indicative</em> in as many words, it names the exact table, method
+          and ambient it assumes — BS 7671 Table 4E2A, copper, 90 °C thermosetting, Reference Method E on a perforated
+          tray at 30 °C — and it says on the same screen that installation method alone swings a rating by more than
+          thirty per cent and that on any appreciable run volt drop governs first. It is a starting point for your own
+          cable schedule. It is not a specification, and it must never be used as one.</p>
           <p className="td-p">It does not implement IEEE 519 above 69 kV, because Tables 3 and 4 could not be verified
           and cannot be derived by scaling. It does not carry the NETA insulation or torque tables, because open
           transcriptions of those conflict with each other. Where a figure could not be confirmed, it is absent rather

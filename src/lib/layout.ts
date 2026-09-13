@@ -182,11 +182,34 @@ export const AMPACITY_CAVEAT =
 // THE MODEL
 // ════════════════════════════════════════════════════════════════════════
 
-export type ItemKind = 'gen' | 'tx' | 'ups' | 'panel' | 'lb' | 'lb500' | 'lbv' | 'door'
+export type ItemKind =
+  // sources
+  | 'gen' | 'grid'
+  // distribution
+  | 'tx' | 'tx2' | 'mvsw' | 'swbd' | 'panel' | 'ats' | 'ups' | 'batt' | 'busway' | 'pdu'
+  // the load bank family
+  | 'lb' | 'lb500' | 'lbv'
+  // white space and cooling
+  | 'rack' | 'crah' | 'crac' | 'chiller'
+  // not electrical
+  | 'door' | 'tray' | 'fire'
+
+export type ItemGroup = 'Sources' | 'Distribution' | 'Load banks' | 'White space' | 'Not electrical'
+
+/** The order the palette shows them in — supply first, then what it feeds. */
+export const ITEM_GROUPS: ItemGroup[] = ['Sources', 'Distribution', 'Load banks', 'White space', 'Not electrical']
 
 export type ItemSpec = {
   label: string
   short: string
+  /**
+   * Which band of the palette it sits in.
+   *
+   * Eight types could be one list. Twenty-one cannot: an undifferentiated
+   * column of buttons is a list nobody reads to the bottom of, and the item
+   * somebody wants is always the one below the fold.
+   */
+  group: ItemGroup
   w: number
   h: number
   tone: 'source' | 'dist' | 'load' | 'passive'
@@ -204,14 +227,53 @@ export type ItemSpec = {
  * room when there is not gets found out at 40 °C with a client watching.
  */
 export const ITEMS: Record<ItemKind, ItemSpec> = {
-  gen: { label: 'Generator', short: 'GEN', w: 8, h: 2.5, tone: 'source', intake: 1.5, discharge: 3, role: 'source', note: 'Radiator discharge' },
-  tx: { label: 'Transformer', short: 'TX', w: 2.4, h: 1.8, tone: 'source', intake: 1, discharge: 1, role: 'distribution', note: 'Keep ventilation clear' },
-  ups: { label: 'UPS', short: 'UPS', w: 2, h: 0.9, tone: 'dist', intake: 0.8, discharge: 0.8, role: 'distribution', note: '' },
-  panel: { label: 'Distribution panel', short: 'DB', w: 1.2, h: 0.6, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: 'Tap-off point' },
-  lb: { label: 'Load bank 1 MW', short: 'LB 1MW', w: 6.1, h: 2.5, tone: 'load', intake: 2, discharge: 5, role: 'load', note: 'Containerised, horizontal discharge' },
-  lb500: { label: 'Load bank 500 kW', short: 'LB 500', w: 3, h: 2.2, tone: 'load', intake: 1, discharge: 5, role: 'load', note: 'Portable' },
-  lbv: { label: 'Load bank, vertical', short: 'LB ↑', w: 2.4, h: 2.4, tone: 'load', intake: 2, discharge: 5, role: 'load', note: 'Discharges upwards — keep 5 m clear above' },
-  door: { label: 'Door / louvre', short: 'Door', w: 2, h: 0.3, tone: 'passive', intake: 0, discharge: 0, role: 'passive', note: '' },
+  // ── SOURCES ──────────────────────────────────────────────────────────
+  gen:    { label: 'Generator', short: 'GEN', group: 'Sources', w: 8, h: 2.5, tone: 'source', intake: 1.5, discharge: 3, role: 'source', note: 'Radiator discharge' },
+  grid:   { label: 'Utility incomer', short: 'GRID', group: 'Sources', w: 1.2, h: 0.8, tone: 'source', intake: 0, discharge: 0, role: 'source', note: 'The point of supply, not a machine' },
+
+  // ── DISTRIBUTION ─────────────────────────────────────────────────────
+  //
+  // Nothing here consumes anything. Their ratings are what they can PASS,
+  // and counting a board's rating as load would double every figure beneath
+  // it — which is the classic error this model exists to avoid.
+  tx:     { label: 'Transformer', short: 'TX', group: 'Distribution', w: 2.4, h: 1.8, tone: 'source', intake: 1, discharge: 1, role: 'distribution', note: 'Keep ventilation clear' },
+  tx2:    { label: 'Transformer, 2 MVA', short: 'TX 2M', group: 'Distribution', w: 3.2, h: 2.2, tone: 'source', intake: 1.2, discharge: 1.2, role: 'distribution', note: 'Cast resin, forced-air rating needs the fans clear' },
+  mvsw:   { label: 'MV switchgear', short: 'MV SW', group: 'Distribution', w: 1.2, h: 1.6, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: 'Arc venting is normally upward — check the duct route above' },
+  swbd:   { label: 'LV switchboard', short: 'MSB', group: 'Distribution', w: 3, h: 1, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: 'Front and rear access' },
+  panel:  { label: 'Distribution panel', short: 'DB', group: 'Distribution', w: 1.2, h: 0.6, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: 'Tap-off point' },
+  ats:    { label: 'Transfer switch', short: 'ATS', group: 'Distribution', w: 0.9, h: 0.6, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: 'Automatic or manual — the drawing does not distinguish' },
+  ups:    { label: 'UPS', short: 'UPS', group: 'Distribution', w: 2, h: 0.9, tone: 'dist', intake: 0.8, discharge: 0.8, role: 'distribution', note: '' },
+  batt:   { label: 'Battery cabinet', short: 'BATT', group: 'Distribution', w: 1.2, h: 0.9, tone: 'dist', intake: 0.8, discharge: 0.8, role: 'distribution', note: 'Ventilation is a code requirement, not a preference' },
+  busway: { label: 'Busway riser', short: 'BUSW', group: 'Distribution', w: 0.6, h: 0.6, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: 'Where the busway leaves or enters the room' },
+  pdu:    { label: 'Floor PDU', short: 'PDU', group: 'Distribution', w: 0.9, h: 0.9, tone: 'dist', intake: 0, discharge: 0, role: 'distribution', note: '' },
+
+  // ── LOAD BANKS ───────────────────────────────────────────────────────
+  //
+  // Clearances are the conservative end of the manufacturer range. Crestchic
+  // asks two metres on the discharge and Avtron five; a plan that says there
+  // is room when there is not gets found out at 40 °C with a client watching.
+  lb:     { label: 'Load bank 1 MW', short: 'LB 1MW', group: 'Load banks', w: 6.1, h: 2.5, tone: 'load', intake: 2, discharge: 5, role: 'load', note: 'Containerised, horizontal discharge' },
+  lb500:  { label: 'Load bank 500 kW', short: 'LB 500', group: 'Load banks', w: 3, h: 2.2, tone: 'load', intake: 1, discharge: 5, role: 'load', note: 'Portable' },
+  lbv:    { label: 'Load bank, vertical', short: 'LB \u2191', group: 'Load banks', w: 2.4, h: 2.4, tone: 'load', intake: 2, discharge: 5, role: 'load', note: 'Discharges upwards \u2014 keep 5 m clear above' },
+
+  // ── WHITE SPACE AND COOLING ──────────────────────────────────────────
+  rack:   { label: 'IT rack', short: 'RACK', group: 'White space', w: 0.6, h: 1.2, tone: 'load', intake: 1, discharge: 1, role: 'load', note: 'Intake at the front, exhaust at the rear \u2014 face it into the cold aisle' },
+  crah:   { label: 'CRAH unit', short: 'CRAH', group: 'White space', w: 2.2, h: 1, tone: 'load', intake: 1.5, discharge: 2.5, role: 'load', note: 'Chilled water. Down-flow unless the drawing says otherwise' },
+  crac:   { label: 'CRAC unit', short: 'CRAC', group: 'White space', w: 1.8, h: 0.9, tone: 'load', intake: 1.5, discharge: 2.5, role: 'load', note: 'Direct expansion \u2014 it carries its own compressor load' },
+  chiller:{ label: 'Air-cooled chiller', short: 'CHILL', group: 'White space', w: 4.5, h: 2.2, tone: 'load', intake: 2.5, discharge: 3, role: 'load', note: 'Outdoors. Short-cycling its own discharge is the commonest siting mistake' },
+
+  // ── NOT ELECTRICAL ───────────────────────────────────────────────────
+  //
+  // On the drawing for orientation and for the clearance checks. None of
+  // them appears in any cable calculation.
+  door:   { label: 'Door / louvre', short: 'Door', group: 'Not electrical', w: 2, h: 0.3, tone: 'passive', intake: 0, discharge: 0, role: 'passive', note: '' },
+  tray:   { label: 'Cable tray', short: 'TRAY', group: 'Not electrical', w: 3, h: 0.3, tone: 'passive', intake: 0, discharge: 0, role: 'passive', note: 'Marks the containment route. Cable lengths still come off the drawing, not off the tray' },
+  fire:   { label: 'Fire panel', short: 'FIRE', group: 'Not electrical', w: 0.6, h: 0.3, tone: 'passive', intake: 0, discharge: 0, role: 'passive', note: 'Keep the approach clear' },
+}
+
+/** The kinds in one palette band, in the order they are declared above. */
+export function kindsInGroup(group: ItemGroup): ItemKind[] {
+  return (Object.keys(ITEMS) as ItemKind[]).filter((k) => ITEMS[k].group === group)
 }
 
 export type Dir = 'N' | 'E' | 'S' | 'W'

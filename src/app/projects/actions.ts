@@ -61,9 +61,21 @@ export async function createProject(formData: FormData) {
   }
 
   refreshEverything()
-  redirect('/dashboard')
+
+  // A brand new project has nothing in it, so a dashboard of zeroes is not
+  // where anybody wants to be dropped. Configuration is the first real
+  // decision on a job — which rungs of the ladder it climbs, which
+  // disciplines, against which standards — and every other screen counts
+  // against the answer. So that is where a new project opens.
+  //
+  // If the insert did not come back with an id then no project was made, and
+  // sending somebody to a configuration screen for a project that does not
+  // exist would be worse than useless. The list is where the form is.
+  redirect(data?.id ? '/project/configuration' : '/projects')
 }
 
+// Choosing an EXISTING project is a different act: that project has already
+// been configured and has records in it, so the dashboard is exactly right.
 export async function selectProject(formData: FormData) {
   const id = str(formData, 'id')
   if (!id) return

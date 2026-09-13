@@ -152,7 +152,10 @@ export const MANUAL_GROUPS: ManualGroup[] = [
           { label: 'Careful', text: 'A tag used twice is marked in red down the left of both rows and counted in the bar underneath. Two items with the same tag is a register where somebody records a test against the wrong one.' },
           { label: 'Dual feed', text: 'An item may have TWO supplies. Each feeder is sized for the WHOLE load, not half of it \u2014 that is the 2N rule, and it is what the loss-of-one-feeder case needs. A third supply is refused. Where both supplies trace back to the same source the page says so: that is two cables and one point of failure, and on a drawing the two arrangements look identical.' },
           { label: 'Careful', text: 'Spare capacity is reported on the WORST SINGLE SOURCE, never on the sum of them. Two 2500 kVA sources under a 3000 kVA dual-fed block sum to 5000 and look 40 per cent spare; each has to carry the 3000 alone, which is 20 per cent over. The sum is the number that reads reassuring and gets somebody in trouble.' },
-          { label: 'Note', text: 'Print for the method statement, or export a PNG. Saving a layout against a project needs database step part 39 and is not wired up yet \u2014 the page says so rather than offering a Save button that does nothing.' },
+          { label: 'Saving', text: 'Name the drawing and press Save and it belongs to the project, so it can be reopened and revised. A saved drawing keeps the conditions it was computed under \u2014 the ambient, the volt drop guidance and the room \u2014 so a cable schedule printed from it stays defensible after somebody changes the project\u2019s design ambient next month.' },
+          { label: 'Careful', text: 'Saving is the one thing here that needs an account, because a saved drawing belongs to a project and a project belongs to a team. Signed out, the bar says so and there is no Save button \u2014 everything the planner calculates still works.' },
+          { label: 'Needs first', text: 'Database step part 39 for the three layout tables. Until it is run the planner works exactly as before and the bar says which file to run.' },
+          { label: 'Note', text: 'Print for the method statement, or export a PNG. Freezing a drawing as a numbered revision for a handover pack is the next step and is not built yet.' },
         ],
       },
       {

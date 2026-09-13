@@ -61,7 +61,7 @@ export async function createProject(formData: FormData) {
   }
 
   refreshEverything()
-  redirect('/dashboard')
+  redirect(data?.id ? '/project/configuration' : '/projects')
 }
 
 export async function selectProject(formData: FormData) {

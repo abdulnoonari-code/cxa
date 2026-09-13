@@ -210,6 +210,26 @@ export default async function ConfigurationPage() {
           </span>
         </div>
       </form>
+
+      {project && !columnMissing && (
+        <section className="card" aria-labelledby="next-setup-step" style={{ marginBottom: 24 }}>
+          <h2 id="next-setup-step" className="section-title">
+            Next: Systems and Equipment
+          </h2>
+          <p className="text-secondary">
+            Save your configuration above before continuing. Then create or import your systems,
+            followed by the equipment and tags assigned to them.
+          </p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Link href="/systems" className="btn btn-primary">
+              Set up systems
+            </Link>
+            <Link href="/equipment" className="btn btn-secondary">
+              Set up equipment
+            </Link>
+          </div>
+        </section>
+      )}
     </>
   )
 }

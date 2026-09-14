@@ -1,10 +1,14 @@
 import ExcelJS from 'exceljs'
 import { STAGES } from '@/lib/readiness'
 import { SYSTEM_SHEET_COLUMNS, SYSTEM_GUIDE_SHEET } from '@/lib/system-sheet'
+import { requireAccess } from '@/data/require-access'
 
 // A blank system list with three worked rows, so a new project has something
 // to type over rather than a format to guess at.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

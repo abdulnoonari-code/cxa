@@ -2,12 +2,16 @@ import ExcelJS from 'exceljs'
 import { LEVELS } from '@/lib/checklist'
 import { CATEGORIES, ISSUE_STATUSES, SEVERITIES } from '@/lib/issues'
 import { CATEGORY_BLOCKS } from '@/lib/punchlist'
+import { requireAccess } from '@/data/require-access'
 
 // A blank punch list in the same shape the export comes out in, so a walkdown
 // done on paper and typed up in Excel imports without anybody being told the
 // format. Three worked rows: an A item against a tag, a B item against a
 // system, and one already cleared and waiting on acceptance.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

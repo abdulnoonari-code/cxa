@@ -1,10 +1,14 @@
 import ExcelJS from 'exceljs'
 import { PARTIES, OBLIGATION_TYPES, OBLIGATION_STATUSES } from '@/lib/obligations'
 import { LEVELS } from '@/lib/checklist'
+import { requireAccess } from '@/data/require-access'
 
 // A blank obligations register in the same shape the export comes out in,
 // with one worked row per party the reader most often gets wrong.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

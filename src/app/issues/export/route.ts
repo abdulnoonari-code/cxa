@@ -6,6 +6,7 @@ import { refKey } from '@/lib/subjects'
 import { LEVELS } from '@/lib/checklist'
 import { CATEGORIES, ISSUE_STATUSES, SEVERITIES } from '@/lib/issues'
 import { CATEGORY_BLOCKS, summarise, verdict, daysOverdue, ageInDays, statusLabel, severityLabel } from '@/lib/punchlist'
+import { requireAccess } from '@/data/require-access'
 
 // The punch list as it goes to the client, and as it comes back.
 //
@@ -13,6 +14,9 @@ import { CATEGORY_BLOCKS, summarise, verdict, daysOverdue, ageInDays, statusLabe
 // record and are ignored on the way back. The punch number is what makes a
 // marked-up file land on the right rows.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

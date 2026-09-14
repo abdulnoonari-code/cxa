@@ -1,5 +1,6 @@
 import { getCurrentProject } from '@/lib/project'
 import { loadPhoto } from '@/data/photos'
+import { requireAccess } from '@/data/require-access'
 
 // Download a photograph with its original filename.
 //
@@ -9,6 +10,9 @@ import { loadPhoto } from '@/data/photos'
 // which item it belongs to, because it is going to be attached to an email
 // and looked at a week later.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const { id } = await params
   const project = await getCurrentProject()
   if (!project) return new Response('No project selected', { status: 404 })

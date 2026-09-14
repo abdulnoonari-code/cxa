@@ -11,12 +11,16 @@ import {
   typeLabel,
   daysOverdue,
 } from '@/lib/obligations'
+import { requireAccess } from '@/data/require-access'
 
 // The register as a spreadsheet — the one that comes back edited.
 //
 // The first thirteen columns round-trip. Everything after them is the record
 // and is ignored on the way in.
 export async function GET(request: Request) {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const built = await buildObligationReport(request.url)
   if (!built) return new Response('No project found', { status: 404 })
 

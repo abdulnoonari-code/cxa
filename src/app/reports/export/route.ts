@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { LEVELS, STATUSES, reviewLabel } from '@/lib/checklist'
+import { requireAccess } from '@/data/require-access'
 
 const HEADER_FILL = 'FFEAF1FF'
 
@@ -31,6 +32,9 @@ function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]
 }
 
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

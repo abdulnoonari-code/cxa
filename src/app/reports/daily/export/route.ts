@@ -12,10 +12,14 @@ import {
   emptyDayNote,
   type AuditEvent,
 } from '@/lib/daily-report'
+import { requireAccess } from '@/data/require-access'
 
 // The daily report as a workbook, so it can go straight into a client email
 // or a contractual submission without being retyped.
 export async function GET(request: Request) {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

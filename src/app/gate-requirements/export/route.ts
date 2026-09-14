@@ -5,11 +5,15 @@ import { loadSubjectIndex } from '@/data/subjects'
 import { subjectTitle, subjectLabel, getSubject } from '@/lib/subjects'
 import { RULE_KINDS } from '@/lib/gates'
 import { paramsToSetting, settingHelp, kindLabel } from '@/lib/gate-rules-io'
+import { requireAccess } from '@/data/require-access'
 
 // Every gate requirement on the project, in one sheet, ready to be edited in
 // Excel and brought back. One row per rule; the CXA ID is what makes it come
 // back to the right rule rather than being matched by guessing at text.
 export async function GET(request: Request) {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

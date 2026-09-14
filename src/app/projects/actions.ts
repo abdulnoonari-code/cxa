@@ -9,6 +9,8 @@ import { FALLBACK_PROJECT_NAME } from '@/lib/purge'
 import { projectImpact, purgeProject, projectCount } from '@/data/purge'
 import { verifyPassword } from '@/lib/reauth'
 import { recordAudit } from '@/lib/audit'
+import { accessVerdict } from '@/data/gate'
+import { mayOpenProject } from '@/lib/gate'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -56,6 +58,23 @@ export async function createProject(formData: FormData) {
   // Open the new project straight away — that's almost always what you want
   // after creating one.
   if (data?.id) {
+    // THE PERSON WHO MADE IT GOES ON THE TEAM, FIRST.
+    //
+    // Project access is now decided by the team list. A project created with
+    // an empty team is a project its own author cannot open: they would be
+    // redirected to configuration for a job that, one query later, they are
+    // not on. Owners would not notice — they can open anything — which is
+    // exactly how this would have shipped broken for everybody else.
+    //
+    // project_admin, not engineer: whoever starts a job can manage its team,
+    // otherwise nobody can add the second person to it.
+    const verdict = await accessVerdict()
+    if (verdict.email) {
+      await supabase
+        .from('project_members')
+        .insert({ project_id: data.id, email: verdict.email, role: 'project_admin' })
+    }
+
     const store = await cookies()
     store.set(PROJECT_COOKIE, data.id, { path: '/', maxAge: 60 * 60 * 24 * 365 })
   }
@@ -80,6 +99,15 @@ export async function selectProject(formData: FormData) {
   const id = str(formData, 'id')
   if (!id) return
 
+  // A server action is reachable by anybody signed in, with any id they like
+  // — the switcher on screen is not the only way to call this. getCurrentProject
+  // already refuses to honour a cookie for a project this account is not on,
+  // so setting one would achieve nothing; refusing here as well means the
+  // cookie never carries a lie in the first place, and the person lands back
+  // on the project list rather than silently on somebody else's job.
+  const verdict = await accessVerdict()
+  if (!mayOpenProject(verdict, id)) redirect('/projects')
+
   const store = await cookies()
   store.set(PROJECT_COOKIE, id, { path: '/', maxAge: 60 * 60 * 24 * 365 })
 
@@ -97,7 +125,23 @@ async function ensureAProjectExists(): Promise<{ id: string; name: string } | nu
     .select('id, name')
     .single()
 
-  return (data as { id: string; name: string } | null) ?? null
+  const fresh = (data as { id: string; name: string } | null) ?? null
+
+  // On the team of it, for the same reason as a project somebody creates by
+  // hand: this one is made automatically after the last project is deleted,
+  // and a replacement its own author cannot open is worse than no
+  // replacement — the cookie would point at a project that answers "no
+  // project selected" on every screen.
+  if (fresh) {
+    const verdict = await accessVerdict()
+    if (verdict.email) {
+      await supabase
+        .from('project_members')
+        .insert({ project_id: fresh.id, email: verdict.email, role: 'project_admin' })
+    }
+  }
+
+  return fresh
 }
 
 export async function deleteProject(formData: FormData) {

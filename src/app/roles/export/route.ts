@@ -2,11 +2,15 @@ import ExcelJS from 'exceljs'
 import { getCurrentProject } from '@/lib/project'
 import { loadRoles } from '@/data/project-roles'
 import { CAPABILITIES } from '@/lib/project-roles'
+import { requireAccess } from '@/data/require-access'
 
 // The project's role list as a workbook. Laid out so it can be edited in
 // Excel and imported straight back: one row per role, one column per
 // capability, with a Y where the role has it.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

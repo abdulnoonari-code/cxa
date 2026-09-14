@@ -5,6 +5,7 @@ import { loadSubjectIndex } from '@/data/subjects'
 import { refKey } from '@/lib/subjects'
 import { criteriaLabel, calibrationStatus, calibrationLabel } from '@/lib/tests'
 import { INSPECTION_TYPES } from '@/lib/inspection'
+import { requireAccess } from '@/data/require-access'
 
 // Every test on the project, in the shape the importer reads back.
 //
@@ -12,6 +13,9 @@ import { INSPECTION_TYPES } from '@/lib/inspection'
 // and is ignored on the way back — including Result, which is never imported
 // from anywhere: it is worked out from the measured value and the criteria.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

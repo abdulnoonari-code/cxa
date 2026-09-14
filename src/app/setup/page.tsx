@@ -209,7 +209,7 @@ export default async function SetupPage() {
             : gate.state === 'owner'
               ? 'Closed. You are on the owner list.'
               : gate.state === 'member'
-                ? `Closed. You are on the team of ${gate.projects} project${gate.projects === 1 ? '' : 's'}.`
+                ? `Closed. You can open ${gate.projectIds.length} project${gate.projectIds.length === 1 ? '' : 's'} — the ones you are on the team of, and no others.`
                 : 'Closed.'}
         </div>
 

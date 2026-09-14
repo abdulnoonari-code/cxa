@@ -20,6 +20,7 @@ import {
   MATRIX_KEY,
 } from '@/lib/itp'
 import type { SubjectType } from '@/lib/subjects'
+import { requireAccess } from '@/data/require-access'
 
 // The ITP as a workbook: the matrix a client marks up, the points in detail,
 // and the findings.
@@ -29,6 +30,9 @@ import type { SubjectType } from '@/lib/subjects'
 // one addition that earns this file its keep: a column headed **Nobody**, for
 // the points no party holds.
 export async function GET(request: Request) {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   if (!project) return new Response('No project found', { status: 404 })
 

@@ -1,10 +1,14 @@
 import ExcelJS from 'exceljs'
 import { CAPABILITIES } from '@/lib/project-roles'
+import { requireAccess } from '@/data/require-access'
 
 // A blank role list with the columns filled in and three worked examples, so
 // somebody setting up a new site has something to type over rather than a
 // format to guess at.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

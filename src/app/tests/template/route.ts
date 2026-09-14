@@ -1,10 +1,14 @@
 import ExcelJS from 'exceljs'
 import { INSPECTION_TYPES } from '@/lib/inspection'
+import { requireAccess } from '@/data/require-access'
 
 // A blank test sheet in the same shape the export comes out in, with four
 // worked rows covering the four kinds of acceptance criteria: a minimum, a
 // maximum, a range, and one that can only be judged by a person.
 export async function GET() {
+  const refused = await requireAccess()
+  if (refused) return refused
+
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CxSentinel'
   wb.created = new Date()

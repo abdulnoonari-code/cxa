@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { checkFile, type PhotoKind } from '@/lib/photo'
+import { FILE_ROUTE, encodePath } from '@/lib/file-url'
 
 export type StoreResult =
   | { ok: true; id: string | null }
@@ -38,7 +39,8 @@ export async function storeIssuePhoto(input: {
     }
   }
 
-  const { data: publicUrl } = supabase.storage.from('documents').getPublicUrl(path)
+  // NOT getPublicUrl — see src/lib/file-url.ts.
+  const publicUrl = { publicUrl: `${FILE_ROUTE}/${encodePath(path)}` }
 
   const { data, error } = await supabase
     .from('issue_photos')

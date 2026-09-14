@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { FILE_CATEGORIES, fileCategoryLabel } from '@/lib/tasks'
 import { uploadProjectFile, deleteProjectFile } from './actions'
+import { viewUrl } from '@/lib/file-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +107,7 @@ export default async function FilesPage({
               files.map((f) => (
                 <tr key={f.id}>
                   <td>
-                    <a href={f.file_url} target="_blank" rel="noopener noreferrer" className="link">
+                    <a href={viewUrl(f) ?? '#'} target="_blank" rel="noopener noreferrer" className="link">
                       {f.file_name}
                     </a>
                   </td>

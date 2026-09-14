@@ -14,6 +14,7 @@ import {
   ACCEPTED_TYPES,
 } from '@/lib/photo'
 import type { IssuePhoto } from '@/data/photos'
+import { viewUrl } from '@/lib/file-url'
 
 function when(value: string | null): string {
   if (!value) return '—'
@@ -193,10 +194,14 @@ export function IssuePhotos({
               </span>
             </div>
 
-            {p.file_url && (
+            {/* viewUrl, never p.file_url: a row written before update 90
+                holds a public storage address that needs no sign-in, and
+                this recovers the path out of it so it goes through the
+                gate like everything else. */}
+            {viewUrl(p) && (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img
-                src={p.file_url}
+                src={viewUrl(p) ?? ''}
                 alt={p.caption ?? kindLabel(p.kind)}
                 style={{
                   width: '100%',

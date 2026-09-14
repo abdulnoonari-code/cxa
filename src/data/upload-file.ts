@@ -8,6 +8,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { describeStorageError, orphanedFileNote, type UploadOutcome } from '@/lib/uploads'
+import { FILE_ROUTE, encodePath } from '@/lib/file-url'
 
 export { safeStorageName } from '@/lib/uploads'
 
@@ -34,7 +35,8 @@ export async function putFile(
     return { ok: false, outcome: { ok: false, file: file.name, ...described } }
   }
 
-  const { data } = supabase.storage.from('documents').getPublicUrl(path)
+  // NOT getPublicUrl — see src/lib/file-url.ts.
+  const data = { publicUrl: `${FILE_ROUTE}/${encodePath(path)}` }
   return {
     ok: true,
     stored: {

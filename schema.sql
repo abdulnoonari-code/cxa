@@ -790,8 +790,6 @@ ALTER TABLE public.test_records DROP CONSTRAINT IF EXISTS test_records_pkey;
 ALTER TABLE public.test_records ADD CONSTRAINT test_records_pkey PRIMARY KEY (id);
 
 -- Unique constraints
-ALTER TABLE public.equipment DROP CONSTRAINT IF EXISTS equipment_project_id_tag_id_key;
-ALTER TABLE public.equipment ADD CONSTRAINT equipment_project_id_tag_id_key UNIQUE (project_id, tag_id);
 
 -- Check constraints — the real vocabulary of this application
 ALTER TABLE public.checklist_items DROP CONSTRAINT IF EXISTS checklist_items_level_check;
@@ -979,7 +977,7 @@ CREATE INDEX IF NOT EXISTS equipment_building_idx ON public.equipment USING btre
 CREATE INDEX IF NOT EXISTS equipment_category_idx ON public.equipment USING btree (project_id, category);
 CREATE INDEX IF NOT EXISTS equipment_floor_idx ON public.equipment USING btree (project_id, floor) WHERE (floor IS NOT NULL);
 CREATE INDEX IF NOT EXISTS equipment_project_id_idx ON public.equipment USING btree (project_id);
-CREATE INDEX IF NOT EXISTS equipment_project_tag_idx ON public.equipment USING btree (project_id, tag_id);
+CREATE UNIQUE INDEX IF NOT EXISTS equipment_tag_unique_ci ON public.equipment USING btree (project_id, lower(tag_id));
 CREATE INDEX IF NOT EXISTS equipment_type_idx ON public.equipment USING btree (project_id, type_id) WHERE (type_id IS NOT NULL);
 
 -- equipment_types

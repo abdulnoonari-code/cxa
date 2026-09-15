@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { cookies } from 'next/headers'
 import { getCurrentProject } from '@/lib/project'
+import { IMPORT_COOKIE, decodeOutcome, summaryLine, detailLines, alertClass } from '@/lib/import-result'
 import { getActor } from '@/lib/audit'
 import { loadRoles } from '@/data/project-roles'
 import { canIn } from '@/lib/project-roles'
@@ -21,23 +23,20 @@ export default async function EquipmentPage({
     q?: string
     category?: string
     page?: string
-    import?: string
-    named?: string
-    open?: string
-    rows?: string
   }>
 }) {
   const {
     q,
     category,
     page: pageParam,
-    import: importResult,
-    named: namedProject,
-    open: openProject,
-    rows: importRows,
   } = await searchParams
   const page = Math.max(1, Number(pageParam ?? '1') || 1)
   const from = (page - 1) * PAGE_SIZE
+
+  // Written by the import a second ago and gone thirty seconds later. Not in
+  // the address bar, so it cannot be bookmarked, shared or arrive again from
+  // somebody's history tomorrow announcing an import that happened today.
+  const outcome = decodeOutcome((await cookies()).get(IMPORT_COOKIE)?.value)
 
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
@@ -282,30 +281,30 @@ export default async function EquipmentPage({
         )}
       </form>
 
-      {importResult === 'nocomponents' && (
-        <div className="alert alert-danger" style={{ marginBottom: 16 }}>
-          <strong>Nothing was imported.</strong> {importRows} row{importRows === '1' ? '' : 's'} in that file name a{' '}
-          <em>Part of tag</em>, and this database has no components table yet. Run{' '}
-          <code className="mono">week5-part34-components.sql</code> in Supabase and upload the same file again.
-          Nothing was half-imported: the boards without their cubicles would have looked finished.
-        </div>
-      )}
-      {importResult === 'orphans' && (
-        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
-          <strong>{importRows} part{importRows === '1' ? ' was' : 's were'} not filed.</strong> They name a{' '}
-          <em>Part of tag</em> that is not in this project. Everything else was imported. The{' '}
-          <Link href="/audit" className="link">
-            audit trail
-          </Link>{' '}
-          lists them by row. The parent tag was not created for you — inventing a piece of plant nobody listed is
-          worse than leaving a part unfiled.
-        </div>
-      )}
-      {importResult === 'wrongproject' && (
-        <div className="alert alert-danger" style={{ marginBottom: 16 }}>
-          <strong>Nothing was imported — that file is for a different project.</strong> Its Project column says{' '}
-          <strong>{namedProject}</strong> and the project you have open is <strong>{openProject}</strong>. Open the
-          right project and upload it again, or delete the Project column from the file if it is wrong.
+      {/* ── What the import did ─────────────────────────────────────────
+          One banner for every outcome, including the successful one. There
+          used to be three, each for a particular refusal, and none at all
+          for "it worked" or "it could not be read" — so silence was the
+          normal end of a successful import and carried no information. */}
+      {outcome && (
+        <div className={alertClass(outcome)} style={{ marginBottom: 16 }}>
+          <strong>{summaryLine(outcome)}</strong>
+          {detailLines(outcome).length > 0 && (
+            <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+              {detailLines(outcome).map((line, i) => (
+                <li key={i} style={{ marginBottom: 4 }}>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div style={{ marginTop: 8, fontSize: 12.5 }}>
+            Every import is recorded in full in the{' '}
+            <Link href="/audit" className="link">
+              audit trail
+            </Link>
+            , including anything not listed here.
+          </div>
         </div>
       )}
 

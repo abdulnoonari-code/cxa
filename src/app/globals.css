@@ -1130,6 +1130,24 @@ textarea.input {
   color: var(--color-warning);
 }
 
+/* A fourth class that was used and never defined, found the same way as the
+   first three — by rendering the page and looking at it.
+
+   `.alert alert-success` is what the Project Configuration screen sets on
+   "Saved. Every screen that counts levels is now counting these ones." With
+   no rule behind it that confirmation has always drawn as plain black text
+   with no panel: the one message on that screen whose whole job is to say
+   the save worked, rendered as though nothing had been said.
+
+   The class-name sweep in the test suite missed it because the name is not
+   written in a className attribute — it is a value in a lookup table, which
+   a scan for className="..." cannot see. The sweep now reads string literals
+   too, so the next one is caught rather than noticed. */
+.alert-success {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
 /* Not decoration: it marks the sentence that says this application reports
    and does not authorise. It gets a left rule so it cannot be skimmed past
    as an ordinary information box. */

@@ -6,11 +6,41 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { actorCan, recordAudit } from '@/lib/audit'
 import { parseEquipmentWorkbook } from '@/lib/equipment-import'
+import { cookies } from 'next/headers'
+import {
+  IMPORT_COOKIE,
+  IMPORT_COOKIE_SECONDS,
+  encodeOutcome,
+  type ImportOutcome,
+} from '@/lib/import-result'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
   if (typeof value !== 'string' || value.trim() === '') return null
   return value.trim()
+}
+
+/**
+ * Say what the import did, then go back to the register.
+ *
+ * EVERY exit from importEquipment goes through here — the successful one as
+ * much as the refusals. That is the point. The counts and the errors were
+ * always written to the audit trail and never to the screen, so a file that
+ * imported nothing and a file that imported eighteen hundred tags both ended
+ * the same way: the page redrew and said nothing at all.
+ *
+ * Returns `never` because redirect throws; a caller writes
+ * `return reportImport({...})` and nothing after it runs.
+ */
+async function reportImport(outcome: ImportOutcome): Promise<never> {
+  const jar = await cookies()
+  jar.set(IMPORT_COOKIE, encodeOutcome(outcome), {
+    maxAge: IMPORT_COOKIE_SECONDS,
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  })
+  redirect('/equipment')
 }
 
 function refresh() {
@@ -113,10 +143,30 @@ export async function updateEquipment(formData: FormData) {
 export async function importEquipment(formData: FormData) {
   const project = await getCurrentProject()
   if (!project) return
-  if (!(await actorCan('manage', project.id))) return
 
   const file = formData.get('file')
-  if (!(file instanceof File) || file.size === 0) return
+  const fileName = file instanceof File ? file.name : 'the file'
+
+  // Refusals said out loud, not silently. Somebody whose role cannot manage
+  // the register would otherwise press Import, watch the page redraw, and
+  // conclude the file was wrong.
+  if (!(await actorCan('manage', project.id))) {
+    return reportImport({
+      kind: 'refused',
+      file: fileName,
+      problems: [
+        'Your role on this project cannot change the equipment register, so nothing was imported. Ask a project admin to import the file, or to change your role on the Team screen.',
+      ],
+    })
+  }
+
+  if (!(file instanceof File) || file.size === 0) {
+    return reportImport({
+      kind: 'empty',
+      file: fileName,
+      problems: ['No file was attached, or the file was empty. Choose the spreadsheet and press Import again.'],
+    })
+  }
 
   const parsed = await parseEquipmentWorkbook(await file.arrayBuffer(), { fileName: file.name })
 
@@ -132,7 +182,17 @@ export async function importEquipment(formData: FormData) {
           : 'The file had nothing readable in it.',
     })
     refresh()
-    return
+    return reportImport({
+      kind: parsed.headingsSeen.length > 0 ? 'unreadable' : 'empty',
+      file: file.name,
+      problems:
+        parsed.headingsSeen.length > 0
+          ? [
+              `The importer looks for a column called Tag, Tag No, Equipment Tag or similar and could not find one. The headings it saw were: ${parsed.headingsSeen.slice(0, 12).join(', ')}.`,
+              'Download the template from this page to see the column names it expects, or rename your tag column to "Tag".',
+            ]
+          : ['There was nothing readable in the file — no sheet with rows in it.'],
+    })
   }
 
   // Existing tags, so a re-import updates rather than duplicates.
@@ -145,6 +205,51 @@ export async function importEquipment(formData: FormData) {
     ((existingRows ?? []) as { id: string; tag_id: string }[]).map((e) => [e.tag_id.toLowerCase(), e.id])
   )
   const existingIds = new Set(existingByTag.values())
+
+  // ── TX-01 and tx-01 ────────────────────────────────────────────────────
+  //
+  // To a commissioning engineer those are one tag. To this importer they are
+  // one tag — the map above is keyed on lower case. To the DATABASE they are
+  // two, because the unique index is on the exact text of the column.
+  //
+  // So the register can legitimately hold both, and when it does, the map
+  // above quietly kept whichever came back second. The other row is then
+  // invisible to every import from that moment on: an update aimed at it
+  // lands on its twin, the twin's values are overwritten with the wrong
+  // row's, and nothing anywhere says so.
+  //
+  // Refused, and both spellings named. Merging them automatically would be
+  // choosing which engineer's row survives, which is not a decision this
+  // application gets to make.
+  const spellings = new Map<string, string[]>()
+  for (const e of (existingRows ?? []) as { id: string; tag_id: string }[]) {
+    const key = e.tag_id.toLowerCase()
+    spellings.set(key, [...(spellings.get(key) ?? []), e.tag_id])
+  }
+  const clashes = [...spellings.values()].filter((v) => v.length > 1)
+
+  if (clashes.length > 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'equipment import refused — same tag twice',
+      entity: 'equipment',
+      entityLabel: file.name,
+      comment: `The register already holds ${clashes.length} tag(s) under more than one spelling: ${clashes
+        .slice(0, 10)
+        .map((v) => v.join(' / '))
+        .join('; ')}. Nothing was imported.`,
+    })
+    refresh()
+    return reportImport({
+      kind: 'refused',
+      file: file.name,
+      problems: [
+        `The register already holds the same tag under more than one spelling, so an import cannot tell which row you mean. Nothing was changed.`,
+        ...clashes.slice(0, 5).map((v) => `${v.join('  and  ')} — the same tag, recorded twice.`),
+        'Open the Equipment register, decide which row is the real one, and delete or rename the other. Then import again.',
+      ],
+    })
+  }
 
   const errors = [...parsed.errors]
   for (const row of parsed.rows) {
@@ -171,7 +276,17 @@ export async function importEquipment(formData: FormData) {
         .join(' | '),
     })
     refresh()
-    return
+    return reportImport({
+      kind: 'refused',
+      file: file.name,
+      problems: [
+        `${errors.length} row${errors.length === 1 ? '' : 's'} could not be read, so nothing was imported — a half-loaded register is worse than none.`,
+        ...errors
+          .slice(0, 6)
+          .map((e) => `Row ${e.row}, ${e.column}: ${e.message}${e.value ? ` (found "${e.value}")` : ''}`),
+        ...(errors.length > 6 ? [`The audit trail lists all ${errors.length}.`] : []),
+      ],
+    })
   }
 
   // ── Build the hierarchy the sheet describes ────────────────────────────
@@ -226,9 +341,17 @@ export async function importEquipment(formData: FormData) {
       entityLabel: file.name,
       comment: `The file names ${mismatched.map((m) => `"${m}"`).join(', ')} in its Project column and the open project is "${project.name}". Nothing was imported. Open the right project, or remove the Project column.`,
     })
-    redirect(
-      `/equipment?import=wrongproject&named=${encodeURIComponent(mismatched.slice(0, 3).join(', '))}&open=${encodeURIComponent(project.name)}`
-    )
+    return reportImport({
+      kind: 'refused',
+      file: file.name,
+      problems: [
+        `That file is for a different project. Its Project column says ${mismatched
+          .slice(0, 3)
+          .map((m) => `"${m}"`)
+          .join(', ')} and the project you have open is "${project.name}".`,
+        'Open the right project and import it again, or delete the Project column from the file if it is the column that is wrong. Importing four hundred of one substation\u2019s tags into another is not something anybody unpicks by hand.',
+      ],
+    })
   }
 
   let areasCreated = 0
@@ -348,7 +471,14 @@ export async function importEquipment(formData: FormData) {
       entityLabel: file.name,
       comment: `The file has ${componentRows.length} row(s) with a "Part of tag" and this database has no components table. Nothing was imported. Run SQL part 34 and import the same file again.`,
     })
-    redirect(`/equipment?import=nocomponents&rows=${componentRows.length}`)
+    return reportImport({
+      kind: 'refused',
+      file: file.name,
+      problems: [
+        `${componentRows.length} row${componentRows.length === 1 ? '' : 's'} in that file name a "Part of tag", and this database has no components table yet.`,
+        'Run week5-part34-components.sql in Supabase and import the same file again. Nothing was half-imported: the boards without their cubicles would have looked finished.',
+      ],
+    })
   }
 
   let inserted = 0
@@ -534,7 +664,54 @@ export async function importEquipment(formData: FormData) {
   })
 
   refresh()
+
+  // THE EXIT THAT USED TO SAY NOTHING.
+  //
+  // Everything above was already recorded, accurately and in detail — in the
+  // audit trail. On the screen this function simply returned, so a person who
+  // had just loaded eighteen hundred tags saw the same blank page as a person
+  // whose file had been refused.
+  const ignored: string[] = []
+  if (floorIgnored)
+    ignored.push(
+      'The file has Floor, Building or Critical values and this database has nowhere to put them — they were NOT saved. Run week5-part32-building-critical-disciplines.sql and import again; everything else was imported normally.'
+    )
+  if (typesIgnored)
+    ignored.push(
+      'The file has a Type column and this database has no equipment types table — those values were NOT saved. Run week5-part35-equipment-types.sql and import again; everything else was imported normally.'
+    )
+
+  const problems: string[] = []
   if (orphans.length > 0) {
-    redirect(`/equipment?import=orphans&rows=${orphans.length}`)
+    problems.push(
+      `${orphans.length} part${orphans.length === 1 ? '' : 's'} could not be filed: they name a "Part of tag" that is not in this project. Everything else was imported.`
+    )
+    problems.push(
+      ...orphans.slice(0, 4).map((o) => `Row ${o.row}: "${o.tag}" is a part of "${o.parent}", which is not in the register.`)
+    )
+    problems.push(
+      'The parent tag was not created for you — inventing a piece of plant nobody listed is worse than leaving a part unfiled. Add the parent and import again.'
+    )
   }
+  if (parsed.warnings.length > 0) {
+    problems.push(
+      `${parsed.warnings.length} cell${parsed.warnings.length === 1 ? ' was' : 's were'} not understood and left blank — the audit trail lists them by row and column.`
+    )
+  }
+
+  return reportImport({
+    kind: 'done',
+    file: file.name,
+    added: inserted,
+    updated,
+    removed,
+    extra: [
+      ...created,
+      ...(componentsUpdated > 0
+        ? [`${componentsUpdated} component${componentsUpdated === 1 ? '' : 's'} updated`]
+        : []),
+    ],
+    ...(ignored.length > 0 ? { ignored } : {}),
+    ...(problems.length > 0 ? { problems } : {}),
+  })
 }

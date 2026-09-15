@@ -213,6 +213,10 @@ export const NOT_PROBED: { source: string; why: string }[] = [
     source: 'week5-part27-ROLLBACK.sql',
     why: 'An undo, not a step. It reopens the database to the browser key and must never appear as something to run.',
   },
+  {
+    source: 'week5-part40-tag-case.sql',
+    why: 'Makes TX-01 and tx-01 the same tag to the database, as they have always been to the application. It swaps one index for another and adds no column, and this application talks to the database through an interface that cannot see indexes — so there is nothing here to look for. Worth running, but not required: the equipment import checks for the same clash itself and refuses rather than guessing. The file prints its own report when you run it, and refuses to change anything if your register already holds a tag under two spellings.',
+  },
 ]
 
 export type StepResult = {

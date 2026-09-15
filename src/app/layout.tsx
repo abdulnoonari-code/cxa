@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { Chrome } from "@/components/Chrome";
@@ -12,6 +12,28 @@ export const metadata: Metadata = {
   title: "CxSentinel — AI Commissioning Copilot",
   description:
     "AI-assisted commissioning copilot for data centers, substations, and power plants — checklists, documents, and issue tracking in one place.",
+  // What an iPhone needs before "Add to Home Screen" gives an icon that opens
+  // without the browser bars. Android reads app/manifest.ts for the same
+  // thing; Safari has never read the manifest for this and wants its own tags.
+  appleWebApp: { capable: true, title: "CxSentinel", statusBarStyle: "default" },
+  icons: { icon: "/icon-192.png", apple: "/apple-icon.png" },
+};
+
+/**
+ * `viewport-fit=cover` so the page reaches under the notch, and
+ * `maximumScale` deliberately LEFT ALONE.
+ *
+ * Locking zoom is the standard trick for stopping iOS enlarging a form field
+ * on focus, and it is the wrong fix: it also stops somebody pinching to read
+ * a serial number off a photograph in bad light, which is a thing that
+ * happens on every site visit. The right fix is a 16px font in every input,
+ * which is what the phone stylesheet does.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0369a1",
 };
 
 // The sidebar appears once you're logged in AND you have a project open, so

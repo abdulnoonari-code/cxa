@@ -1,6 +1,20 @@
 // Data access for the punch list.
+//
+// ── Why every read here has a fallback ──────────────────────────────────
+//
+// Three of these columns arrive with SQL part 42, and until somebody runs it
+// they do not exist. Selecting a column PostgREST has never heard of does not
+// return it as null — it FAILS THE WHOLE QUERY, and every other column with
+// it. A punch list of four hundred items becomes an empty screen that looks
+// exactly like a project nobody has raised anything on.
+//
+// So the read asks for everything, and if the database says it has never
+// heard of a column, asks again without it and reports which. The cost is one
+// extra round trip on a database that is behind, and none at all on one that
+// is not.
 
 import { supabase } from '@/lib/supabase'
+import { selectWithFallback } from '@/lib/pg-columns'
 
 export type PunchRow = {
   id: string
@@ -27,12 +41,22 @@ export type PunchRow = {
   verified_by: string | null
   ai_comment: string | null
   created_at: string | null
+  /** What must be done about it — SQL part 42. Absent on a database behind that. */
+  required_action?: string | null
+  action_set_by?: string | null
+  action_set_at?: string | null
 }
 
-const COLUMNS =
-  'id, ref, project_id, equipment_id, subject_type, subject_id, checklist_item_id, title, description, severity, ' +
-  'category, status, level, raised_by, responsible_party, discipline, location, due_date, closed_at, closed_by, ' +
-  'verified_at, verified_by, ai_comment, created_at'
+const COLUMNS = [
+  'id', 'ref', 'project_id', 'equipment_id', 'subject_type', 'subject_id', 'checklist_item_id', 'title',
+  'description', 'severity', 'category', 'status', 'level', 'raised_by', 'responsible_party', 'discipline',
+  'location', 'due_date', 'closed_at', 'closed_by', 'verified_at', 'verified_by', 'ai_comment', 'created_at',
+  // Part 42. Dropped and reported if this database does not have them yet.
+  'required_action', 'action_set_by', 'action_set_at',
+]
+
+/** The SQL step to name on screen when the remedy columns are not there. */
+export const ACTION_SQL = 'week5-part42-what-must-be-done.sql'
 
 export type PunchFilter = {
   status?: string | null
@@ -70,21 +94,31 @@ export async function loadPunchPage(
   filter: PunchFilter,
   page: number,
   perPage: number
-): Promise<{ rows: PunchRow[]; total: number }> {
-  if (!projectId) return { rows: [], total: 0 }
+): Promise<{ rows: PunchRow[]; total: number; missing: string[] }> {
+  if (!projectId) return { rows: [], total: 0, missing: [] }
 
   const from = (page - 1) * perPage
-  let query = supabase
-    .from('issues')
-    .select(COLUMNS, { count: 'exact' })
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
-    .range(from, from + perPage - 1)
+  // The count comes back on the same reply as the rows, so it is caught here
+  // rather than asked for separately — a second count query against a few
+  // thousand rows to learn a number the first one already returned.
+  let total = 0
 
-  query = applyFilter(query, filter)
+  const outcome = await selectWithFallback<PunchRow>(COLUMNS, async (columns) => {
+    let query = supabase
+      .from('issues')
+      .select(columns.join(', '), { count: 'exact' })
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .range(from, from + perPage - 1)
 
-  const { data, count } = await query
-  return { rows: (data ?? []) as unknown as PunchRow[], total: count ?? 0 }
+    query = applyFilter(query, filter)
+
+    const { data, error, count } = await query
+    if (!error) total = count ?? 0
+    return { data: (data ?? []) as unknown as PunchRow[], error }
+  })
+
+  return { rows: outcome.rows, total, missing: outcome.missing }
 }
 
 /**
@@ -103,15 +137,35 @@ export async function loadPunchTotals(projectId: string | null): Promise<
   return (data ?? []) as { status: string; category: string | null; due_date: string | null; created_at: string | null; level: string | null }[]
 }
 
-/** Every punch item on the project, for the export. */
+/** Every punch item on the project, for the exports and the documents. */
 export async function loadAllPunch(projectId: string | null): Promise<PunchRow[]> {
-  if (!projectId) return []
-  const { data } = await supabase
-    .from('issues')
-    .select(COLUMNS)
-    .eq('project_id', projectId)
-    .order('ref', { ascending: true })
-  return (data ?? []) as unknown as PunchRow[]
+  return (await loadAllPunchWithNotes(projectId)).rows
+}
+
+/**
+ * The same, and which columns this database does not have.
+ *
+ * A defect report generated against a database where part 42 has not been run
+ * would otherwise say "no action has been agreed" against every single item —
+ * true in the sense that there is nowhere to write one, and deeply misleading
+ * as a thing to send to a contractor. The screen that offers the button says
+ * so instead.
+ */
+export async function loadAllPunchWithNotes(
+  projectId: string | null
+): Promise<{ rows: PunchRow[]; missing: string[] }> {
+  if (!projectId) return { rows: [], missing: [] }
+
+  const outcome = await selectWithFallback<PunchRow>(COLUMNS, async (columns) => {
+    const { data, error } = await supabase
+      .from('issues')
+      .select(columns.join(', '))
+      .eq('project_id', projectId)
+      .order('ref', { ascending: true })
+    return { data: (data ?? []) as unknown as PunchRow[], error }
+  })
+
+  return { rows: outcome.rows, missing: outcome.missing }
 }
 
 /** The punch numbers already issued, so a new item can take the next one. */

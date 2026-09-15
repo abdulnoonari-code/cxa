@@ -26,6 +26,16 @@ export type PreparedPhoto = {
   contentType: string
   caption: string
   note: string
+  /**
+   * Which item this photograph belongs to.
+   *
+   * A gallery at the back of a document does not need it — the caption names
+   * the item. A defect report does: it prints each photograph inside the block
+   * for its own defect, and the budget is spent across every item in one pass
+   * so the urgent ones get the film. Carrying the owner through is what lets
+   * one pass be split back out afterwards without matching on caption text.
+   */
+  owner?: string
 }
 
 export type PreparedGallery = {
@@ -33,7 +43,7 @@ export type PreparedGallery = {
   /** How many were left out, and why — printed in the document. */
   omitted: number
   /** Photographs that exist but could not be fetched. Named, never silently dropped. */
-  failed: { caption: string; reason: string }[]
+  failed: { caption: string; reason: string; owner?: string }[]
   /** Roughly how many bytes the images add to the document. */
   bytes: number
   /**
@@ -215,6 +225,8 @@ export type PhotoSource = {
   contentType: string | null
   caption: string
   note: string
+  /** The item it belongs to, carried through to the prepared photograph. */
+  owner?: string
 }
 
 /**
@@ -287,7 +299,7 @@ export async function prepareGallery(
   limit = MAX_PHOTOS
 ): Promise<PreparedGallery> {
   const photos: PreparedPhoto[] = []
-  const failed: { caption: string; reason: string }[] = []
+  const failed: { caption: string; reason: string; owner?: string }[] = []
   let bytes = 0
   let used = 0
   let stoppedBy: 'count' | 'bytes' | null = null
@@ -304,7 +316,7 @@ export async function prepareGallery(
 
     const got = await fetchBytes(source, download)
     if (!got.ok) {
-      failed.push({ caption: source.caption, reason: got.reason })
+      failed.push({ caption: source.caption, reason: got.reason, owner: source.owner })
       used += 1
       continue
     }
@@ -323,11 +335,16 @@ export async function prepareGallery(
         contentType: small.contentType,
         caption: source.caption,
         note: source.note,
+        owner: source.owner,
       })
       bytes += small.bytes.byteLength
       used += 1
     } catch {
-      failed.push({ caption: source.caption, reason: 'The photograph was fetched but could not be read as an image.' })
+      failed.push({
+        caption: source.caption,
+        reason: 'The photograph was fetched but could not be read as an image.',
+        owner: source.owner,
+      })
       used += 1
     }
   }
@@ -346,6 +363,8 @@ export async function prepareGallery(
 
 export type PhotoRowLike = {
   kind: string
+  /** Optional: set, it follows the photograph into the prepared gallery. */
+  issue_id?: string | null
   file_path?: string | null
   file_url: string | null
   content_type: string | null
@@ -373,6 +392,7 @@ export function photoSources<T extends PhotoRowLike>(
       bits.push(`${hedge}: ${row.ai_problem.replace(/\s+/g, ' ').slice(0, 150)}`)
     }
     return {
+      owner: row.issue_id ?? undefined,
       path: row.file_path ?? null,
       url: row.file_url,
       contentType: row.content_type,

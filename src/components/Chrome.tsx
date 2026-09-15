@@ -15,6 +15,16 @@ import { usePathname } from 'next/navigation'
 // project, it has no rail.
 const BARE = new Set(['/', '/projects', '/login', '/signup', '/about'])
 
+/**
+ * Which screens are a phone screen.
+ *
+ * The rail is twenty-one links down the left of a 1400px window. On a phone it
+ * is either a wall of text before any content, or a hamburger nobody presses
+ * while holding a torch. On Site has one link out of it instead — back to the
+ * full punch list — and that is deliberately the only navigation on it.
+ */
+const PHONE = new Set(['/site'])
+
 export function Chrome({
   sidebar,
   topbar,
@@ -25,6 +35,11 @@ export function Chrome({
   children: React.ReactNode
 }) {
   const pathname = usePathname() ?? '/'
+
+  // No rail, no top bar, no shell padding — the whole width is the content.
+  if (PHONE.has(pathname)) {
+    return <main className="phone-layout">{children}</main>
+  }
 
   // Bare of the RAIL, not bare of everything. A page with no frame at all
   // reads as an unfinished page rather than a deliberate one.

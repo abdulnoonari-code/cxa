@@ -31,12 +31,32 @@ import { storedBytes } from '@/data/stored-bytes'
 
 function refresh(issueId?: string) {
   revalidatePath('/issues')
+  revalidatePath('/site')
   if (issueId) revalidatePath(`/issues/${issueId}/edit`)
   revalidatePath('/dashboard')
   revalidatePath('/audit')
 }
 
-function back(issueId: string, params: string): string {
+/**
+ * Where to send somebody afterwards.
+ *
+ * The desktop screen wants the item's own page. The phone screen does not:
+ * somebody halfway up a ladder who has just photographed a gland wants the
+ * list they were on, not a wide edit form. So a form may say where it came
+ * from — and only ever as a path on this site, never `//elsewhere`, because a
+ * redirect that takes its destination from a form field and does not check it
+ * is how a login page ends up forwarding people to somebody else's copy.
+ */
+function safeBack(formData: FormData): string | null {
+  const raw = formData.get('back')
+  if (typeof raw !== 'string') return null
+  const path = raw.trim()
+  if (!path.startsWith('/') || path.startsWith('//')) return null
+  return path
+}
+
+function back(issueId: string, params: string, from?: string | null): string {
+  if (from) return `${from}${from.includes('?') ? '&' : '?'}${params}`
   return `/issues/${issueId}/edit?${params}`
 }
 
@@ -49,21 +69,23 @@ function back(issueId: string, params: string): string {
  */
 export async function uploadIssuePhoto(formData: FormData) {
   const issueId = String(formData.get('issue_id') ?? '')
-  if (!issueId) redirect('/issues?photo=badrow')
+  const from = safeBack(formData)
+  if (!issueId) redirect(`${from ?? '/issues'}${(from ?? '/issues').includes('?') ? '&' : '?'}photo=badrow`)
 
   const project = await getCurrentProject()
   if (!project) redirect('/issues?photo=noproject')
-  if (!(await actorCan('review', project.id))) redirect(back(issueId, 'photo=denied'))
+  if (!(await actorCan('review', project.id))) redirect(back(issueId, 'photo=denied', from))
 
   const file = formData.get('file')
-  if (!(file instanceof File)) redirect(back(issueId, 'photo=nofile'))
+  if (!(file instanceof File)) redirect(back(issueId, 'photo=nofile', from))
 
   const problem = checkFile({ name: file.name, type: file.type, size: file.size })
   if (problem) {
     redirect(
       back(
         issueId,
-        `photo=badfile&reason=${encodeURIComponent(problem.reason)}&hint=${encodeURIComponent(problem.hint)}`
+        `photo=badfile&reason=${encodeURIComponent(problem.reason)}&hint=${encodeURIComponent(problem.hint)}`,
+        from
       )
     )
   }
@@ -80,7 +102,7 @@ export async function uploadIssuePhoto(formData: FormData) {
     contentType: file.type,
     upsert: false,
   })
-  if (uploadError) redirect(back(issueId, `photo=upload&reason=${encodeURIComponent(uploadError.message)}`))
+  if (uploadError) redirect(back(issueId, `photo=upload&reason=${encodeURIComponent(uploadError.message)}`, from))
 
   // NOT getPublicUrl — see src/lib/file-url.ts. A site photograph behind a
   // link that needs no sign-in is a client's site open to anybody.
@@ -98,7 +120,7 @@ export async function uploadIssuePhoto(formData: FormData) {
     caption,
     uploaded_by_name: actor.name ?? actor.email ?? null,
   })
-  if (error) redirect(back(issueId, `photo=save&reason=${encodeURIComponent(error.message)}`))
+  if (error) redirect(back(issueId, `photo=save&reason=${encodeURIComponent(error.message)}`, from))
 
   await recordAudit({
     projectId: project.id,
@@ -110,7 +132,7 @@ export async function uploadIssuePhoto(formData: FormData) {
   })
 
   refresh(issueId)
-  redirect(back(issueId, 'photo=ok'))
+  redirect(back(issueId, 'photo=ok', from))
 }
 
 export async function deleteIssuePhoto(formData: FormData) {

@@ -340,9 +340,35 @@ export const MANUAL_GROUPS: ManualGroup[] = [
         lede: 'Defects, by category and level, and what each one blocks. Fifty a page.',
         facts: [
           { label: 'You see', text: 'Six figures over the whole project — open, Category A open, overdue, awaiting acceptance, uncategorised, and the age of the oldest open item.' },
-          { label: 'You can', text: 'Raise an item, including a photograph with a caption in the same form; import a marked-up sheet; export to PDF, Word, Excel or PDF with photographs; filter on six dimensions; and bulk-raise items from failed checks.' },
+          { label: 'You can', text: 'Raise an item, including a photograph with a caption and what must be done in the same form; issue a defect report; import a marked-up sheet; export to PDF, Word, Excel or PDF with photographs; filter on six dimensions; and bulk-raise items from failed checks.' },
           { label: 'Note', text: 'An uncategorised item is treated as blocking until somebody assesses it. That is the safe direction to be wrong in.' },
-          { label: 'Needs first', text: 'Database step part 21, or no photograph attached to a punch item will save.' },
+          {
+            label: 'Two reports',
+            text: 'The PUNCH LIST is a register: a table of everything outstanding, with the photographs gathered at the back. The DEFECT REPORT is one block per defect — the photograph, what is wrong, and what must be done — grouped by tag, most urgent first, to issue to whoever has to fix it. The first is for filing and for sending back edited; the second is an instruction to somebody who was not standing there.',
+          },
+          {
+            label: 'The remedy',
+            text: 'Written by a person, it is printed as an agreed action, signed with their name and the date it was written. Left empty, the report falls back to the AI suggestion if there is one and prints it as a suggestion nobody has agreed — on every item it appears on, never once at the front. The two are never allowed to look alike: one can be acted on and the other is a prompt to go and look. The first page says how many items carry neither.',
+          },
+          { label: 'Needs first', text: 'Database step part 21, or no photograph attached to a punch item will save. And part 42, or there is nowhere to write what must be done.' },
+        ],
+      },
+      {
+        href: '/site',
+        title: 'On Site (phone)',
+        lede: 'The same punch list, built for a phone at the panel. One column, thumb-sized, and the camera opens straight from the form.',
+        facts: [
+          { label: 'You see', text: 'What is outstanding on this project, most urgent first — Category A before B before C, overdue before not — each with its photograph, its state, when it is due, and what must be done about it.' },
+          { label: 'You can', text: 'Raise a defect with a photograph taken there and then; attach a defect or after-the-fix photograph to anything already open; mark work done; and pull the defect report.' },
+          {
+            label: 'Install it',
+            text: 'In Safari press Share then “Add to Home Screen”; in Chrome the menu then “Install”. It gets its own icon and opens straight to this screen with no address bar, like an app. It is not in an app store and does not need to be.',
+          },
+          {
+            label: 'Needs signal',
+            text: 'Nothing is stored on the phone, on purpose. There is no queue holding a defect until the signal comes back — a queue like that loses work when a browser clears its storage, and nobody finds out for weeks. A form that cannot reach the site says so when you press the button, while you can still remember what you saw and walk twenty metres for a bar of signal.',
+          },
+          { label: 'Note', text: 'It is the same records as the desktop, through the same server actions. There is no second copy and no state in which the two disagree. “Work done” marks an item ready for retest — accepting it is the commissioning agent’s decision and stays on the item’s own screen.' },
         ],
       },
       {

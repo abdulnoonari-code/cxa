@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
 import { refKey, subjectLabel } from '@/lib/subjects'
+import { remedyFor } from '@/lib/remedy'
 import { LEVELS } from '@/lib/checklist'
 import { updateIssue } from '../../actions'
 import { SEVERITIES, CATEGORIES, ISSUE_STATUSES } from '@/lib/issues'
@@ -79,6 +80,11 @@ export default async function EditIssuePage({
     ai_blocks: string | null
     ai_kind: string | null
     ai_recommendation: string | null
+    // Part 42. `select('*')` means these simply arrive as undefined on a
+    // database that has not had it run, rather than failing the query.
+    required_action?: string | null
+    action_set_by?: string | null
+    action_set_at?: string | null
     equipment_id: string | null
     subject_type: string | null
     subject_id: string | null
@@ -362,9 +368,33 @@ export default async function EditIssuePage({
             <input
               name="description"
               defaultValue={issue.description ?? ''}
-              placeholder="What has to happen before it can be closed"
+              placeholder="What you can see, and where exactly"
               className="input"
             />
+          </label>
+
+          {/* The field the defect report is built around. It is separated from
+              Detail on purpose: what is WRONG and what must be DONE are two
+              different sentences, written by two different people as often as
+              not, and a report that cannot tell them apart cannot be issued. */}
+          <label className="field" style={{ gridColumn: '1 / -1' }}>
+            What must be done
+            <textarea
+              name="required_action"
+              rows={2}
+              defaultValue={issue.required_action ?? ''}
+              placeholder="e.g. Re-make the gland, clamp the armour under the cone, re-test continuity across it"
+              className="input"
+              style={{ fontFamily: 'inherit', lineHeight: 1.45 }}
+            />
+            <span className="text-secondary" style={{ fontSize: 11.5, marginTop: 3 }}>
+              {issue.required_action
+                ? remedyFor(issue).provenance +
+                  ' Changing these words re-signs it with your name and today\u2019s date; changing anything else on this form leaves the signature alone.'
+                : issue.ai_recommendation
+                  ? 'Empty. The defect report will fall back to the AI suggestion above and print it as a suggestion nobody has agreed \u2014 which is the honest thing for it to do, and not something to issue to a contractor. Write the action here and it becomes an agreed instruction.'
+                  : 'Empty. The defect report will say nobody has decided what to do about this item.'}
+            </span>
           </label>
 
           <label className="field">

@@ -53,6 +53,54 @@ export type ReportGallery = {
   emptyNote?: string
 }
 
+/**
+ * One item, printed as a block of its own with its photographs beside it.
+ *
+ * ── Why this is not a table ─────────────────────────────────────────────
+ *
+ * A punch list is a table: forty rows, eight columns, read down the page by
+ * somebody who already knows the site. A DEFECT REPORT is not. It goes to a
+ * contractor who was not there, and for each defect it has to answer three
+ * questions in one place — what is wrong, what it looks like, and what must
+ * be done — or the reader has to hold a row number in their head while they
+ * page to a gallery at the back to find the photograph.
+ *
+ * That gallery-at-the-back is exactly what the punch list PDF does, and it
+ * is right for that document. It is wrong for this one. So a card keeps the
+ * photograph, the words and the instruction together, and the whole block
+ * moves to the next page rather than splitting a defect across a fold.
+ *
+ * `paragraphs` carries its own `note` per block, because the sentence that
+ * has to follow "what must be done" is not the same sentence every time:
+ * an agreed action is signed by somebody, and an AI suggestion has to say
+ * out loud that nobody has agreed it. See lib/remedy.ts.
+ */
+export type ReportCard = {
+  /** "P-014 — Earth bond missing on the transformer neutral" */
+  heading: string
+  /** The line under it: what it is against, its category, its state. */
+  strapline?: string
+  /** Short label/value pairs — responsible, due, level, raised by. */
+  facts?: { label: string; value: string }[]
+  /** Labelled blocks of prose, printed in the order given. */
+  paragraphs?: { label: string; text: string; note?: string }[]
+  /** This item's own photographs. */
+  images?: ReportImage[]
+  /** Photographs that exist and could not be carried — named, never dropped. */
+  missing?: { caption: string; reason: string }[]
+  /** What to say when this item has no photograph at all. */
+  noImagesNote?: string
+}
+
+export type ReportCardSet = {
+  title?: string
+  /** A paragraph under the title, before the first card. */
+  intro?: string
+  cards: ReportCard[]
+  /** What to say when there are no cards at all. */
+  emptyNote?: string
+}
+
 export type Report = {
   title: string
   subtitle?: string
@@ -61,7 +109,9 @@ export type Report = {
   standfirst?: string
   figures?: ReportFigure[]
   tables?: ReportTable[]
-  /** photographs, printed after the tables */
+  /** one block per item, each with its own photographs — printed after the tables */
+  cards?: ReportCardSet[]
+  /** photographs gathered together, printed after the cards */
   galleries?: ReportGallery[]
   /** small print at the end: what this document is and is not */
   footnotes?: string[]
@@ -169,6 +219,115 @@ export async function toWord(report: Report): Promise<Buffer> {
 
   for (const table of report.tables ?? []) children.push(...docxTable(table))
 
+  // ── Cards ───────────────────────────────────────────────────────────
+  //
+  // `keepNext` on everything down to the first photograph is what stops Word
+  // breaking a defect in half: the heading, the strapline and the facts stay
+  // with the block they introduce. Word has no "keep this whole thing
+  // together" — it only has "keep this paragraph with the next" — so it is
+  // set paragraph by paragraph rather than once.
+  for (const set of report.cards ?? []) {
+    if (set.title) {
+      children.push(new Paragraph({ text: set.title, heading: HeadingLevel.HEADING_2, spacing: { before: 320, after: 100 } }))
+    }
+    if (set.intro) {
+      children.push(new Paragraph({ spacing: { after: 200 }, children: [new TextRun({ text: set.intro, size: 19, color: '5B6B85' })] }))
+    }
+    if (set.cards.length === 0) {
+      children.push(
+        new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: set.emptyNote ?? 'Nothing to report.', size: 18, color: '5B6B85' })] })
+      )
+    }
+
+    for (const card of set.cards) {
+      children.push(
+        new Paragraph({
+          keepNext: true,
+          spacing: { before: 360, after: 40 },
+          border: { top: { style: BorderStyle.SINGLE, size: 6, color: 'D5DEEF' } },
+          children: [new TextRun({ text: card.heading, bold: true, size: 23 })],
+        })
+      )
+      if (card.strapline) {
+        children.push(
+          new Paragraph({ keepNext: true, spacing: { after: 100 }, children: [new TextRun({ text: card.strapline, size: 18, color: '5B6B85' })] })
+        )
+      }
+      if (card.facts?.length) {
+        children.push(
+          new Paragraph({
+            keepNext: true,
+            spacing: { after: 140 },
+            children: card.facts.flatMap((f, i) => [
+              ...(i > 0 ? [new TextRun({ text: '   ·   ', size: 18, color: '9AA7BC' })] : []),
+              new TextRun({ text: `${f.label}: `, size: 18, color: '5B6B85' }),
+              new TextRun({ text: f.value, size: 18, bold: true }),
+            ]),
+          })
+        )
+      }
+      for (const block of card.paragraphs ?? []) {
+        children.push(
+          new Paragraph({
+            keepNext: true,
+            spacing: { before: 120, after: 20 },
+            children: [new TextRun({ text: block.label.toUpperCase(), bold: true, size: 15, color: '5B6B85' })],
+          })
+        )
+        children.push(new Paragraph({ children: [new TextRun({ text: block.text, size: 20 })] }))
+        if (block.note) {
+          children.push(
+            new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: block.note, size: 16, color: '5B6B85', italics: true })] })
+          )
+        }
+      }
+      for (const image of card.images ?? []) {
+        children.push(
+          new Paragraph({
+            spacing: { before: 160, after: 40 },
+            children: [
+              new ImageRun({
+                data: image.bytes,
+                transformation: { width: WORD_IMAGE_W, height: Math.round(WORD_IMAGE_W * 0.75) },
+                type: image.contentType === 'image/png' ? 'png' : 'jpg',
+              }),
+            ],
+          })
+        )
+        children.push(
+          new Paragraph({
+            spacing: { after: image.note ? 20 : 120 },
+            children: [new TextRun({ text: image.caption, bold: true, size: 17 })],
+          })
+        )
+        if (image.note) {
+          children.push(
+            new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: image.note, size: 16, color: '5B6B85' })] })
+          )
+        }
+      }
+      for (const gone of card.missing ?? []) {
+        children.push(
+          new Paragraph({
+            spacing: { before: 100 },
+            children: [
+              new TextRun({ text: `${gone.caption} — not shown. `, bold: true, size: 17, color: 'B42318' }),
+              new TextRun({ text: gone.reason, size: 17, color: '5B6B85' }),
+            ],
+          })
+        )
+      }
+      if ((card.images ?? []).length === 0 && (card.missing ?? []).length === 0 && card.noImagesNote) {
+        children.push(
+          new Paragraph({
+            spacing: { before: 100 },
+            children: [new TextRun({ text: card.noImagesNote, size: 16, color: '5B6B85', italics: true })],
+          })
+        )
+      }
+    }
+  }
+
   for (const gallery of report.galleries ?? []) {
     if (gallery.title) {
       children.push(
@@ -250,6 +409,152 @@ export async function toWord(report: Report): Promise<Buffer> {
   return Packer.toBuffer(doc)
 }
 
+// ── What a PDF can actually print ────────────────────────────────────────
+//
+// This was found by rendering a defect report with "95 mm² neutral" and
+// "12 Ω" in it and looking at the page. Both are ordinary things for an
+// electrical engineer to write. Neither survived:
+//
+//     95 mm² neutral      printed as   95 mm  neutral        (² vanished)
+//     12 Ω END            printed as   12 :'Tä@              (!!)
+//     5 μs END            printed as   5 ;Ç2Tä@              (!!)
+//
+// The second and third are the serious ones. pdfkit's built-in Helvetica is
+// a WinAnsi font: one byte per character, 224 characters, no Greek. Hand it
+// a character outside that set and it does not drop the character — it
+// writes a byte that means something else, and EVERYTHING AFTER IT IN THAT
+// STRING comes out as garbage. A punch item reading "insulation resistance
+// 4.2 GΩ at 5 kV, megger serial 118432" becomes unreadable from the Ω
+// onwards, in a document going to a client, with nothing on screen to
+// suggest anything is wrong.
+//
+// This affects every PDF this application produces — the punch list, the
+// obligations register, the daily report, the ITP, the dossier, the test
+// register, the validity review — and has done since the first one.
+//
+// ── The fix, and its honest limits ──────────────────────────────────────
+//
+// Every string is put through `toWinAnsi` before it reaches pdfkit:
+//
+//   · characters that Helvetica has are left exactly as they are — °, ±,
+//     ×, ÷, the dashes, the curly quotes, every accented Latin letter;
+//   · the handful an engineer actually types are spelled out — Ω becomes
+//     "ohm", μ becomes "u", ² becomes "2", Δ becomes "delta";
+//   · anything else becomes "?" — VISIBLE, and only where the character
+//     was. A question mark is a bad outcome. Three lines of corrupted text
+//     is a much worse one, because nobody can tell it happened.
+//
+// The limit is real and worth saying out loud: a PDF cannot carry Thai,
+// Chinese or Arabic text this way. A Thai contractor name comes out as
+// "????". The Word file carries it perfectly — Word is XML and Unicode
+// throughout — so that is the button to use for those. Fixing it properly
+// means embedding a Unicode font in the deployment, which is a change worth
+// making deliberately rather than as a side effect of this one.
+
+/** Characters an engineer types that Helvetica cannot draw. */
+const SPELLED_OUT: Record<string, string> = {
+  '²': '2', '³': '3', '¹': '1', '⁰': '0', '⁴': '4',
+  '½': '1/2', '¼': '1/4', '¾': '3/4',
+  'Ω': 'ohm', 'ω': 'omega', 'µ': 'u', 'μ': 'u',
+  'Δ': 'delta', 'δ': 'delta', 'Σ': 'sum', 'σ': 'sigma',
+  'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'ε': 'epsilon', 'η': 'eta',
+  'θ': 'theta', 'λ': 'lambda', 'π': 'pi', 'ρ': 'rho', 'τ': 'tau',
+  'φ': 'phi', 'Φ': 'phi', 'χ': 'chi', 'ψ': 'psi',
+  '≤': '<=', '≥': '>=', '≠': '!=', '≈': '~', '≡': '=',
+  '→': '->', '←': '<-', '↔': '<->', '⇒': '=>',
+  '∅': 'dia ', '⌀': 'dia ', '∞': 'infinity', '√': 'sqrt',
+  '∆': 'delta', '·': '·', '‰': 'o/oo', '′': "'", '″': '"',
+  ' ': ' ', ' ': ' ', ' ': ' ', '​': '',
+  '\t': '  ',
+}
+
+/**
+ * A string pdfkit's Helvetica can print without corrupting itself.
+ *
+ * WinAnsi is Latin-1 plus a handful of typographic characters in the 0x80
+ * block. Everything in those ranges goes through untouched.
+ */
+export function toWinAnsi(text: string): string {
+  let out = ''
+  for (const ch of text) {
+    const spelled = SPELLED_OUT[ch]
+    if (spelled !== undefined) {
+      out += spelled
+      continue
+    }
+    const code = ch.codePointAt(0) ?? 0
+    // Printable ASCII, and Latin-1 above the C1 control block. Both are in
+    // WinAnsi at the same code point.
+    if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff)) {
+      out += ch
+      continue
+    }
+    if (ch === '\n' || ch === '\r') {
+      out += ch
+      continue
+    }
+    // The 0x80 block: the curly quotes, the dashes, the ellipsis, the bullet.
+    // WinAnsi has these and this application uses all of them.
+    const WIN80 = '€‚ƒ„…†‡ˆ‰Š‹Œ Ž  ‘’“”•–—˜™š›œ žŸ'
+    if (WIN80.includes(ch)) {
+      out += ch
+      continue
+    }
+    out += '?'
+  }
+  return out
+}
+
+/** The same, over every string in a report. */
+function plainReport(report: Report): Report {
+  const s = (v: string | undefined) => (v === undefined ? undefined : toWinAnsi(v))
+  const cellOf = (v: string | number | null) => (typeof v === 'string' ? toWinAnsi(v) : v)
+
+  return {
+    ...report,
+    title: toWinAnsi(report.title),
+    subtitle: s(report.subtitle),
+    project: toWinAnsi(report.project),
+    standfirst: s(report.standfirst),
+    figures: report.figures?.map((f) => ({
+      label: toWinAnsi(f.label),
+      value: typeof f.value === 'string' ? toWinAnsi(f.value) : f.value,
+      note: s(f.note),
+    })),
+    tables: report.tables?.map((t) => ({
+      ...t,
+      title: s(t.title),
+      columns: t.columns.map(toWinAnsi),
+      rows: t.rows.map((r) => r.map(cellOf)),
+    })),
+    cards: report.cards?.map((set) => ({
+      ...set,
+      title: s(set.title),
+      intro: s(set.intro),
+      emptyNote: s(set.emptyNote),
+      cards: set.cards.map((c) => ({
+        ...c,
+        heading: toWinAnsi(c.heading),
+        strapline: s(c.strapline),
+        facts: c.facts?.map((f) => ({ label: toWinAnsi(f.label), value: toWinAnsi(f.value) })),
+        paragraphs: c.paragraphs?.map((p) => ({ label: toWinAnsi(p.label), text: toWinAnsi(p.text), note: s(p.note) })),
+        images: c.images?.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note) })),
+        missing: c.missing?.map((m) => ({ caption: toWinAnsi(m.caption), reason: toWinAnsi(m.reason) })),
+        noImagesNote: s(c.noImagesNote),
+      })),
+    })),
+    galleries: report.galleries?.map((g) => ({
+      ...g,
+      title: s(g.title),
+      note: s(g.note),
+      emptyNote: s(g.emptyNote),
+      images: g.images.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note) })),
+      missing: g.missing?.map((m) => ({ caption: toWinAnsi(m.caption), reason: toWinAnsi(m.reason) })),
+    })),
+    footnotes: report.footnotes?.map(toWinAnsi),
+  }
+}
+
 // ── PDF ──────────────────────────────────────────────────────────────────
 
 const PAGE_MARGIN = 42
@@ -261,7 +566,21 @@ const DANGER = '#b42318'
 /** Widest a photograph is drawn in the PDF, in points. Two fit a row on A4. */
 const PDF_IMAGE_W = 250
 
-export async function toPdf(report: Report): Promise<Buffer> {
+/**
+ * Narrower inside a card.
+ *
+ * A card carries its photographs under the words that describe them, so the
+ * pair has to fit on the same page as the text without pushing every defect
+ * onto a page of its own. 210pt ≈ 74 mm, which still prints a loose gland
+ * clearly enough to argue about.
+ */
+const CARD_IMAGE_W = 210
+
+export async function toPdf(original: Report): Promise<Buffer> {
+  // Once, here, over the whole report — rather than at each of the forty
+  // `doc.text(...)` calls below, where the one that gets forgotten is the one
+  // that scrambles a page.
+  const report = plainReport(original)
   const at = report.generatedAt ?? new Date()
 
   return new Promise((resolve, reject) => {
@@ -420,6 +739,149 @@ export async function toPdf(report: Report): Promise<Buffer> {
           .restore()
       })
       doc.moveDown(0.5)
+    }
+
+    // ── Cards ─────────────────────────────────────────────────────────
+    //
+    // One defect, one block: the words and the photograph of the thing they
+    // describe, together.
+    //
+    // The whole block is MEASURED BEFORE ANY OF IT IS DRAWN, and moved to the
+    // next page if it will not fit. That is the difference between a document
+    // somebody can hand to a foreman and one where item P-014's photograph is
+    // on page 6 and what to do about it is on page 7 — which is how a defect
+    // gets closed against the wrong picture.
+    //
+    // A card taller than a whole page cannot be kept together by anybody, so
+    // that one is allowed to flow; it only reserves enough for its heading so
+    // the heading is never left alone at the foot of a page.
+    for (const set of report.cards ?? []) {
+      const gap = 14
+      const cellW = (width - gap) / 2
+      const imgW = Math.min(cellW, CARD_IMAGE_W)
+      const frameH = Math.round(imgW * 0.72)
+      const imgRowH = frameH + 30
+      const pageH = bottom - PAGE_MARGIN
+
+      ensure(50)
+      doc.moveDown(0.8)
+      if (set.title) {
+        doc.fillColor(INK).fontSize(12).font('Helvetica-Bold').text(set.title, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.3)
+      }
+      if (set.intro) {
+        doc.fillColor(MUTED).fontSize(9).font('Helvetica').text(set.intro, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.3)
+      }
+      if (set.cards.length === 0) {
+        doc.fillColor(MUTED).fontSize(9).font('Helvetica-Oblique')
+          .text(set.emptyNote ?? 'Nothing to report.', PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.4)
+      }
+
+      const factsLine = (card: ReportCard) =>
+        (card.facts ?? []).map((f) => `${f.label}: ${f.value}`).join('    ·    ')
+
+      for (const card of set.cards) {
+        // Measure. Every fontSize/font call here is matched by the same pair
+        // below — a mismatch would measure one thing and draw another, which
+        // reads as a random extra gap under some cards and not others.
+        let needed = 12
+        doc.font('Helvetica-Bold').fontSize(11.5)
+        needed += doc.heightOfString(card.heading, { width }) + 3
+        if (card.strapline) {
+          doc.font('Helvetica').fontSize(8.5)
+          needed += doc.heightOfString(card.strapline, { width }) + 4
+        }
+        const facts = factsLine(card)
+        if (facts) {
+          doc.font('Helvetica').fontSize(8.5)
+          needed += doc.heightOfString(facts, { width }) + 6
+        }
+        for (const block of card.paragraphs ?? []) {
+          needed += 12
+          doc.font('Helvetica').fontSize(9.5)
+          needed += doc.heightOfString(block.text, { width }) + 3
+          if (block.note) {
+            doc.font('Helvetica-Oblique').fontSize(7.5)
+            needed += doc.heightOfString(block.note, { width }) + 4
+          }
+        }
+        const images = card.images ?? []
+        const missing = card.missing ?? []
+        if (images.length > 0) needed += 6 + Math.ceil(images.length / 2) * imgRowH
+        needed += missing.length * 14
+        if (images.length === 0 && missing.length === 0 && card.noImagesNote) needed += 16
+
+        // Keep it whole if it can be whole.
+        if (needed <= pageH) ensure(needed)
+        else ensure(64)
+
+        // Draw.
+        doc.moveDown(0.5)
+        doc.save().strokeColor(RULE).lineWidth(1)
+          .moveTo(PAGE_MARGIN, doc.y).lineTo(PAGE_MARGIN + width, doc.y).stroke().restore()
+        doc.moveDown(0.4)
+
+        doc.fillColor(INK).font('Helvetica-Bold').fontSize(11.5).text(card.heading, PAGE_MARGIN, doc.y, { width })
+        if (card.strapline) {
+          doc.fillColor(MUTED).font('Helvetica').fontSize(8.5).text(card.strapline, PAGE_MARGIN, doc.y + 1, { width })
+        }
+        if (facts) {
+          doc.fillColor(INK).font('Helvetica').fontSize(8.5).text(facts, PAGE_MARGIN, doc.y + 3, { width })
+        }
+
+        for (const block of card.paragraphs ?? []) {
+          doc.fillColor(MUTED).font('Helvetica-Bold').fontSize(7).text(block.label.toUpperCase(), PAGE_MARGIN, doc.y + 6, { width, characterSpacing: 0.4 })
+          doc.fillColor(INK).font('Helvetica').fontSize(9.5).text(block.text, PAGE_MARGIN, doc.y + 1, { width })
+          if (block.note) {
+            doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(7.5).text(block.note, PAGE_MARGIN, doc.y + 1, { width })
+          }
+        }
+
+        if (images.length > 0) doc.moveDown(0.5)
+        for (let i = 0; i < images.length; i += 2) {
+          ensure(imgRowH + 4)
+          const top = doc.y
+          images.slice(i, i + 2).forEach((image, n) => {
+            const x = PAGE_MARGIN + n * (cellW + gap)
+            try {
+              doc.image(image.bytes, x, top, { fit: [imgW, frameH], align: 'center', valign: 'center' })
+            } catch {
+              doc.save().fillColor(MUTED).fontSize(8).font('Helvetica-Oblique')
+                .text('This image could not be rendered.', x, top + frameH / 2, { width: imgW, align: 'center' })
+                .restore()
+            }
+            doc.save()
+            doc.fillColor(INK).fontSize(8).font('Helvetica-Bold')
+              .text(image.caption, x, top + frameH + 4, { width: imgW, height: 10, ellipsis: true })
+            if (image.note) {
+              doc.fillColor(MUTED).fontSize(7).font('Helvetica')
+                .text(image.note, x, top + frameH + 15, { width: imgW, height: 13, ellipsis: true })
+            }
+            doc.restore()
+          })
+          doc.y = top + imgRowH
+        }
+
+        for (const gone of missing) {
+          ensure(22)
+          doc.save()
+          doc.fillColor(DANGER).fontSize(8).font('Helvetica-Bold')
+            .text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y + 3, { width, continued: true })
+          doc.fillColor(MUTED).font('Helvetica').text(` ${gone.reason}`)
+          doc.restore()
+        }
+
+        if (images.length === 0 && missing.length === 0 && card.noImagesNote) {
+          ensure(20)
+          doc.fillColor(MUTED).fontSize(7.5).font('Helvetica-Oblique')
+            .text(card.noImagesNote, PAGE_MARGIN, doc.y + 4, { width })
+        }
+
+        doc.x = PAGE_MARGIN
+      }
+      doc.moveDown(0.6)
     }
 
     // ── Photographs ───────────────────────────────────────────────────

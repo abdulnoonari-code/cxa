@@ -254,6 +254,47 @@ export default async function IssuesPage({
         </div>
       )}
 
+      {/* ── The defect report ──────────────────────────────────────────────
+          A card of its own, above the exchange panel, because it is a
+          different KIND of thing from the exports below it. Those are the
+          register: a table, for filing and for sending back edited. This is an
+          instruction to a party who was not there — one block per defect, the
+          photograph beside the words, and what must be done about it.
+          Filing it in with "PDF, Word, Excel, blank template" is how it would
+          never be found. */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <h2 className="section-title">Issue a defect report</h2>
+        <p className="text-secondary" style={{ fontSize: 13, marginBottom: 14 }}>
+          One block per defect — the photograph, what is wrong, and{' '}
+          <strong>what must be done</strong> — grouped by tag, most urgent first. This is the document a contractor
+          can work from; the punch list below is the register it comes out of. It carries the filters set below, so
+          one contractor&apos;s items can be issued to that contractor and nothing else.
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <a href={`/issues/defects/pdf${exportSuffix}`} className="btn btn-primary btn-sm">
+            Defect report (PDF)
+          </a>
+          <a href={`/issues/defects/word${exportSuffix}`} className="btn btn-secondary btn-sm">
+            Defect report (Word)
+          </a>
+          <a
+            href={`/issues/defects/pdf${exportSuffix ? `${exportSuffix}&group=party` : '?group=party'}`}
+            className="btn btn-secondary btn-sm"
+          >
+            Grouped by contractor
+          </a>
+          <Link href="/site" className="btn btn-secondary btn-sm">
+            On Site (phone)
+          </Link>
+        </div>
+        <p className="text-secondary" style={{ fontSize: 12.5, margin: 0 }}>
+          A remedy written by a person is printed as an agreed action, signed with their name and the date. An AI
+          suggestion is printed as a suggestion, and says so on every item it appears on —{' '}
+          <strong>the two are never allowed to look alike</strong>, because one of them can be acted on and the other
+          one is a prompt to go and look. The report says on its first page how many of its items carry neither.
+        </p>
+      </div>
+
       {/* ── Exchange with the client ───────────────────────────────────── */}
       <div className="card" style={{ marginTop: 18 }}>
         <h2 className="section-title">Send it out, get it back</h2>
@@ -345,7 +386,24 @@ export default async function IssuesPage({
           </label>
           <label className="field" style={{ gridColumn: '1 / -1' }}>
             Detail
-            <input name="description" placeholder="What needs to happen before this can be closed" className="input" />
+            <input name="description" placeholder="What you can see, and where exactly" className="input" />
+          </label>
+          {/* What is WRONG and what must be DONE are two different sentences,
+              and until SQL part 42 there was only somewhere to write the
+              first. A defect report carrying only the first is a list of
+              complaints. */}
+          <label className="field" style={{ gridColumn: '1 / -1' }}>
+            What must be done
+            <input
+              name="required_action"
+              placeholder="e.g. Re-make the gland, clamp the armour, re-test continuity across it"
+              className="input"
+            />
+            <span className="text-secondary" style={{ fontSize: 11.5, marginTop: 3 }}>
+              Optional, and worth the thirty seconds: this is what the defect report issues to the contractor, signed
+              with your name and today&apos;s date. Left blank, the report says nobody has decided — which is honest,
+              and is also what comes back as a question.
+            </span>
           </label>
           <label className="field">
             Category

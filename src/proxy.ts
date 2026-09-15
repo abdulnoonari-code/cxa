@@ -48,7 +48,15 @@ export async function proxy(request: NextRequest) {
     // Engineering reference. It holds no project data at all — it is arithmetic
     // and standards — and somebody standing in a switchroom should not have to
     // sign in to size a load bank.
-    request.nextUrl.pathname.startsWith('/knowledge')
+    request.nextUrl.pathname.startsWith('/knowledge') ||
+    // The web manifest — the file that makes "Add to Home Screen" offer an
+    // icon and a full-screen window. It holds a name, a colour and three icon
+    // paths and nothing else, and the phone fetches it separately from the
+    // page. Behind the gate it would come back as the login page, and the
+    // install prompt would simply never appear, with nothing anywhere to say
+    // why. The icons themselves are already past the matcher below, being
+    // .png files.
+    request.nextUrl.pathname === '/manifest.webmanifest'
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone()

@@ -189,6 +189,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'Whether a file you imported can be taken back out. Without it, eighteen hundred tags from an EPC spreadsheet land in the register with nothing to say they arrived together — so finding out an hour later that it was rev B and not rev C means deleting them one at a time, or deleting the project. With it, every file imported afterwards gets its own heading on Equipment, Systems and Equipment Types, with its own Delete button. It changes no existing row: anything already in the register stays outside every group, which is what stops a Delete button reaching work that was typed in by hand.',
     probe: { table: 'equipment', columns: ['source_ref'] },
   },
+  {
+    id: 'part42',
+    source: 'week5-part42-what-must-be-done.sql',
+    title: 'What must be done about a defect',
+    matters:
+      'Whether a punch item can say what to DO, and not only what is wrong. Without it the only remedy anywhere in this database is the one a language model guessed from a photograph — so a defect report issued to a contractor either carries a machine’s suggestion over your name, or carries nothing, and forty items come back as forty questions. With it, an action is written by a person, signed with their name and the date, and printed as an agreed instruction; an AI suggestion stays visibly a suggestion beside it.',
+    probe: { table: 'issues', columns: ['required_action'] },
+  },
 ]
 
 /**

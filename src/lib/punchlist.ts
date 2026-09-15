@@ -69,11 +69,28 @@ function startOfDay(value: Date): number {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
 }
 
-/** Whole days between two calendar days, ignoring the time of day. */
+/**
+ * Whole days between two calendar days, ignoring the time of day.
+ *
+ * NaN when either date cannot be read, and that is the important part rather
+ * than an edge case: `new Date('rubbish')` is an Invalid Date, subtracting it
+ * gives NaN, and NaN propagates silently all the way onto paper. A defect
+ * report went out of the renderer reading "Raised: NaN days ago by A. Jabbar"
+ * from a single bad timestamp, which is how a document loses a reader's
+ * confidence in every other number on it.
+ *
+ * The callers below turn NaN into null — "not known" — because that is what
+ * it means, and a screen already knows how to print nothing.
+ */
 export function daysBetween(from: string | Date, to: string | Date = new Date()): number {
   const a = startOfDay(typeof from === 'string' ? new Date(from) : from)
   const b = startOfDay(typeof to === 'string' ? new Date(to) : to)
   return Math.round((b - a) / DAY)
+}
+
+/** A number, or null if it is not one. */
+function realNumber(value: number): number | null {
+  return Number.isFinite(value) ? value : null
 }
 
 /**
@@ -87,8 +104,8 @@ export function daysBetween(from: string | Date, to: string | Date = new Date())
 export function daysOverdue(item: PunchLike, today: Date = new Date()): number | null {
   if (!isOpen(item.status)) return null
   if (!item.due_date) return null
-  const late = daysBetween(item.due_date, today)
-  return late > 0 ? late : null
+  const late = realNumber(daysBetween(item.due_date, today))
+  return late !== null && late > 0 ? late : null
 }
 
 export function isOverdue(item: PunchLike, today: Date = new Date()): boolean {
@@ -99,7 +116,8 @@ export function isOverdue(item: PunchLike, today: Date = new Date()): boolean {
 export function ageInDays(item: PunchLike, today: Date = new Date()): number | null {
   if (!isOpen(item.status)) return null
   if (!item.created_at) return null
-  return Math.max(0, daysBetween(item.created_at, today))
+  const age = realNumber(daysBetween(item.created_at, today))
+  return age === null ? null : Math.max(0, age)
 }
 
 // ── What the list adds up to ─────────────────────────────────────────────

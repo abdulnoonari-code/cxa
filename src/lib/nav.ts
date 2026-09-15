@@ -163,6 +163,12 @@ export const NAV: NavSection[] = [
         children: [
           { href: '/issues', label: 'Punch List', icon: 'issue', note: 'Defects by category and level, and what each one blocks.' },
           {
+            href: '/site',
+            label: 'On Site (phone)',
+            icon: 'issue',
+            note: 'The same punch list, built for a phone at the panel — the camera, what must be done, and what is still open. Add it to your home screen and it opens like an app.',
+          },
+          {
             href: '/levels',
             label: 'Level Summary',
             icon: 'readiness',

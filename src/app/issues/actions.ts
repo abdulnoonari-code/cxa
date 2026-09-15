@@ -11,6 +11,8 @@ import { loadPunchRefs } from '@/data/punchlist'
 import { nextRef, refSeries } from '@/lib/punchlist'
 import { parsePunchWorkbook, type PunchProblem } from '@/lib/punchlist-io'
 import { storeIssuePhoto } from '@/data/photo-store'
+import { insertIssue, patchIssue, droppedNote } from '@/data/punch-write'
+import { ACTION_SQL } from '@/data/punchlist'
 import { outcomeParams } from '@/lib/uploads'
 
 function str(formData: FormData, key: string): string | null {
@@ -19,8 +21,29 @@ function str(formData: FormData, key: string): string | null {
   return value.trim()
 }
 
+/**
+ * Where to go back to, when the form says.
+ *
+ * The phone screen posts the same actions as the desktop one and must not be
+ * thrown back to /issues afterwards — that screen is a wide table nobody can
+ * use one-handed at the top of a ladder.
+ *
+ * Only a path on this site, and never one starting `//`, which the browser
+ * reads as another host entirely. A redirect that takes its destination from
+ * a form field and does not check it is how a login page ends up forwarding
+ * people to somebody else's copy of it.
+ */
+function backTo(formData: FormData): string | null {
+  const raw = formData.get('back')
+  if (typeof raw !== 'string') return null
+  const path = raw.trim()
+  if (!path.startsWith('/') || path.startsWith('//')) return null
+  return path
+}
+
 function refresh(equipmentId?: string | null) {
   revalidatePath('/issues')
+  revalidatePath('/site')
   revalidatePath('/dashboard')
   revalidatePath('/assets')
   revalidatePath('/readiness')
@@ -113,7 +136,13 @@ export async function createIssue(formData: FormData) {
 
   const ref = nextRef(await loadPunchRefs(project.id))
 
-  const { data: created } = await supabase.from('issues').insert({
+  // What must be done, if whoever raised it knew. Stamped with their name and
+  // the moment, because a remedy that cannot say who asked for it is not
+  // distinguishable on paper from one a language model suggested — and those
+  // two must never read alike. See lib/remedy.ts.
+  const action = str(formData, 'required_action')
+
+  const written = await insertIssue({
     // Without this the item is invisible on every project screen — they all
     // filter on project_id and none of them walk up through equipment.
     project_id: project.id,
@@ -133,10 +162,41 @@ export async function createIssue(formData: FormData) {
     discipline: str(formData, 'discipline'),
     location: str(formData, 'location'),
     due_date: str(formData, 'due_date'),
+    required_action: action,
+    action_set_by: action ? actor.name ?? actor.email ?? null : null,
+    action_set_at: action ? new Date().toISOString() : null,
     ai_comment: generateIssueReview(severity, category, 'open', description),
-  }).select('id').single()
+  })
 
-  const newId = (created as { id: string } | null)?.id ?? null
+  const newId = written.id
+  const lostColumns = droppedNote(written.dropped, ACTION_SQL)
+
+  if (lostColumns) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'punch item raised without its action',
+      entity: 'issue',
+      entityId: newId,
+      entityLabel: `${ref} — ${title}`,
+      comment: lostColumns,
+    })
+  }
+
+  // Refused outright — a constraint, a foreign key, a permission. Saying
+  // nothing here is the worst thing this function could do: somebody standing
+  // in front of the defect would walk away believing it was recorded.
+  if (written.error) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'punch item NOT raised',
+      entity: 'issue',
+      entityLabel: `${ref} — ${title}`,
+      newValue: written.error,
+      comment: 'The database refused the row. Nothing was written, including any photograph.',
+    })
+    const home = backTo(formData) ?? '/issues'
+    redirect(`${home}${home.includes('?') ? '&' : '?'}raise=error&detail=${encodeURIComponent(written.error.slice(0, 300))}`)
+  }
 
   await recordAudit({
     projectId: project.id,
@@ -201,11 +261,22 @@ export async function createIssue(formData: FormData) {
   // that says nothing is indistinguishable from one that silently failed —
   // which is how a punch photograph came to be missing without anybody
   // knowing until a report was generated weeks later.
+  const home = backTo(formData)
+
   if (photoAttempted) {
     const outcome = photoNote
       ? { ok: false, file: photoName, reason: photoNote, hint: 'The punch item itself was raised and is fine — open it and attach the photograph there once this is sorted.' }
       : { ok: true, file: photoName, against: ref }
-    redirect(`/issues?raised=${encodeURIComponent(ref)}&${outcomeParams(outcome)}`)
+    const to = home ?? '/issues'
+    redirect(`${to}${to.includes('?') ? '&' : '?'}raised=${encodeURIComponent(ref)}&${outcomeParams(outcome)}`)
+  }
+
+  // No photograph, but the phone screen still has to be told something
+  // happened — it posts from a form that is then wiped, and a screen that
+  // simply redraws is a screen somebody presses Raise on twice.
+  if (home) {
+    const said = lostColumns ? `&kept=partial` : ''
+    redirect(`${home}${home.includes('?') ? '&' : '?'}raised=${encodeURIComponent(ref)}${said}`)
   }
 }
 
@@ -216,9 +287,20 @@ export async function updateIssue(formData: FormData) {
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
 
+  // required_action is read back so the stamp is only re-dated when the words
+  // actually change. Re-stamping it on every save would make "agreed by A.
+  // Jabbar on 14 Sep" quietly become today's date every time somebody edited
+  // the due date — and that line is the whole basis on which a contractor is
+  // being asked to do the work.
   const { data: before } = await supabase
     .from('issues')
     .select('status, category, closed_at, closed_by, verified_at, equipment_id, ref, title')
+    .eq('id', id)
+    .single()
+
+  const { data: priorAction } = await supabase
+    .from('issues')
+    .select('required_action, action_set_by, action_set_at')
     .eq('id', id)
     .single()
 
@@ -239,25 +321,58 @@ export async function updateIssue(formData: FormData) {
   const description = str(formData, 'description')
   const mark = stamps(status, actor.name ?? 'Unknown', previous)
 
-  await supabase
-    .from('issues')
-    .update({
-      severity,
-      category,
-      status,
-      description,
-      level: str(formData, 'level'),
-      responsible_party: str(formData, 'responsible_party'),
-      discipline: str(formData, 'discipline'),
-      location: str(formData, 'location'),
-      due_date: str(formData, 'due_date'),
-      closed_at: mark.closed_at,
-      closed_by: mark.closed_by,
-      verified_at: mark.verified_at,
-      verified_by: mark.verified_by,
-      ai_comment: generateIssueReview(severity, category, status, description),
+  const was = (priorAction ?? {}) as { required_action?: string | null; action_set_by?: string | null; action_set_at?: string | null }
+  const action = str(formData, 'required_action')
+  const changed = (action ?? '') !== (was.required_action ?? '').trim()
+
+  const written = await patchIssue(id, {
+    severity,
+    category,
+    status,
+    description,
+    level: str(formData, 'level'),
+    responsible_party: str(formData, 'responsible_party'),
+    discipline: str(formData, 'discipline'),
+    location: str(formData, 'location'),
+    due_date: str(formData, 'due_date'),
+    required_action: action,
+    // Unchanged words keep their original signature and date. New or edited
+    // words are signed by whoever just wrote them.
+    action_set_by: action ? (changed ? actor.name ?? actor.email ?? null : was.action_set_by ?? null) : null,
+    action_set_at: action ? (changed ? new Date().toISOString() : was.action_set_at ?? null) : null,
+    closed_at: mark.closed_at,
+    closed_by: mark.closed_by,
+    verified_at: mark.verified_at,
+    verified_by: mark.verified_by,
+    ai_comment: generateIssueReview(severity, category, status, description),
+  })
+
+  if (project && (written.error || written.dropped.length > 0)) {
+    await recordAudit({
+      projectId: project.id,
+      action: written.error ? 'punch item NOT updated' : 'punch item updated without its action',
+      entity: 'issue',
+      entityId: id,
+      entityLabel: `${previous.ref ?? ''} — ${previous.title ?? ''}`.trim(),
+      newValue: written.error ?? null,
+      comment: written.error
+        ? 'The database refused the change. Nothing was written.'
+        : droppedNote(written.dropped, ACTION_SQL) ?? '',
     })
-    .eq('id', id)
+  }
+
+  if (project && changed && action && !written.error) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'recorded what must be done',
+      entity: 'issue',
+      entityId: id,
+      entityLabel: `${previous.ref ?? ''} — ${previous.title ?? ''}`.trim(),
+      oldValue: (was.required_action ?? '').trim() || null,
+      newValue: action,
+      comment: 'An agreed action, signed and dated. It is not an AI suggestion.',
+    })
+  }
 
   if (project && previous.status !== status) {
     await recordAudit({
@@ -271,7 +386,7 @@ export async function updateIssue(formData: FormData) {
   }
 
   refresh(previous.equipment_id ?? null)
-  redirect('/issues')
+  redirect(backTo(formData) ?? '/issues')
 }
 
 export async function deleteIssue(formData: FormData) {

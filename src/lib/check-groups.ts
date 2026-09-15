@@ -109,6 +109,59 @@ export function inGroup(sourceRef: string | null | undefined, key: string): bool
   return r !== null && r.kind === g.kind && r.name === g.name
 }
 
+/**
+ * A register row that knows which import it came from.
+ *
+ * Deliberately narrower than GroupedCheck. A tag has no "answered" and no
+ * commissioning level, and a group type carrying fields that are always
+ * zero invites a screen to print "0 answered" beside eighteen hundred tags.
+ */
+export type GroupedRow = { id: string; sourceRef: string | null }
+
+export type RowGroup = {
+  key: string
+  kind: CheckGroupKind
+  name: string
+  ids: string[]
+  total: number
+}
+
+/**
+ * Gather register rows into the imports they arrived in.
+ *
+ * Rows with no parseable source are LEFT OUT, exactly as for checks — a
+ * tag typed in by hand belongs to no file, so no "delete this import"
+ * button can reach it. On a register that cascades (deleting a tag takes
+ * its checks, its tests and its punch items with it) that property is not
+ * a nicety; it is the reason the button is allowed to exist.
+ */
+export function groupRows(rows: GroupedRow[]): RowGroup[] {
+  const out: RowGroup[] = []
+  const index = new Map<string, RowGroup>()
+
+  for (const r of rows) {
+    const ref = parseRef(r.sourceRef)
+    if (!ref) continue
+
+    const key = groupKey(ref.kind, ref.name)
+    let g = index.get(key)
+    if (!g) {
+      g = { key, kind: ref.kind, name: ref.name, ids: [], total: 0 }
+      index.set(key, g)
+      out.push(g)
+    }
+    g.ids.push(r.id)
+    g.total += 1
+  }
+
+  return out
+}
+
+/** How many rows were typed in rather than imported. */
+export function ungroupedRows(rows: GroupedRow[]): number {
+  return rows.filter((r) => parseRef(r.sourceRef) === null).length
+}
+
 export type GroupedCheck = {
   id: string
   sourceRef: string | null

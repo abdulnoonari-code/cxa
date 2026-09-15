@@ -236,6 +236,88 @@ export const CHECK_REFERENCES: CheckReference[] = [
   },
 ]
 
+/**
+ * What goes with a TAG.
+ *
+ * ── Why this list matters more than the one above it ────────────────────
+ *
+ * Deleting a check removes a check. Deleting a TAG removes the tag AND
+ * everything the database has hanging off it, because four foreign keys
+ * say ON DELETE CASCADE: its checklist, its test records, its punch items
+ * and its parts all go, without a word, in the same instant.
+ *
+ * That is correct behaviour — a checklist for a tag that no longer exists
+ * is not a record of anything. But it means "delete these 1,800 tags" can
+ * destroy a hundred thousand rows of commissioning history, and the person
+ * pressing it has to be told the number BEFORE they press it, not after.
+ *
+ * Each of these is counted and named on the confirmation.
+ */
+export const EQUIPMENT_REFERENCES: CheckReference[] = [
+  {
+    table: 'checklist_items',
+    column: 'equipment_id',
+    label: 'checks',
+    consequence: 'DELETED with the tag. Every L1 to L5 check recorded against it, with its answers and comments.',
+  },
+  {
+    table: 'test_records',
+    column: 'equipment_id',
+    label: 'test records',
+    consequence: 'DELETED with the tag. Measured values, instruments, witnesses and dates all go.',
+  },
+  {
+    table: 'issues',
+    column: 'equipment_id',
+    label: 'punch items',
+    consequence: 'DELETED with the tag, along with any photographs attached to them. A defect nobody has closed disappears from the punch list.',
+  },
+  {
+    table: 'components',
+    column: 'equipment_id',
+    label: 'parts',
+    consequence: 'DELETED with the tag. Cubicles, relays and breakers recorded inside it.',
+  },
+  {
+    table: 'layout_items',
+    column: 'equipment_id',
+    label: 'boxes on a room drawing',
+    consequence: 'The box stays on the drawing and stops naming a tag, so a signed layout is not silently emptied.',
+  },
+]
+
+/**
+ * What goes with a SYSTEM.
+ *
+ * Far gentler than a tag, and worth saying so on the screen: equipment
+ * points at a system with ON DELETE SET NULL, so the tags survive and
+ * become unassigned. Only subsystems cascade.
+ */
+export const SYSTEM_REFERENCES: CheckReference[] = [
+  {
+    table: 'equipment',
+    column: 'system_id',
+    label: 'tags',
+    consequence: 'The tag SURVIVES and becomes unassigned. Its checks, tests and punch items are untouched.',
+  },
+  {
+    table: 'subsystems',
+    column: 'system_id',
+    label: 'subsystems',
+    consequence: 'DELETED with the system. Any tag that pointed at one becomes unassigned rather than disappearing.',
+  },
+]
+
+/** What goes with an EQUIPMENT TYPE. Nothing, except a reference. */
+export const TYPE_REFERENCES: CheckReference[] = [
+  {
+    table: 'equipment',
+    column: 'type_id',
+    label: 'tags',
+    consequence: 'The tag SURVIVES and stops naming a type. Nothing else about it changes.',
+  },
+]
+
 /** The sentence shown above a delete button, so the size of it is not a surprise. */
 export function impactSentence(impact: Impact, what: string): string {
   if (impact.total === 0) return `There is nothing to delete — ${what} holds no records.`

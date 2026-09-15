@@ -3,6 +3,8 @@ import { getCurrentProject } from '@/lib/project'
 import { loadProjectReadiness } from '@/lib/system-data'
 import { STAGES, stageLabel, readinessBadgeClass, readinessVerdict } from '@/lib/readiness'
 import { createSystem, updateSystem, deleteSystem, assignEquipment, importSystems } from './actions'
+import ImportGroups from '@/components/ImportGroups'
+import { loadRegisterGroups } from '@/data/register-groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +29,7 @@ export default async function SystemsPage({
     lost,
   } = await searchParams
   const project = await getCurrentProject()
+  const systemImports = await loadRegisterGroups('systems', project?.id ?? null)
   const { systems, unassigned, overall } = await loadProjectReadiness(project?.id ?? null)
 
   const readyCount = systems.filter((s) => s.readiness.ready).length
@@ -201,6 +204,8 @@ export default async function SystemsPage({
         </form>
       </details>
 
+      <ImportGroups kind="systems" summary={systemImports} />
+
       {systems.length > 0 ? (
         <div style={{ display: 'grid', gap: 16, marginTop: 22 }}>
           {systems.map((s) => (
@@ -215,7 +220,16 @@ export default async function SystemsPage({
                   marginBottom: 14,
                 }}
               >
-                <div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', minWidth: 0 }}>
+                  <input
+                    type="checkbox"
+                    name="row_ids"
+                    value={s.id}
+                    form="pickrows"
+                    aria-label={`Select ${s.system_id} for deletion`}
+                    style={{ marginTop: 4, width: 16, height: 16, flex: 'none', cursor: 'pointer' }}
+                  />
+                  <div style={{ minWidth: 0 }}>
                   <div className="text-secondary mono" style={{ fontSize: 11.5, marginBottom: 3 }}>
                     {s.system_id}
                     {s.discipline ? ` · ${s.discipline}` : ''}
@@ -236,6 +250,7 @@ export default async function SystemsPage({
                       {s.description}
                     </div>
                   )}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span className="badge badge-neutral">{stageLabel(s.stage)}</span>

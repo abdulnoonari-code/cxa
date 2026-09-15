@@ -8,6 +8,8 @@ import { loadRoles } from '@/data/project-roles'
 import { canIn } from '@/lib/project-roles'
 import { createEquipment, deleteEquipment, importEquipment } from './actions'
 import { CATEGORIES, INSTALL_STATUSES, installBadgeClass } from './styles'
+import ImportGroups from '@/components/ImportGroups'
+import { loadRegisterGroups } from '@/data/register-groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +41,7 @@ export default async function EquipmentPage({
   const outcome = decodeOutcome((await cookies()).get(IMPORT_COOKIE)?.value)
 
   const project = await getCurrentProject()
+  const tagImports = await loadRegisterGroups('equipment', project?.id ?? null)
   const actor = await getActor(project?.id ?? null)
   const roles = await loadRoles(project?.id ?? null)
   const mayRecord = canIn(roles, actor.role, 'record')
@@ -308,10 +311,13 @@ export default async function EquipmentPage({
         </div>
       )}
 
+      <ImportGroups kind="equipment" summary={tagImports} />
+
       <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
+              <th style={{ width: 30 }}></th>
               <th>Tag</th>
               <th>Description</th>
               <th>Category</th>
@@ -327,6 +333,16 @@ export default async function EquipmentPage({
             {shown.length > 0 ? (
               shown.map((item) => (
                 <tr key={item.id}>
+                  <td style={{ width: 30 }}>
+                    <input
+                      type="checkbox"
+                      name="row_ids"
+                      value={item.id}
+                      form="pickrows"
+                      aria-label={`Select ${item.tag_id} for deletion`}
+                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                    />
+                  </td>
                   <td className="mono tag-id">{item.tag_id}</td>
                   <td style={{ fontSize: 13.5 }}>{item.description ?? '—'}</td>
                   <td style={{ fontSize: 13 }}>{item.category ? categoryLabel(item.category) : '—'}</td>

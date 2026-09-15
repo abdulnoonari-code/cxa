@@ -13,6 +13,7 @@ import {
   encodeOutcome,
   type ImportOutcome,
 } from '@/lib/import-result'
+import { makeRef } from '@/lib/check-groups'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -460,6 +461,9 @@ export async function importEquipment(formData: FormData) {
   // a database that cannot hold them is REFUSED ENTIRELY rather than half
   // imported. Half of a tag list is worse than none: the boards would be in,
   // the cubicles would not, and the register would look finished.
+  const sourceProbe = await supabase.from('equipment').select('source_ref').limit(1)
+  const hasSource = !sourceProbe.error
+
   const componentProbe = await supabase.from('components').select('id').limit(1)
   const hasComponents = !componentProbe.error
 
@@ -547,9 +551,16 @@ export async function importEquipment(formData: FormData) {
       await supabase.from('equipment').update(values).eq('id', existingId)
       updated += 1
     } else {
-      await supabase
-        .from('equipment')
-        .insert({ project_id: project.id, install_status: row.install_status, ...values })
+      // Only NEW rows carry the source. A tag being UPDATED by this file was
+      // already in the register and did not arrive in it — recording
+      // otherwise would put an existing tag into a group whose Delete button
+      // would then destroy its checks, tests and punch items.
+      await supabase.from('equipment').insert({
+        project_id: project.id,
+        install_status: row.install_status,
+        ...values,
+        ...(hasSource ? { source_ref: makeRef('file', file.name, row.row) } : {}),
+      })
       inserted += 1
     }
   }
@@ -614,9 +625,13 @@ export async function importEquipment(formData: FormData) {
         await supabase.from('components').update(values).eq('id', existing)
         componentsUpdated += 1
       } else {
-        await supabase
-          .from('components')
-          .insert({ project_id: project.id, equipment_id: parentId, install_status: row.install_status, ...values })
+        await supabase.from('components').insert({
+          project_id: project.id,
+          equipment_id: parentId,
+          install_status: row.install_status,
+          ...values,
+          ...(hasSource ? { source_ref: makeRef('file', file.name, row.row) } : {}),
+        })
         componentsIn += 1
       }
     }

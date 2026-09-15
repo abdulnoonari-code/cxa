@@ -181,6 +181,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'Whether a drawing survives closing the tab. Without it the room layout planner still works and still calculates, but nothing you draw can be saved against a system, attached to a method statement or put in a handover pack — it is a calculator, not a record. The planner says so on itself rather than offering a Save button that does nothing.',
     probe: { table: 'layouts', columns: ['name', 'room_w', 'ambient_c'] },
   },
+  {
+    id: 'part41',
+    source: 'week5-part41-import-source.sql',
+    title: 'Imports can be undone',
+    matters:
+      'Whether a file you imported can be taken back out. Without it, eighteen hundred tags from an EPC spreadsheet land in the register with nothing to say they arrived together — so finding out an hour later that it was rev B and not rev C means deleting them one at a time, or deleting the project. With it, every file imported afterwards gets its own heading on Equipment, Systems and Equipment Types, with its own Delete button. It changes no existing row: anything already in the register stays outside every group, which is what stops a Delete button reaching work that was typed in by hand.',
+    probe: { table: 'equipment', columns: ['source_ref'] },
+  },
 ]
 
 /**

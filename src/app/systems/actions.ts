@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { recordAudit } from '@/lib/audit'
 import { parseSystemWorkbook } from '@/lib/system-import'
+import { makeRef } from '@/lib/check-groups'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -180,6 +181,12 @@ export async function importSystems(formData: FormData) {
   // why. Asked once and not per row, because a per-row retry turns forty
   // systems into eighty requests and the answer cannot change halfway.
   const placeProbe = await supabase.from('systems').select('building, floor').limit(1)
+  // Has SQL part 41 been run? A database without the column must still be
+  // able to import — the file simply is not gathered into a group, and the
+  // screen says so rather than silently losing the import.
+  const sourceProbe = await supabase.from('systems').select('source_ref').limit(1)
+  const hasSource = !sourceProbe.error
+
   const hasPlace = !placeProbe.error
 
   let areasCreated = 0
@@ -226,9 +233,18 @@ export async function importSystems(formData: FormData) {
       await supabase.from('systems').update(values).eq('id', id)
       updated += 1
     } else {
+      // Only NEW rows carry the source. A row being UPDATED by this file was
+      // already here and did not arrive in it — recording otherwise would put
+      // an existing tag into a group whose Delete button would then remove
+      // work that predates the import entirely.
       await supabase
         .from('systems')
-        .insert({ project_id: project.id, stage: row.stage ?? 'construction', ...values })
+        .insert({
+          project_id: project.id,
+          stage: row.stage ?? 'construction',
+          ...values,
+          ...(hasSource ? { source_ref: makeRef('file', file.name, row.row) } : {}),
+        })
       inserted += 1
     }
   }

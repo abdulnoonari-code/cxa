@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { recordAudit } from '@/lib/audit'
 import { parseTypeWorkbook } from '@/lib/type-import'
+import { makeRef } from '@/lib/check-groups'
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key)
@@ -106,6 +107,12 @@ export async function importTypes(formData: FormData) {
     redirect('/equipment-types?import=notable')
   }
 
+  // Has SQL part 41 been run? A database without the column must still be
+  // able to import — the file simply is not gathered into a group, and the
+  // screen says so rather than silently losing the import.
+  const sourceProbe = await supabase.from('equipment_types').select('source_ref').limit(1)
+  const hasSource = !sourceProbe.error
+
   const { data: existing } = await supabase
     .from('equipment_types')
     .select('id, type_code')
@@ -138,7 +145,15 @@ export async function importTypes(formData: FormData) {
       await supabase.from('equipment_types').update(values).eq('id', id)
       updated += 1
     } else {
-      await supabase.from('equipment_types').insert({ project_id: project.id, ...values })
+      // Only NEW rows carry the source. A row being UPDATED by this file was
+      // already here and did not arrive in it — recording otherwise would put
+      // an existing tag into a group whose Delete button would then remove
+      // work that predates the import entirely.
+      await supabase.from('equipment_types').insert({
+        project_id: project.id,
+        ...values,
+        ...(hasSource ? { source_ref: makeRef('file', file.name, row.row) } : {}),
+      })
       inserted += 1
     }
   }

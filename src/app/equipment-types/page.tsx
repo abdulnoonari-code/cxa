@@ -3,6 +3,8 @@ import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { CATEGORIES } from '@/app/equipment/styles'
 import { createType, deleteType, importTypes } from './actions'
+import ImportGroups from '@/components/ImportGroups'
+import { loadRegisterGroups } from '@/data/register-groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +15,7 @@ export default async function EquipmentTypesPage({
 }) {
   const { import: imp, added = '0', updated: changed = '0', warn = '0', why, q } = await searchParams
   const project = await getCurrentProject()
+  const typeImports = await loadRegisterGroups('equipment_types', project?.id ?? null)
 
   // The catalogue arrives with SQL part 35. Asking for a table the database
   // does not have is an error, and an error read as "no types" would look
@@ -215,10 +218,13 @@ export default async function EquipmentTypesPage({
         </form>
       )}
 
+      <ImportGroups kind="equipment_types" summary={typeImports} />
+
       <div className="table-wrap" style={{ marginTop: 16 }}>
         <table className="table">
           <thead>
             <tr>
+              <th style={{ width: 30 }}></th>
               <th>Type code</th>
               <th>Name</th>
               <th>Discipline</th>
@@ -233,6 +239,16 @@ export default async function EquipmentTypesPage({
             {types.length > 0 ? (
               types.map((t) => (
                 <tr key={t.id}>
+                  <td style={{ width: 30 }}>
+                    <input
+                      type="checkbox"
+                      name="row_ids"
+                      value={t.id}
+                      form="pickrows"
+                      aria-label={`Select ${t.type_code} for deletion`}
+                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                    />
+                  </td>
                   <td className="mono tag-id">
                     <Link href={`/equipment-types/${t.id}`} className="link">
                       {t.type_code}

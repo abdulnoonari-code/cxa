@@ -1,0 +1,484 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { outcomeParams } from '@/lib/uploads'
+import { verifyPassword } from '@/lib/reauth'
+import { checklistImpact, deleteChecklist, type CheckScope } from '@/data/purge'
+import { putFile, recordFile, safeStorageName } from '@/data/upload-file'
+import { parseChecklistWorkbook, type ParsedCheck, type CheckProblem } from '@/lib/checklist-io'
+import { generateAttachmentReview, generateCheckComment } from '@/lib/review'
+import { getCurrentProject } from '@/lib/project'
+import { recordAudit } from '@/lib/audit'
+import { loadSubjectIndex } from '@/data/subjects'
+import { buildTextIndex, findSubjectByText, subjectLabel, type Subject } from '@/lib/subjects'
+import { makeRef, parseGroupKey, groupLabel } from '@/lib/check-groups'
+
+function str(formData: FormData, key: string): string | null {
+  const value = formData.get(key)
+  if (typeof value !== 'string' || value.trim() === '') return null
+  return value.trim()
+}
+
+function refresh(equipmentId?: string | null) {
+  revalidatePath('/checklists')
+  revalidatePath('/dashboard')
+  revalidatePath('/documents')
+  if (equipmentId) revalidatePath(`/equipment/${equipmentId}/checklist`)
+}
+
+function describe(p: CheckProblem): string {
+  return `Row ${p.row} · ${p.column}: ${p.message}${p.value ? ` (found "${p.value}")` : ''}`
+}
+
+function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
+  return out
+}
+
+// What one parsed row is going to do to the database, worked out before
+// anything is written. Nothing touches a table until every row has produced
+// one of these without complaint.
+type Plan = {
+  row: ParsedCheck
+  targets: { equipment_id: string | null; subject_type: string; subject_id: string }[]
+}
+
+// Import one checklist file.
+//
+// Three things can happen to a row, and which one is decided by the row
+// itself, not by a mode chosen on the screen:
+//
+//   • it carries a CXA ID     → that exact check is updated, or removed
+//   • it names a tag or system → the check is created against that subject
+//   • it names nothing         → it fans out to the tags ticked on the form,
+//                                because one L2 checklist normally applies to
+//                                a whole family of identical tags
+//
+// If any row cannot be read, nothing at all is written. A half-applied
+// checklist is worse than none, because nobody can tell which half applied.
+export async function importProjectChecklist(formData: FormData) {
+  const file = formData.get('file')
+  const equipmentIds = formData.getAll('equipment_ids').filter((v): v is string => typeof v === 'string')
+  const defaultLevel = str(formData, 'default_level')
+
+  if (!(file instanceof File) || file.size === 0) {
+    redirect('/checklists?import=nofile')
+  }
+
+  const project = await getCurrentProject()
+  if (!project) redirect('/checklists?import=noproject')
+
+  const parsed = await parseChecklistWorkbook(await file.arrayBuffer(), {
+    defaultLevel: defaultLevel ?? undefined,
+    fileName: file.name,
+  })
+
+  if (parsed.rows.length === 0 && parsed.errors.length === 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'checklist import failed',
+      entity: 'checklist_item',
+      entityLabel: file.name,
+      comment:
+        parsed.headingsSeen.length > 0
+          ? `No item column found. Headings seen: ${parsed.headingsSeen.slice(0, 15).join(', ')}`
+          : 'The file had nothing readable in it.',
+    })
+    const found = parsed.headingsSeen.slice(0, 8).join(', ')
+    redirect(`/checklists?import=empty&headings=${encodeURIComponent(found)}`)
+  }
+
+  // ── Resolve every row against the project ──────────────────────────────
+  const index = await loadSubjectIndex(project.id)
+  const text = buildTextIndex(index)
+
+  const errors: CheckProblem[] = [...parsed.errors]
+
+  // Existing checks named by CXA ID. Fetched in one go, in chunks, so a
+  // three-thousand-row file is a handful of queries rather than three
+  // thousand of them.
+  const namedIds = [...new Set(parsed.rows.map((r) => r.id).filter((v): v is string => !!v))]
+  const known = new Map<string, { id: string; item: string }>()
+  for (const part of chunk(namedIds, 200)) {
+    const { data } = await supabase
+      .from('checklist_items')
+      .select('id, item')
+      .eq('project_id', project.id)
+      .in('id', part)
+    for (const row of (data ?? []) as { id: string; item: string }[]) known.set(row.id, row)
+  }
+
+  const plans: Plan[] = []
+
+  for (const row of parsed.rows) {
+    if (row.id) {
+      if (!known.has(row.id)) {
+        errors.push({
+          row: row.row,
+          column: 'CXA ID',
+          value: row.id,
+          message: 'No check on this project has that ID. Clear the cell to create a new one instead.',
+        })
+        continue
+      }
+      plans.push({ row, targets: [] })
+      continue
+    }
+
+    if (row.remove) {
+      errors.push({
+        row: row.row,
+        column: 'Remove',
+        value: 'Y',
+        message: 'Only a row with a CXA ID can be removed — there is nothing to identify this one by.',
+      })
+      continue
+    }
+
+    if (row.subject) {
+      const match = findSubjectByText(text, row.subject)
+      if (!match.subject) {
+        errors.push({
+          row: row.row,
+          column: 'Tag / System',
+          value: row.subject,
+          message:
+            match.candidates.length > 1
+              ? `More than one thing on the project is called that (${match.candidates
+                  .map((c) => subjectLabel(c.type))
+                  .join(', ')}). Use the tag or system code instead.`
+              : 'Not a tag, system or area on this project. Add it first, or clear the cell to use the ticked tags.',
+        })
+        continue
+      }
+      const s: Subject = match.subject
+      plans.push({
+        row,
+        targets: [
+          { equipment_id: s.type === 'equipment' ? s.id : null, subject_type: s.type, subject_id: s.id },
+        ],
+      })
+      continue
+    }
+
+    if (equipmentIds.length === 0) {
+      errors.push({
+        row: row.row,
+        column: 'Tag / System',
+        value: '',
+        message: 'No tag or system on this row, and no tags ticked below. One or the other is needed.',
+      })
+      continue
+    }
+
+    plans.push({
+      row,
+      targets: equipmentIds.map((id) => ({ equipment_id: id, subject_type: 'equipment', subject_id: id })),
+    })
+  }
+
+  if (errors.length > 0) {
+    await recordAudit({
+      projectId: project.id,
+      action: 'checklist import rejected',
+      entity: 'checklist_item',
+      entityLabel: file.name,
+      newValue: `${errors.length} problems, nothing imported`,
+      comment: errors.slice(0, 12).map(describe).join(' | '),
+    })
+    const detail = errors.slice(0, 3).map(describe).join(' · ')
+    redirect(`/checklists?import=rejected&errors=${errors.length}&detail=${encodeURIComponent(detail.slice(0, 400))}`)
+  }
+
+  // ── Nothing was wrong, so write ────────────────────────────────────────
+  const removeIds = plans.filter((p) => p.row.remove).map((p) => p.row.id as string)
+  const updates = plans.filter((p) => p.row.id && !p.row.remove)
+  const inserts = plans.filter((p) => !p.row.id)
+
+  for (const part of chunk(removeIds, 200)) {
+    await supabase.from('checklist_items').delete().in('id', part)
+  }
+
+  for (const p of updates) {
+    await supabase
+      .from('checklist_items')
+      .update({
+        level: p.row.level,
+        item: p.row.item,
+        status: p.row.status,
+        notes: p.row.notes,
+        inspection_type: p.row.inspection_type,
+        ai_comment: generateCheckComment(p.row.status, p.row.notes),
+      })
+      .eq('id', p.row.id as string)
+  }
+
+  // ── Every new check remembers which file it arrived in ─────────────────
+  //
+  // It did not before, and that is why a checklist import could not be
+  // undone: two hundred checks scattered under two hundred tags with nothing
+  // to say they came together. Import the wrong revision and the only way
+  // back was to delete every check on the project.
+  //
+  // The same convention the test script importer already uses, with its own
+  // prefix — see src/lib/check-groups.ts. Only NEW rows get it: a check
+  // being updated by CXA ID keeps whatever source it already had, because
+  // it did not arrive in this file, it was merely edited by it.
+  const newRows = inserts.flatMap((p) =>
+    p.targets.map((t) => ({
+      project_id: project.id,
+      equipment_id: t.equipment_id,
+      subject_type: t.subject_type,
+      subject_id: t.subject_id,
+      level: p.row.level,
+      item: p.row.item,
+      status: p.row.status,
+      notes: p.row.notes,
+      inspection_type: p.row.inspection_type,
+      source_ref: makeRef('file', file.name, p.row.row),
+    }))
+  )
+
+  for (const part of chunk(newRows, 500)) {
+    await supabase.from('checklist_items').insert(part)
+  }
+
+  await recordAudit({
+    projectId: project.id,
+    action: 'imported checklist',
+    entity: 'checklist_item',
+    entityLabel: file.name,
+    newValue: `${newRows.length} added, ${updates.length} updated, ${removeIds.length} removed`,
+    comment:
+      `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
+      (parsed.warnings.length > 0
+        ? ` ${parsed.warnings.length} warnings: ${parsed.warnings.slice(0, 6).map(describe).join(' | ')}`
+        : ''),
+  })
+
+  refresh()
+  for (const id of equipmentIds) refresh(id)
+
+  redirect(
+    `/checklists?import=ok&added=${newRows.length}&updated=${updates.length}&removed=${removeIds.length}` +
+      `&rows=${parsed.rows.length}&warnings=${parsed.warnings.length}`
+  )
+}
+
+// Record the yes/no and the comment for one check. The rule-based reviewer
+// runs on every save, so there is no separate "check" step to remember.
+export async function saveCheck(formData: FormData) {
+  const id = str(formData, 'id')
+  const equipment_id = str(formData, 'equipment_id')
+  const status = str(formData, 'status') ?? 'pending'
+  const notes = str(formData, 'notes')
+  if (!id) return
+
+  await supabase
+    .from('checklist_items')
+    .update({ status, notes, ai_comment: generateCheckComment(status, notes) })
+    .eq('id', id)
+
+  refresh(equipment_id)
+}
+
+export async function deleteCheck(formData: FormData) {
+  const id = str(formData, 'id')
+  const equipment_id = str(formData, 'equipment_id')
+  if (!id) return
+
+  await supabase.from('checklist_items').delete().eq('id', id)
+  refresh(equipment_id)
+}
+
+// Attach evidence to a check without leaving the checklist screen.
+export async function attachEvidence(formData: FormData) {
+  const checklist_item_id = str(formData, 'checklist_item_id')
+  const equipment_id = str(formData, 'equipment_id')
+  const tag_id = str(formData, 'tag_id')
+  const file = formData.get('file')
+
+  if (!checklist_item_id || !(file instanceof File) || file.size === 0) return
+
+  const path = `${checklist_item_id}/${Date.now()}-${safeStorageName(file.name)}`
+  const put = await putFile(file, path)
+  if (!put.ok) {
+    refresh(equipment_id)
+    redirect(`/checklists?${outcomeParams(put.outcome)}`)
+  }
+
+  const review = generateAttachmentReview(file.name, file.size, tag_id)
+  const project = await getCurrentProject()
+
+  const outcome = await recordFile(
+    'attachments',
+    {
+      project_id: project?.id ?? null,
+      checklist_item_id,
+      file_name: file.name,
+      file_path: put.stored.path,
+      file_url: put.stored.url,
+      review_status: review.status,
+      review_note: review.note,
+    },
+    put.stored,
+    tag_id ?? undefined
+  )
+
+  refresh(equipment_id)
+  redirect(`/checklists?${outcomeParams(outcome)}`)
+}
+
+// ── Deleting a whole checklist ────────────────────────────────────────────
+//
+// Two scopes, one action. Deleting one piece of equipment's checks is a
+// routine correction — the wrong template got imported against the wrong tag.
+// Deleting every check on the project is not routine, so it asks for the
+// project's name to be typed out.
+//
+// Neither is reversible and neither pretends otherwise.
+/**
+ * Delete everything that arrived in one import.
+ *
+ * ── Why this is not behind the password ─────────────────────────────────
+ *
+ * Clearing a whole project asks for it, because a project cannot be put
+ * back. An import can: the file it came from is on somebody's machine, and
+ * re-importing it recreates every row. So this asks for a confirmation with
+ * the count and the consequences in it, and not for a password.
+ *
+ * What it does NOT do is guess. A check typed in by hand has no source, so
+ * it belongs to no group and no group delete can reach it — which is the
+ * property that makes this safe to put one click away.
+ */
+export async function deleteCheckGroupAction(formData: FormData) {
+  const key = str(formData, 'group')
+  const project = await getCurrentProject()
+  if (!project) redirect('/checklists?purge=noproject')
+  if (!key) redirect('/checklists?purge=notarget')
+
+  const parsed = parseGroupKey(key)
+  if (!parsed) redirect('/checklists?purge=notarget')
+
+  const label = groupLabel(parsed)
+  const scope: CheckScope = { kind: 'group', groupKey: key, label }
+
+  // Counted before, because afterwards there is nothing left to count and
+  // the confirmation would have to guess.
+  const impact = await checklistImpact(project.id, scope)
+  const result = await deleteChecklist(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'imported checks deleted' : 'imported checks delete failed',
+    entity: 'checklist_item',
+    entityLabel: label,
+    oldValue: `${impact.total} checks`,
+    comment: result.ok
+      ? `Deleted ${result.deleted} checks that came from ${label}. ${impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'}`
+      : result.reason,
+  })
+
+  refresh()
+  revalidatePath('/scripts')
+  revalidatePath('/plan')
+  revalidatePath('/readiness')
+
+  if (!result.ok) redirect(`/checklists?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  redirect(`/checklists?purge=ok&n=${result.deleted}&what=${encodeURIComponent(label)}`)
+}
+
+/**
+ * Delete exactly the checks somebody ticked.
+ *
+ * The ids are posted by a form, so they are not trusted: `checkIdsIn`
+ * intersects them with this project's own checks before anything is
+ * removed. An id from another project is silently not deleted rather than
+ * quietly deleted — the same rule as the project cookie.
+ */
+export async function deletePickedChecksAction(formData: FormData) {
+  const ids = formData.getAll('check_ids').filter((v): v is string => typeof v === 'string')
+  const back = str(formData, 'back') === 'scripts' ? '/scripts' : '/checklists'
+
+  const project = await getCurrentProject()
+  if (!project) redirect(`${back}?purge=noproject`)
+  if (ids.length === 0) redirect(`${back}?purge=nothingticked`)
+
+  const label = `${ids.length} selected check${ids.length === 1 ? '' : 's'}`
+  const scope: CheckScope = { kind: 'picked', ids, label }
+
+  const impact = await checklistImpact(project.id, scope)
+  const result = await deleteChecklist(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'selected checks deleted' : 'selected checks delete failed',
+    entity: 'checklist_item',
+    entityLabel: label,
+    oldValue: `${impact.total} checks`,
+    comment: result.ok
+      ? `Deleted ${result.deleted} of ${ids.length} ticked. ${impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'}`
+      : result.reason,
+  })
+
+  refresh()
+  revalidatePath('/scripts')
+  revalidatePath('/plan')
+  revalidatePath('/readiness')
+
+  if (!result.ok) redirect(`${back}?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  redirect(`${back}?purge=ok&n=${result.deleted}&what=${encodeURIComponent(label)}`)
+}
+
+export async function deleteChecklistAction(formData: FormData) {
+  const scopeKind = str(formData, 'scope')
+  const equipmentId = str(formData, 'equipment_id')
+
+  const project = await getCurrentProject()
+  if (!project) redirect('/checklists?purge=noproject')
+
+  // The same rule as deleting a project: anything that empties a whole
+  // project asks for the password. Clearing one tag's checklist does not —
+  // it is scoped, and re-importing the file puts it back.
+  if (scopeKind === 'project') {
+    const auth = await verifyPassword(str(formData, 'password'))
+    if (!auth.ok) {
+      redirect(`/checklists?purge=badpassword&reason=${encodeURIComponent(auth.reason)}`)
+    }
+  }
+
+  const scope: CheckScope =
+    scopeKind === 'project'
+      ? { kind: 'project', label: project.name }
+      : { kind: 'equipment', equipmentId: equipmentId ?? '', label: str(formData, 'label') ?? 'this equipment' }
+
+  if (scope.kind === 'equipment' && !scope.equipmentId) redirect('/checklists?purge=notarget')
+
+  // Counted before the delete, because afterwards there is nothing left to
+  // count and the confirmation message would have to guess.
+  const impact = await checklistImpact(project.id, scope)
+  const result = await deleteChecklist(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'checklist deleted' : 'checklist delete failed',
+    entity: 'checklist_item',
+    entityLabel: scope.label,
+    oldValue: `${impact.total} checks`,
+    comment: result.ok
+      ? `Deleted ${result.deleted} checks. ${impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'}`
+      : result.reason,
+  })
+
+  refresh(equipmentId)
+  revalidatePath('/plan')
+  revalidatePath('/readiness')
+
+  if (!result.ok) {
+    redirect(`/checklists?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  }
+  redirect(`/checklists?purge=ok&n=${result.deleted}&what=${encodeURIComponent(scope.label)}`)
+}

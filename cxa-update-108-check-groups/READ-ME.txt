@@ -1,0 +1,122 @@
+UPDATE 108 — IMPORTED CHECKS UNDER ONE HEADING, AND DELETABLE
+=============================================================
+
+6 FILES. ONE DRAG. NO SQL.
+
+
+WHAT YOU ASKED FOR
+------------------
+
+All the checks from one import under one heading, deletable at once, and
+deletable by multiple selection. Both screens, both kinds of selection.
+
+
+WHAT WAS WRONG
+--------------
+
+A check already knew where it came from — the test script importer wrote
+SCRIPT:<sheet>:<line> into its source. Two things were missing.
+
+The PLAIN checklist importer wrote nothing at all. So a file of two hundred
+checks scattered under two hundred tags with nothing to say they arrived
+together. Import the wrong revision and the only way back was to delete
+every check on the project and start again.
+
+And nothing anywhere could delete a batch. The choices were one tag's
+checklist, or the whole project behind a password. Nothing in between.
+
+
+WHAT YOU GET
+------------
+
+CHECKLISTS SCREEN
+
+  A new card near the top: "Imported checklists and test scripts".
+
+  One row per import, showing the file or sheet name, whether it was a test
+  script or a checklist file, how many checks it brought, how many are
+  answered, and which levels. Each has its own "Delete these 184 checks"
+  button that opens a confirmation saying exactly what goes.
+
+  It also tells you how many checks were TYPED IN rather than imported.
+  Those belong to no group, so no group button can ever reach them.
+
+  Below that, a "Delete ticked checks" button, and a tick box beside every
+  check on the page. Tick any number and press it.
+
+TEST SCRIPTS SCREEN (open any script)
+
+  "Delete ticked lines" plus a tick box on every line of the procedure —
+  for removing a handful that do not apply.
+
+  And "Delete this whole script — all N lines", for the wrong revision.
+
+
+THREE THINGS BUILT INTO IT
+--------------------------
+
+1. A HAND-TYPED CHECK IS IN NO GROUP, EVER.
+
+   That is what makes a one-click delete of 184 records safe to offer. A
+   check with no import source belongs to nothing and cannot be swept up.
+
+2. TWO IMPORTS ARE NEVER CONFUSED.
+
+   A sheet called "SUDB: MV SWGR" has a colon in its name — EPCs send those.
+   A careless reading would make it the same group as a sheet called "SUDB",
+   and deleting one would delete the other. The name is read as everything
+   between the first and last colon, and the group identity is encoded, so
+   "A:B" and "A" can never collide.
+
+3. TICKED ROWS ARE CHECKED AGAINST YOUR PROJECT.
+
+   A form posts whatever a browser sends. Every ticked id is intersected
+   with this project's own checks before anything is removed, so an id from
+   another project is not deletable by asking for it.
+
+Also fixed while in there: the delete now goes in batches of 200. Deleting
+one tag's checklist never came near the limit; deleting a two-thousand-line
+test script would have put two thousand ids into one request and failed with
+an error that reads like a server fault.
+
+83 new assertions. Every fault planted back and watched go red. Whole suite:
+3,961 passed, 0 failed.
+
+
+ONE THING TO KNOW
+-----------------
+
+Checks already in your database were imported BEFORE this update, so the
+plain-checklist ones carry no source and will show under "typed in rather
+than imported". Test script checks are unaffected — they always recorded
+their sheet and will appear as groups straight away.
+
+Anything you import from now on is grouped. If you want your existing
+checklist imports grouped too, delete them the old way and import the same
+file again.
+
+
+HOW TO UPLOAD — ONE DRAG
+========================
+
+   1. Open:  https://github.com/abdulnoonari-code/cxa/upload/main
+
+   2. Drag the folder called  src  onto the page. The whole folder.
+
+   3. It should list 6 files:
+         src/app/checklists/actions.ts
+         src/app/checklists/page.tsx
+         src/app/scripts/[sheet]/page.tsx
+         src/data/check-groups.ts
+         src/data/purge.ts
+         src/lib/check-groups.ts
+
+   4. Commit changes.
+
+
+AFTER IT DEPLOYS
+----------------
+
+Import a small checklist file — two or three rows is enough. It should
+appear immediately as its own heading on the Checklists screen with its own
+Delete button. Press it and the rows go, and nothing else does.

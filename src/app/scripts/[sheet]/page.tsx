@@ -9,6 +9,8 @@ import { statusBadgeClass } from '@/lib/checklist'
 import { LevelBadge } from '@/components/LevelBadge'
 import CheckDetail from '@/components/CheckDetail'
 import { answerLine } from '@/app/scripts/actions'
+import { deleteCheckGroupAction, deletePickedChecksAction } from '@/app/checklists/actions'
+import { groupKey } from '@/lib/check-groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -93,6 +95,43 @@ export default async function ScriptPage({ params }: { params: Promise<{ sheet: 
         </div>
       </div>
 
+      {/* ── Removing lines, and removing the script ─────────────────────
+          The tick boxes below belong to this form and not to the row they
+          sit in: every row already holds its own answer form, and HTML forms
+          cannot nest. form="pickchecks" is what that attribute exists for. */}
+      <form action={deletePickedChecksAction} id="pickchecks" className="card" style={{ marginTop: 16 }}>
+        <input type="hidden" name="back" value="scripts" />
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <button type="submit" className="btn btn-danger btn-sm">
+            Delete ticked lines
+          </button>
+          <span className="text-secondary" style={{ fontSize: 12.5, maxWidth: '76ch' }}>
+            Tick any line below and press this. Only the ones you tick go, and only ones on this project.
+          </span>
+        </div>
+      </form>
+
+      <details className="card" style={{ marginTop: 12, borderLeft: '4px solid var(--color-danger)' }}>
+        <summary className="btn-link" style={{ cursor: 'pointer', fontSize: 13 }}>
+          Delete this whole script &mdash; all {script.total} lines
+        </summary>
+        <form action={deleteCheckGroupAction} style={{ marginTop: 10, maxWidth: 520 }}>
+          <input type="hidden" name="group" value={groupKey('script', script.sheet)} />
+          <p style={{ margin: 0, fontSize: 13 }}>
+            Removes the <strong>{script.total}</strong> checks that came from <strong>{script.sheet}</strong>,
+            with their evidence files and sign-offs. Punch items raised from them survive and stop naming a
+            source. Re-importing the sheet puts every line back.
+          </p>
+          <p className="text-secondary" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
+            Use this when the wrong revision was imported. Nothing typed in by hand is part of a script, so
+            nothing typed in can be removed by this button.
+          </p>
+          <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 10 }}>
+            Delete {script.total} line{script.total === 1 ? '' : 's'}
+          </button>
+        </form>
+      </details>
+
       {script.sections.map((section) => (
         <div key={section.path} style={{ marginTop: 22 }}>
           {section.path && (
@@ -124,7 +163,15 @@ export default async function ScriptPage({ params }: { params: Promise<{ sheet: 
                 }}
               >
                 <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 10, minWidth: 0 }}>
+                    <input
+                      type="checkbox"
+                      name="check_ids"
+                      value={c.id}
+                      form="pickchecks"
+                      aria-label={`Select line ${c.serial ?? ''} for deletion`}
+                      style={{ marginTop: 4, width: 16, height: 16, flex: 'none', cursor: 'pointer' }}
+                    />
                     <span
                       className="mono text-secondary"
                       style={{ fontSize: 12, minWidth: 34, paddingTop: 2, fontWeight: 600 }}

@@ -13,6 +13,7 @@ import { getCurrentProject } from '@/lib/project'
 import { recordAudit } from '@/lib/audit'
 import { loadSubjectIndex } from '@/data/subjects'
 import { buildTextIndex, findSubjectByText, subjectLabel, type Subject } from '@/lib/subjects'
+import { makeRef, parseGroupKey, groupLabel } from '@/lib/check-groups'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -215,6 +216,17 @@ export async function importProjectChecklist(formData: FormData) {
       .eq('id', p.row.id as string)
   }
 
+  // ── Every new check remembers which file it arrived in ─────────────────
+  //
+  // It did not before, and that is why a checklist import could not be
+  // undone: two hundred checks scattered under two hundred tags with nothing
+  // to say they came together. Import the wrong revision and the only way
+  // back was to delete every check on the project.
+  //
+  // The same convention the test script importer already uses, with its own
+  // prefix — see src/lib/check-groups.ts. Only NEW rows get it: a check
+  // being updated by CXA ID keeps whatever source it already had, because
+  // it did not arrive in this file, it was merely edited by it.
   const newRows = inserts.flatMap((p) =>
     p.targets.map((t) => ({
       project_id: project.id,
@@ -226,6 +238,7 @@ export async function importProjectChecklist(formData: FormData) {
       status: p.row.status,
       notes: p.row.notes,
       inspection_type: p.row.inspection_type,
+      source_ref: makeRef('file', file.name, p.row.row),
     }))
   )
 
@@ -327,6 +340,99 @@ export async function attachEvidence(formData: FormData) {
 // project's name to be typed out.
 //
 // Neither is reversible and neither pretends otherwise.
+/**
+ * Delete everything that arrived in one import.
+ *
+ * ── Why this is not behind the password ─────────────────────────────────
+ *
+ * Clearing a whole project asks for it, because a project cannot be put
+ * back. An import can: the file it came from is on somebody's machine, and
+ * re-importing it recreates every row. So this asks for a confirmation with
+ * the count and the consequences in it, and not for a password.
+ *
+ * What it does NOT do is guess. A check typed in by hand has no source, so
+ * it belongs to no group and no group delete can reach it — which is the
+ * property that makes this safe to put one click away.
+ */
+export async function deleteCheckGroupAction(formData: FormData) {
+  const key = str(formData, 'group')
+  const project = await getCurrentProject()
+  if (!project) redirect('/checklists?purge=noproject')
+  if (!key) redirect('/checklists?purge=notarget')
+
+  const parsed = parseGroupKey(key)
+  if (!parsed) redirect('/checklists?purge=notarget')
+
+  const label = groupLabel(parsed)
+  const scope: CheckScope = { kind: 'group', groupKey: key, label }
+
+  // Counted before, because afterwards there is nothing left to count and
+  // the confirmation would have to guess.
+  const impact = await checklistImpact(project.id, scope)
+  const result = await deleteChecklist(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'imported checks deleted' : 'imported checks delete failed',
+    entity: 'checklist_item',
+    entityLabel: label,
+    oldValue: `${impact.total} checks`,
+    comment: result.ok
+      ? `Deleted ${result.deleted} checks that came from ${label}. ${impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'}`
+      : result.reason,
+  })
+
+  refresh()
+  revalidatePath('/scripts')
+  revalidatePath('/plan')
+  revalidatePath('/readiness')
+
+  if (!result.ok) redirect(`/checklists?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  redirect(`/checklists?purge=ok&n=${result.deleted}&what=${encodeURIComponent(label)}`)
+}
+
+/**
+ * Delete exactly the checks somebody ticked.
+ *
+ * The ids are posted by a form, so they are not trusted: `checkIdsIn`
+ * intersects them with this project's own checks before anything is
+ * removed. An id from another project is silently not deleted rather than
+ * quietly deleted — the same rule as the project cookie.
+ */
+export async function deletePickedChecksAction(formData: FormData) {
+  const ids = formData.getAll('check_ids').filter((v): v is string => typeof v === 'string')
+  const back = str(formData, 'back') === 'scripts' ? '/scripts' : '/checklists'
+
+  const project = await getCurrentProject()
+  if (!project) redirect(`${back}?purge=noproject`)
+  if (ids.length === 0) redirect(`${back}?purge=nothingticked`)
+
+  const label = `${ids.length} selected check${ids.length === 1 ? '' : 's'}`
+  const scope: CheckScope = { kind: 'picked', ids, label }
+
+  const impact = await checklistImpact(project.id, scope)
+  const result = await deleteChecklist(project.id, scope)
+
+  await recordAudit({
+    projectId: project.id,
+    action: result.ok ? 'selected checks deleted' : 'selected checks delete failed',
+    entity: 'checklist_item',
+    entityLabel: label,
+    oldValue: `${impact.total} checks`,
+    comment: result.ok
+      ? `Deleted ${result.deleted} of ${ids.length} ticked. ${impact.breaks.map((b) => `${b.count} ${b.label} affected`).join('; ') || 'Nothing else referred to them.'}`
+      : result.reason,
+  })
+
+  refresh()
+  revalidatePath('/scripts')
+  revalidatePath('/plan')
+  revalidatePath('/readiness')
+
+  if (!result.ok) redirect(`${back}?purge=failed&reason=${encodeURIComponent(result.reason.slice(0, 200))}`)
+  redirect(`${back}?purge=ok&n=${result.deleted}&what=${encodeURIComponent(label)}`)
+}
+
 export async function deleteChecklistAction(formData: FormData) {
   const scopeKind = str(formData, 'scope')
   const equipmentId = str(formData, 'equipment_id')

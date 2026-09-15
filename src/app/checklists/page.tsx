@@ -4,7 +4,12 @@ import { LevelBadge } from '@/components/LevelBadge'
 import { LEVELS, STATUSES, statusBadgeClass, reviewBadgeClass, reviewLabel } from '@/lib/checklist'
 import { addChecklistItem } from '@/app/equipment/[id]/checklist/actions'
 import UploadResult from '@/components/UploadResult'
-import { importProjectChecklist, saveCheck, deleteCheck, attachEvidence, deleteChecklistAction } from './actions'
+import {
+  importProjectChecklist, saveCheck, deleteCheck, attachEvidence,
+  deleteChecklistAction, deleteCheckGroupAction, deletePickedChecksAction,
+} from './actions'
+import { loadCheckGroups } from '@/data/check-groups'
+import { levelCode } from '@/lib/levels'
 import ScriptImport from '@/components/ScriptImport'
 import CheckDetail from '@/components/CheckDetail'
 import { loadProjectLinkContext, contextFor } from '@/data/check-links'
@@ -75,6 +80,7 @@ export default async function ChecklistsPage({
   const allParams = await searchParams
 
   const project = await getCurrentProject()
+  const imports = await loadCheckGroups(project?.id ?? null)
 
   // Page over equipment, then fetch only that page's checks. A real project
   // has thousands of tags and tens of thousands of checks; loading them all to
@@ -394,6 +400,95 @@ export default async function ChecklistsPage({
         </form>
       </div>
 
+      {/* ── What came from where ────────────────────────────────────────
+          A check knew its source and nothing ever showed it. So a file
+          imported at the wrong revision scattered two hundred rows under two
+          hundred tags, and the only way back was to delete every check on
+          the project. Each import is now one heading with one button. */}
+      {imports.groups.length > 0 && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2 className="section-title" style={{ marginBottom: 4 }}>
+            Imported checklists and test scripts
+          </h2>
+          <p className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 14px', maxWidth: '84ch' }}>
+            Every check that arrived in a file, gathered under the file it arrived in. Deleting one removes only
+            the checks that file brought. Nothing typed in by hand belongs to a group, so nothing typed in can be
+            swept up by one of these buttons.
+            {imports.typedIn > 0 && (
+              <>
+                {' '}
+                <strong>{imports.typedIn}</strong> check{imports.typedIn === 1 ? ' was' : 's were'} typed in
+                rather than imported and {imports.typedIn === 1 ? 'is' : 'are'} not listed here.
+              </>
+            )}
+          </p>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            {imports.groups.map((g) => (
+              <div
+                key={g.key}
+                style={{
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 9,
+                  padding: '12px 14px',
+                  display: 'flex',
+                  gap: 14,
+                  flexWrap: 'wrap',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14.5, wordBreak: 'break-word' }}>{g.name}</div>
+                  <div className="text-secondary" style={{ fontSize: 12.5, marginTop: 3 }}>
+                    {g.kind === 'script' ? 'Test script' : 'Checklist file'} &middot; {g.total} check
+                    {g.total === 1 ? '' : 's'} &middot; {g.answered} answered
+                    {g.levels.length > 0 &&
+                      ' \u00b7 ' + g.levels.map((l) => levelCode(l)).join(', ')}
+                  </div>
+                </div>
+
+                <details>
+                  <summary className="btn-link" style={{ cursor: 'pointer', fontSize: 12.5 }}>
+                    Delete these {g.total} checks
+                  </summary>
+                  <form action={deleteCheckGroupAction} style={{ marginTop: 8, maxWidth: 460 }}>
+                    <input type="hidden" name="group" value={g.key} />
+                    <p style={{ margin: 0, fontSize: 12.5 }}>
+                      Removes the <strong>{g.total}</strong> checks that came from <strong>{g.name}</strong>, with
+                      their evidence files and sign-offs. Punch items raised from them survive and stop naming a
+                      source. Re-importing the file puts the checks back.
+                    </p>
+                    <button type="submit" className="btn btn-danger btn-sm" style={{ marginTop: 10 }}>
+                      Delete {g.total} check{g.total === 1 ? '' : 's'}
+                    </button>
+                  </form>
+                </details>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* The form the row tick boxes belong to.
+          Empty on purpose, and outside every row: a check row already holds
+          its own Save/Delete form and HTML forms cannot nest. Each tick box
+          carries form="pickchecks" instead, which is exactly what that
+          attribute is for. */}
+      {totalChecks > 0 && (
+        <form action={deletePickedChecksAction} id="pickchecks" className="card" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <button type="submit" className="btn btn-danger btn-sm">
+              Delete ticked checks
+            </button>
+            <span className="text-secondary" style={{ fontSize: 12.5, maxWidth: '78ch' }}>
+              Tick the box beside any check below and press this. Only the ones you tick are removed, and only
+              ones on this project &mdash; whatever a browser sends.
+            </span>
+          </div>
+        </form>
+      )}
+
       {groups.length > 0 && totalChecks > 0 && (
         <details className="card" style={{ marginTop: 20, borderLeft: '4px solid var(--color-danger)' }}>
           <summary className="section-title" style={{ cursor: 'pointer', marginBottom: 0 }}>
@@ -512,11 +607,25 @@ export default async function ChecklistsPage({
                       marginBottom: 12,
                     }}
                   >
-                    <div>
-                      <div style={{ marginBottom: 5 }}>
-                        <LevelBadge level={it.level} format="full" />
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', minWidth: 0 }}>
+                      {/* form="pickchecks" — the tick box sits here in the
+                          markup but belongs to the Delete-ticked form above,
+                          because this row already has its own form and forms
+                          cannot nest. */}
+                      <input
+                        type="checkbox"
+                        name="check_ids"
+                        value={it.id}
+                        form="pickchecks"
+                        aria-label={`Select this check for deletion: ${it.item}`}
+                        style={{ marginTop: 4, width: 16, height: 16, flex: 'none', cursor: 'pointer' }}
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ marginBottom: 5 }}>
+                          <LevelBadge level={it.level} format="full" />
+                        </div>
+                        <div style={{ fontWeight: 500, fontSize: 14.5 }}>{it.item}</div>
                       </div>
-                      <div style={{ fontWeight: 500, fontSize: 14.5 }}>{it.item}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
                       <span className={reviewBadgeClass(it.review_state)}>{reviewLabel(it.review_state)}</span>

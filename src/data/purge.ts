@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { PROJECT_TABLES, CHECK_REFERENCES, OBLIGATION_REFERENCES, impactTotal, type Impact } from '@/lib/purge'
+import { inGroup, pickedIds } from '@/lib/check-groups'
 
 /**
  * How many rows match — or `null` when the question could not be answered.
@@ -47,13 +48,50 @@ async function idsFor(table: string, projectId: string): Promise<string[]> {
   return ((data ?? []) as { id: string }[]).map((r) => r.id)
 }
 
+/** Split a long list of ids into request-sized pieces. */
+function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
+  return out
+}
+
 // ── A checklist ───────────────────────────────────────────────────────────
 
 export type CheckScope =
   | { kind: 'equipment'; equipmentId: string; label: string }
   | { kind: 'project'; label: string }
+  /** Everything that arrived in one import. */
+  | { kind: 'group'; groupKey: string; label: string }
+  /** Exactly the rows somebody ticked. */
+  | { kind: 'picked'; ids: string[]; label: string }
 
 async function checkIdsIn(projectId: string, scope: CheckScope): Promise<string[]> {
+  // A group is matched by PARSING source_ref in code, not by a LIKE pattern.
+  // A sheet called "100% load" or "SUDB_MV" would need escaping in a LIKE,
+  // and a delete that quietly matches the wrong rows because of an unescaped
+  // wildcard is the worst bug this file could have.
+  if (scope.kind === 'group') {
+    const { data, error } = await supabase
+      .from('checklist_items')
+      .select('id, source_ref')
+      .eq('project_id', projectId)
+      .not('source_ref', 'is', null)
+    if (error) return []
+    return ((data ?? []) as { id: string; source_ref: string | null }[])
+      .filter((r) => inGroup(r.source_ref, scope.groupKey))
+      .map((r) => r.id)
+  }
+
+  // Ticked rows are checked against this project's own checks before
+  // anything is deleted. A form posts whatever a browser sent it, and an id
+  // belonging to another project must not be deletable by asking nicely.
+  if (scope.kind === 'picked') {
+    if (scope.ids.length === 0) return []
+    const { data, error } = await supabase.from('checklist_items').select('id').eq('project_id', projectId)
+    if (error) return []
+    return pickedIds(scope.ids, ((data ?? []) as { id: string }[]).map((r) => r.id))
+  }
+
   let q = supabase.from('checklist_items').select('id').eq('project_id', projectId)
   if (scope.kind === 'equipment') q = q.eq('equipment_id', scope.equipmentId)
   const { data, error } = await q
@@ -91,16 +129,27 @@ export async function deleteChecklist(projectId: string, scope: CheckScope): Pro
   const ids = await checkIdsIn(projectId, scope)
   if (ids.length === 0) return { ok: true, deleted: 0 }
 
-  // Links that exist only to point at a check: remove them.
-  await supabase.from('requirement_verifications').delete().in('activity_id', ids).eq('activity_kind', 'checklist_item')
-  await supabase.from('signatures').delete().in('entity_id', ids).eq('entity', 'checklist_item')
-  await supabase.from('attachments').delete().in('checklist_item_id', ids)
+  // ── Why this is chunked ────────────────────────────────────────────────
+  //
+  // Every `.in()` below becomes a list of uuids in a URL. Two thousand of
+  // them is about eighty kilobytes, and the request is rejected long before
+  // that — with an error that reads like a server fault rather than "your
+  // list was too long". Deleting one tag's checklist never came close.
+  // Deleting a whole imported test script does, and that is now a button.
+  for (const part of chunk(ids, 200)) {
+    // Links that exist only to point at a check: remove them.
+    await supabase.from('requirement_verifications').delete().in('activity_id', part).eq('activity_kind', 'checklist_item')
+    await supabase.from('signatures').delete().in('entity_id', part).eq('entity', 'checklist_item')
+    await supabase.from('attachments').delete().in('checklist_item_id', part)
 
-  // Records with a life of their own: keep them, drop the reference.
-  await supabase.from('issues').update({ checklist_item_id: null }).in('checklist_item_id', ids)
+    // Records with a life of their own: keep them, drop the reference.
+    await supabase.from('issues').update({ checklist_item_id: null }).in('checklist_item_id', part)
 
-  const { error } = await supabase.from('checklist_items').delete().in('id', ids)
-  if (error) return { ok: false, reason: error.message }
+    const { error } = await supabase.from('checklist_items').delete().in('id', part)
+    // Stops at the first refusal and reports how far it got, rather than
+    // carrying on and reporting a total that was never deleted.
+    if (error) return { ok: false, reason: error.message }
+  }
 
   return { ok: true, deleted: ids.length }
 }

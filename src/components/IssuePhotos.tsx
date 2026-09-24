@@ -10,9 +10,8 @@ import {
   summarise,
   canCompare,
   isConfidence,
-  MAX_BYTES,
-  ACCEPTED_TYPES,
 } from '@/lib/photo'
+import PhotoInput from '@/components/PhotoInput'
 import type { IssuePhoto } from '@/data/photos'
 import { viewUrl } from '@/lib/file-url'
 
@@ -132,14 +131,9 @@ export function IssuePhotos({
             </option>
           ))}
         </select>
-        <input
-          type="file"
-          name="file"
-          required
-          accept={ACCEPTED_TYPES.join(',')}
-          className="io-file"
-          style={{ maxWidth: 300, fontSize: 12.5 }}
-        />
+        {/* Shrunk in the browser before it is sent — a form submission over
+            4 MB never reaches the server at all. See components/PhotoInput. */}
+        <PhotoInput name="file" required className="io-file" />
         <input
           name="caption"
           placeholder="What the photo shows (optional)"
@@ -150,7 +144,7 @@ export function IssuePhotos({
           Attach photo
         </button>
         <span className="text-secondary" style={{ fontSize: 11.5 }}>
-          JPEG, PNG or WebP, up to {MAX_BYTES / 1024 / 1024} MB
+          JPEG, PNG or WebP. A large photograph is made smaller before it is sent.
         </span>
       </form>
 

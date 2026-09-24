@@ -19,7 +19,7 @@ import {
   ageInDays,
   statusLabel,
 } from '@/lib/punchlist'
-import { ACCEPTED_TYPES, MAX_BYTES } from '@/lib/photo'
+import PhotoInput from '@/components/PhotoInput'
 import { createIssue, deleteIssue, importPunchList } from './actions'
 import RaiseFromChecks from '@/components/RaiseFromChecks'
 
@@ -448,11 +448,15 @@ export default async function IssuesPage({
               steps too many. */}
           <label className="field">
             Photo of the defect
-            <input type="file" name="photo" accept={ACCEPTED_TYPES.join(',')} className="io-file" />
-            <span className="text-secondary" style={{ fontSize: 11.5, marginTop: 3 }}>
-              Optional. JPEG, PNG or WebP, up to {MAX_BYTES / 1024 / 1024} MB. More can be added afterwards, including
-              the after-photo.
-            </span>
+            {/* Shrunk in the browser before it is sent. A form submission
+                over 4 MB never reaches the server, and a photograph straight
+                off a camera is usually bigger than that — which is why this
+                silently failed before. */}
+            <PhotoInput
+              name="photo"
+              className="io-file"
+              hint={`Optional. JPEG, PNG or WebP. A large photo is made smaller before sending. More can be added afterwards, including the after-photo.`}
+            />
           </label>
           <label className="field">
             What the photo shows

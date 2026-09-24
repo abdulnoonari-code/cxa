@@ -10,7 +10,7 @@ import { CATEGORIES, SEVERITIES, isOpen, daysOverdue, statusLabel } from '@/lib/
 import { workOrder, remedyFor } from '@/lib/remedy'
 import { dueWording } from '@/lib/defect-sheet'
 import { viewUrl } from '@/lib/file-url'
-import { ACCEPTED_TYPES } from '@/lib/photo'
+import PhotoInput from '@/components/PhotoInput'
 import { createIssue, updateIssue } from '../issues/actions'
 import { uploadIssuePhoto } from '../issues/photo-actions'
 
@@ -190,18 +190,13 @@ export default async function SitePage({
 
           <label className="phone-field">
             <span className="phone-label">Photograph</span>
-            {/* capture="environment" is the point of this screen: it opens the
-                back camera rather than a file picker. A phone that does not
-                support it falls back to the picker, which is what the desktop
-                screen does anyway — so nothing is lost anywhere. */}
-            <input
-              type="file"
-              name="photo"
-              accept={ACCEPTED_TYPES.join(',')}
-              capture="environment"
-              className="phone-file"
-            />
-            <span className="phone-hint">Take it now. You can add the after-photo when it is fixed.</span>
+            {/* PhotoInput, not a bare file input, for two reasons and the
+                second one is why raising a defect from a phone did not work
+                at all: it opens the back camera rather than a file picker,
+                and it SHRINKS the photograph in the browser before sending.
+                A form submission over 4 MB never reaches the server, and
+                every photograph off a phone camera is bigger than that. */}
+            <PhotoInput name="photo" hint="Take it now. You can add the after-photo when it is fixed." />
           </label>
 
           <label className="phone-field">
@@ -408,14 +403,7 @@ export default async function SitePage({
                   <input type="radio" name="kind" value="fix" />
                   <span>After the fix</span>
                 </label>
-                <input
-                  type="file"
-                  name="file"
-                  accept={ACCEPTED_TYPES.join(',')}
-                  capture="environment"
-                  required
-                  className="phone-file"
-                />
+                <PhotoInput name="file" required />
                 <input name="caption" placeholder="What it shows" className="input phone-input" />
                 <button type="submit" className="btn btn-secondary phone-btn">
                   Attach

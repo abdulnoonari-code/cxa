@@ -47,8 +47,29 @@ export function kindBadgeClass(value: string | null | undefined): string {
 /** What a browser and the vision API will both accept. */
 export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
 
-/** 5 MB. Bigger than any phone photo worth keeping, small enough to send. */
-export const MAX_BYTES = 5 * 1024 * 1024
+/**
+ * The most a photograph may weigh when it reaches the server.
+ *
+ * 4 MB, and the number is not arbitrary — it is the largest request the
+ * platform will carry. It was 5 MB, which was a limit this application could
+ * not actually honour: Next.js discarded any form submission over 1 MB before
+ * this function ever ran, so a 3 MB photograph was refused by the framework
+ * with an error page while this file was still saying 5 MB was fine.
+ *
+ * Both halves of that are now fixed — the cap is raised in next.config.ts and
+ * the browser shrinks the photograph before sending it (components/
+ * PhotoInput.tsx, which turns an 8 MB camera shot into about 320 KB). This
+ * number is what is left: the honest ceiling for a photograph that could not
+ * be shrunk, such as a HEIC.
+ *
+ * 3.5 rather than 4 because the request carries more than the photograph —
+ * multipart boundaries, part headers, and every other field on the form. A
+ * limit set to exactly what the wire allows means a file at the limit is
+ * refused BY THE FRAMEWORK, with an error page, instead of by the sentence
+ * below, which tells somebody what to do about it. The half-megabyte is what
+ * keeps the good message reachable.
+ */
+export const MAX_BYTES = 3.5 * 1024 * 1024
 
 export type FileProblem = { reason: string; hint: string }
 

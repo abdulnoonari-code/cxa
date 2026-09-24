@@ -369,6 +369,19 @@ export const MANUAL_GROUPS: ManualGroup[] = [
             text: 'Nothing is stored on the phone, on purpose. There is no queue holding a defect until the signal comes back — a queue like that loses work when a browser clears its storage, and nobody finds out for weeks. A form that cannot reach the site says so when you press the button, while you can still remember what you saw and walk twenty metres for a bar of signal.',
           },
           { label: 'Note', text: 'It is the same records as the desktop, through the same server actions. There is no second copy and no state in which the two disagree. “Work done” marks an item ready for retest — accepting it is the commissioning agent’s decision and stays on the item’s own screen.' },
+          {
+            label: 'No signal',
+            text: 'It works with none at all. Open the app from its icon in a basement and you get the screen, the tag list from your last visit, and the form. A defect raised there is kept ON THE PHONE and sent by itself when the signal returns — Android can even do it with the app closed.',
+          },
+          {
+            label: 'Drafts',
+            text: 'A defect waiting on the phone shows as “Draft 2 — number given when sent”, never a punch number. Punch numbers are handed out by the site so that two people cannot be given the same one, and a phone with no signal cannot ask. It gets its real number the moment it lands.',
+          },
+          {
+            label: 'The count',
+            text: 'Whenever anything is being carried, a banner says how many and how old the oldest is, and it does not go away until the site has confirmed each one individually. Nothing is ever dropped from the phone on a guess: a server that cannot be reached means try again, for as long as it takes; a server that says no keeps the item and shows the reason.',
+          },
+          { label: 'Needs first', text: 'Database step part 43, or a defect sent over a bad signal can arrive twice.' },
         ],
       },
       {

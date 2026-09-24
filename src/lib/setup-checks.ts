@@ -197,6 +197,14 @@ export const SETUP_STEPS: SetupStep[] = [
       'Whether a punch item can say what to DO, and not only what is wrong. Without it the only remedy anywhere in this database is the one a language model guessed from a photograph — so a defect report issued to a contractor either carries a machine’s suggestion over your name, or carries nothing, and forty items come back as forty questions. With it, an action is written by a person, signed with their name and the date, and printed as an agreed instruction; an AI suggestion stays visibly a suggestion beside it.',
     probe: { table: 'issues', columns: ['required_action'] },
   },
+  {
+    id: 'part43',
+    source: 'week5-part43-raised-offline.sql',
+    title: 'A defect raised with no signal lands once',
+    matters:
+      'Whether a defect queued on a phone in a basement can arrive twice. Without it, a phone that sends a defect over one bar of signal and never hears the reply — which is the normal way a marginal connection fails, not a rare one — sends it again, and the punch list ends up with two numbers for one loose gland, both carrying the same photograph. With it, an id made on the phone before it ever had signal is refused by the database the second time, and the phone reads that refusal as confirmation and stops carrying it. Raising defects offline works without this file; landing them exactly once does not.',
+    probe: { table: 'issues', columns: ['client_ref'] },
+  },
 ]
 
 /**

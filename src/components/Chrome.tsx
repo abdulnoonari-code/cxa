@@ -23,7 +23,7 @@ const BARE = new Set(['/', '/projects', '/login', '/signup', '/about'])
  * while holding a torch. On Site has one link out of it instead — back to the
  * full punch list — and that is deliberately the only navigation on it.
  */
-const PHONE = new Set(['/site'])
+const PHONE = new Set(['/site', '/site/offline'])
 
 export function Chrome({
   sidebar,

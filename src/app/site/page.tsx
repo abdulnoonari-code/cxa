@@ -11,6 +11,7 @@ import { workOrder, remedyFor } from '@/lib/remedy'
 import { dueWording } from '@/lib/defect-sheet'
 import { viewUrl } from '@/lib/file-url'
 import PhotoInput from '@/components/PhotoInput'
+import QueueBanner from '@/components/QueueBanner'
 import { createIssue, updateIssue } from '../issues/actions'
 import { uploadIssuePhoto } from '../issues/photo-actions'
 
@@ -140,6 +141,13 @@ export default async function SitePage({
           Full punch list
         </Link>
       </div>
+
+      {/* Anything still on this phone, plus the two jobs that have to happen
+          on a screen somebody actually visits: registering the service worker
+          so the app can open with no signal next time, and bringing the tag
+          list down so there is something to raise a defect against when it
+          does. `prime` is what makes this the screen that does the second. */}
+      <QueueBanner prime />
 
       {/* ── What just happened ─────────────────────────────────────────── */}
       {sp.raised && (

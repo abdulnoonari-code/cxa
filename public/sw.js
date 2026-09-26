@@ -1,4 +1,4 @@
-// CxSentinel — the bit that makes the phone screen open with no signal.
+// CxNivora — the bit that makes the phone screen open with no signal.
 //
 // ── What a service worker is, in one paragraph ─────────────────────────
 //
@@ -115,7 +115,7 @@ self.addEventListener('fetch', (event) => {
             '<!doctype html><meta charset="utf-8"><title>No signal</title>' +
               '<body style="font:16px system-ui;padding:24px;line-height:1.5">' +
               '<h1 style="font-size:20px">No signal, and nothing saved on this phone yet</h1>' +
-              '<p>CxSentinel needs to be opened once with a signal before it can work without one. ' +
+              '<p>CxNivora needs to be opened once with a signal before it can work without one. ' +
               'Open it again when you have a bar and it will be ready next time.</p>',
             { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
           )

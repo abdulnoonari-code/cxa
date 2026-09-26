@@ -60,6 +60,11 @@ const QUALITY = 0.82
  */
 const WIRE_LIMIT = MAX_BYTES - 200 * 1024
 
+/** "3 photographs, 780 KB" — the count first, because that is what changed. */
+function count(n: number, bytes: number): string {
+  return `${n} photograph${n === 1 ? '' : 's'}, ${mb(bytes)}`
+}
+
 function mb(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`
 }
@@ -135,12 +140,21 @@ export default function PhotoInput({
   required = false,
   className = 'phone-file',
   hint,
+  multiple = false,
 }: {
   name: string
   required?: boolean
   className?: string
   /** A line under the field, shown until a photograph is chosen. */
   hint?: string
+  /**
+   * Several photographs of the same defect.
+   *
+   * A loose gland wants three: the gland, the panel it is in so somebody can
+   * find it, and the termination once it is re-made. One photograph of a
+   * gland is a photograph of a gland; it does not say which of forty.
+   */
+  multiple?: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
   const [said, setSaid] = useState<string | null>(null)
@@ -153,58 +167,85 @@ export default function PhotoInput({
     input.setCustomValidity('')
     setRefused(false)
 
-    const file = input.files?.[0]
-    if (!file) {
+    const chosenFiles = [...(input.files ?? [])]
+    if (chosenFiles.length === 0) {
       setSaid(null)
       return
     }
 
-    // Already small. Do not re-encode it — that costs quality for nothing.
-    if (file.size <= LEAVE_ALONE) {
-      setSaid(`${mb(file.size)} — sent as it is.`)
+    const before = chosenFiles.reduce((sum, f) => sum + f.size, 0)
+    const heavy = chosenFiles.filter((f) => f.size > LEAVE_ALONE)
+
+    if (heavy.length === 0) {
+      setSaid(count(chosenFiles.length, before) + ' — sent as they are.')
       return
     }
 
-    setSaid(`${mb(file.size)} — making it smaller…`)
-    // Pressing Raise while this is still running would send the original and
+    setSaid(`${count(chosenFiles.length, before)} — making ${chosenFiles.length === 1 ? 'it' : 'them'} smaller…`)
+    // Pressing Raise while this is still running would send the originals and
     // fail exactly as before. It takes a fraction of a second, but a fraction
     // of a second is enough for somebody whose thumb is already moving — so
     // the browser is told the field is not valid yet, and refuses to submit.
-    input.setCustomValidity('The photograph is still being prepared. Try again in a moment.')
+    input.setCustomValidity('The photographs are still being prepared. Try again in a moment.')
 
-    const small = await shrink(file)
-    input.setCustomValidity('')
-
-    if (small) {
-      try {
-        const box = new DataTransfer()
-        box.items.add(small)
-        input.files = box.files
-        setSaid(`Reduced from ${mb(file.size)} to ${mb(small.size)} before sending. Nothing you can see is lost.`)
-        return
-      } catch {
-        // A browser that will not let a script replace the chosen file. Fall
-        // through and treat it as un-shrinkable, which it now is.
+    // One at a time rather than all at once. A phone asked to decode five
+    // twelve-megapixel photographs in parallel runs out of memory and the tab
+    // is killed — which looks exactly like the app crashing, and takes the
+    // typed-out defect with it.
+    const out: File[] = []
+    for (const file of chosenFiles) {
+      if (file.size <= LEAVE_ALONE) {
+        out.push(file)
+        continue
       }
+      const small = await shrink(file)
+      out.push(small ?? file)
     }
 
-    // Could not be made smaller — a HEIC, or a browser that would not allow
-    // it. If it is small enough to send as it is, that is fine. If it is not,
-    // the browser must refuse to submit rather than the framework silently
-    // dropping the request.
-    if (file.size <= WIRE_LIMIT) {
-      setSaid(`${mb(file.size)} — sent as it is.`)
+    input.setCustomValidity('')
+    const after = out.reduce((sum, f) => sum + f.size, 0)
+
+    let replaced = false
+    try {
+      const box = new DataTransfer()
+      for (const file of out) box.items.add(file)
+      input.files = box.files
+      replaced = true
+    } catch {
+      // A browser that will not let a script replace the chosen files. What
+      // is going to be sent is the originals, whatever we just made.
+    }
+
+    const sending = replaced ? after : before
+    const files = replaced ? out : chosenFiles
+
+    // ── Does it fit? ───────────────────────────────────────────────────
+    //
+    // The limit is on the WHOLE request, not on each photograph — five at
+    // 900 KB is over it even though no single one is close. Checked here, in
+    // front of the person, rather than by the framework silently discarding
+    // the lot.
+    if (sending > WIRE_LIMIT) {
+      const spare = files.filter((f) => f.size <= LEAVE_ALONE).length
+      const heicish = files.some((f) => /heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name))
+      const message = heicish
+        ? `These come to ${mb(sending)}, and at least one is a HEIC that a browser cannot shrink. On an iPhone: Settings → Camera → Formats → Most Compatible, then take them again.`
+        : `These ${files.length} photographs come to ${mb(sending)}, and at most ${mb(WIRE_LIMIT)} can be sent at once. Choose fewer and add the rest from the item afterwards.`
+      void spare
+      input.setCustomValidity(message)
+      setRefused(true)
+      setSaid(message)
       return
     }
 
-    const heic = /heic|heif/i.test(file.type) || /\.(heic|heif)$/i.test(file.name)
-    const message = heic
-      ? `This is a HEIC photograph (${mb(file.size)}), which a browser cannot open or shrink. On an iPhone: Settings → Camera → Formats → Most Compatible, then take it again.`
-      : `This photograph is ${mb(file.size)} and cannot be sent — the limit is ${mb(WIRE_LIMIT)}. Take it again at a lower resolution, or share a smaller copy.`
+    if (replaced && after < before) {
+      setSaid(
+        `${count(files.length, after)} — reduced from ${mb(before)} before sending. Nothing you can see is lost.`
+      )
+      return
+    }
 
-    input.setCustomValidity(message)
-    setRefused(true)
-    setSaid(message)
+    setSaid(count(files.length, sending) + ' — sent as ' + (files.length === 1 ? 'it is' : 'they are') + '.')
   }
 
   return (
@@ -213,6 +254,7 @@ export default function PhotoInput({
         ref={ref}
         type="file"
         name={name}
+        multiple={multiple}
         required={required}
         accept={ACCEPTED_TYPES.join(',')}
         // The whole point of the phone screen: the back camera, not a file

@@ -26,7 +26,7 @@ import { requireAccess } from '@/data/require-access'
 // and the findings.
 //
 // The matrix sheet is the one that gets emailed. It is laid out the way an ITP
-// always is, so somebody who has never seen CxSentinel can read it — with the
+// always is, so somebody who has never seen CxNivora can read it — with the
 // one addition that earns this file its keep: a column headed **Nobody**, for
 // the points no party holds.
 export async function GET(request: Request) {
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   const anyUnowned = hasUnassigned(rows)
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const headerFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFEAF1FF' } }

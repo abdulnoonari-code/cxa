@@ -123,4 +123,4 @@ export const UNKNOWN_FLOOR_NOTE =
   'Floors this does not recognise keep their name exactly as written and are listed at the end. Nothing is renamed and nothing is dropped.'
 
 export const FLOOR_HELP =
-  'The floor the equipment is on: B, B2, G, M, L1, L2, L10, R and so on. Written as you write it — L3, Level 3, 3F and 3 are all read as the third floor, and the text you typed is what is stored. This is NOT the commissioning level: L1 to L5 elsewhere in CxSentinel mean factory acceptance through to integrated testing, which is a different thing entirely.'
+  'The floor the equipment is on: B, B2, G, M, L1, L2, L10, R and so on. Written as you write it — L3, Level 3, 3F and 3 are all read as the third floor, and the text you typed is what is stored. This is NOT the commissioning level: L1 to L5 elsewhere in CxNivora mean factory acceptance through to integrated testing, which is a different thing entirely.'

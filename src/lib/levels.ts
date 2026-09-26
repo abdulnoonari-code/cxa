@@ -38,7 +38,11 @@ export type LevelTone = {
 
 export const LEVEL_TONES: Record<string, LevelTone> = {
   L1_fat: { solid: '#64748b', bg: '#f1f5f9', border: '#cbd5e1', text: '#475569' },
-  L2_iv: { solid: '#0891b2', bg: '#ecfeff', border: '#a5f3fc', text: '#0e7490' },
+  /* Moved off cyan. This file and --level-2 in globals.css are the same
+     ramp seen from two sides, and the brand is now cyan — the old #0891b2
+     measured 20 from it, which is to say it WAS it. Text #1D4ED8 on this
+     background is 6.08, so it still passes at 12px. */
+  L2_iv: { solid: '#2563EB', bg: '#EFF4FE', border: '#BFD3FB', text: '#1D4ED8' },
   L3_prefunctional: { solid: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe', text: '#4338ca' },
   L4_fpt: { solid: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9' },
   L5_ist: { solid: '#c026d3', bg: '#fdf4ff', border: '#f5d0fe', text: '#a21caf' },

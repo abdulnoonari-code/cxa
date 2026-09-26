@@ -74,7 +74,7 @@ export async function GET() {
   }
 
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = 'CxSentinel'
+  workbook.creator = 'CxNivora'
   workbook.created = new Date()
 
   const sheet = workbook.addWorksheet('Project checklist')
@@ -136,7 +136,7 @@ export async function GET() {
     r.alignment = { vertical: 'top', wrapText: true }
   }
 
-  note('CXA ID', 'Do not change it. It is how CxSentinel knows this row is the check you already have, so editing a row here updates that check instead of creating a second copy. Leave it blank on a row you have added yourself and a new check is created.')
+  note('CXA ID', 'Do not change it. It is how CxNivora knows this row is the check you already have, so editing a row here updates that check instead of creating a second copy. Leave it blank on a row you have added yourself and a new check is created.')
   note('Tag / System', 'What the check belongs to. A tag creates the check against that piece of equipment; a system or area name creates it against the system itself, which is where checks like "all cable schedules issued" belong. Codes are matched before names.')
   note('Level', `One of: ${LEVELS.map((l) => l.label).join(' · ')}. "L3" on its own works too.`)
   note('Item to check', 'The check itself. Required on every row — a row with an empty item is skipped, which is how you leave spacing rows in your own sheet.')

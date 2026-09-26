@@ -88,7 +88,7 @@ export default async function DossierPage() {
       <h1 className="page-title">Handover Packs</h1>
       <p className="page-subtitle">
         {project ? project.name : 'No project selected'} — the pack you hand over when a system is finished, that
-        proves it was commissioned rather than merely built. Everything else in CxSentinel was recorded for this.
+        proves it was commissioned rather than merely built. Everything else in CxNivora was recorded for this.
       </p>
 
       <div className="card">

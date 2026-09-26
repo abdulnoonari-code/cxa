@@ -12,7 +12,7 @@
 //
 // Creating a checklist item from a plan row would put a check into the system
 // that nobody performed, sitting at a level, waiting to be counted in a
-// readiness figure. Everything else in CxSentinel exists to stop exactly that.
+// readiness figure. Everything else in CxNivora exists to stop exactly that.
 // So an unmatched row stops the file and is reported by its row number.
 //
 // What the import DOES set is the two things the plan decides: **which party
@@ -432,7 +432,7 @@ export async function parseItpWorkbook(
           row: mapping.headerRow,
           column: p.heading,
           value: p.heading,
-          message: `Two columns both name the ${p.party.replace(/_/g, ' ')}. Merge them into one before uploading — CxSentinel will not choose between them.`,
+          message: `Two columns both name the ${p.party.replace(/_/g, ' ')}. Merge them into one before uploading — CxNivora will not choose between them.`,
         })
       }
       seen.add(p.party)
@@ -563,7 +563,7 @@ export async function parseItpWorkbook(
                 column: 'Held by',
                 value: heldRaw,
                 message:
-                  'Not a party CxSentinel recognises. Use Client, EPC, Contractor, Subcontractor, Vendor, CxM, CxA, Operator, Designer or Authority.',
+                  'Not a party CxNivora recognises. Use Client, EPC, Contractor, Subcontractor, Vendor, CxM, CxA, Operator, Designer or Authority.',
               })
               continue
             }
@@ -654,7 +654,7 @@ function key(tag: string, activity: string): string {
 /**
  * Match every plan row to the record it describes, and work out what changed.
  *
- * Matching is by CxSentinel's own id first, then by tag plus activity. An
+ * Matching is by CxNivora's own id first, then by tag plus activity. An
  * activity that matches nothing is an **error**: the ITP is a view of the
  * checklist and test registers, so a row with no record behind it means either
  * the file is for a different project or somebody typed a new activity into a

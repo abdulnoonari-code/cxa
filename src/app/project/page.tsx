@@ -127,7 +127,7 @@ export default async function ProjectPage() {
       <div className="card" style={{ marginTop: 16 }}>
         <h2 className="section-title">What&apos;s in this project</h2>
         <p className="text-secondary" style={{ fontSize: 14, marginBottom: 0 }}>
-          {equipmentCount} equipment tag{equipmentCount === 1 ? '' : 's'}. Everything in CxSentinel — checks,
+          {equipmentCount} equipment tag{equipmentCount === 1 ? '' : 's'}. Everything in CxNivora — checks,
           documents, punch list items and milestones — belongs to this project.
         </p>
       </div>

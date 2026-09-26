@@ -76,63 +76,98 @@ export async function uploadIssuePhoto(formData: FormData) {
   if (!project) redirect('/issues?photo=noproject')
   if (!(await actorCan('review', project.id))) redirect(back(issueId, 'photo=denied', from))
 
-  const file = formData.get('file')
-  if (!(file instanceof File)) redirect(back(issueId, 'photo=nofile', from))
+  // Several at once. One defect often needs three — the thing, where it is,
+  // and what it looked like afterwards — and making somebody repeat the
+  // whole form three times is how the second and third never get taken.
+  const files = formData.getAll('file').filter((f): f is File => f instanceof File && f.size > 0)
+  if (files.length === 0) redirect(back(issueId, 'photo=nofile', from))
 
-  const problem = checkFile({ name: file.name, type: file.type, size: file.size })
-  if (problem) {
-    redirect(
-      back(
-        issueId,
-        `photo=badfile&reason=${encodeURIComponent(problem.reason)}&hint=${encodeURIComponent(problem.hint)}`,
-        from
+  // EVERY file is checked BEFORE ANY is uploaded. Half a set landing and
+  // then a refusal leaves somebody guessing which two of four went, and the
+  // only way to find out is to count them on the item.
+  for (const file of files) {
+    const problem = checkFile({ name: file.name, type: file.type, size: file.size })
+    if (problem) {
+      redirect(
+        back(
+          issueId,
+          `photo=badfile&reason=${encodeURIComponent(
+            files.length > 1 ? `${file.name}: ${problem.reason} Nothing was uploaded.` : problem.reason
+          )}&hint=${encodeURIComponent(problem.hint)}`,
+          from
+        )
       )
-    )
+    }
   }
 
   const kindRaw = String(formData.get('kind') ?? 'defect')
   const kind: PhotoKind = kindRaw === 'fix' ? 'fix' : 'defect'
   const caption = String(formData.get('caption') ?? '').trim() || null
-
   const actor = await getActor(project.id)
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_{2,}/g, '_')
-  const path = `punch/${issueId}/${kind}-${Date.now()}-${safeName}`
 
-  const { error: uploadError } = await supabase.storage.from('documents').upload(path, file, {
-    contentType: file.type,
-    upsert: false,
-  })
-  if (uploadError) redirect(back(issueId, `photo=upload&reason=${encodeURIComponent(uploadError.message)}`, from))
+  let done = 0
+  for (const file of files) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_{2,}/g, '_')
+    const path = `punch/${issueId}/${kind}-${Date.now()}-${done}-${safeName}`
 
-  // NOT getPublicUrl — see src/lib/file-url.ts. A site photograph behind a
-  // link that needs no sign-in is a client's site open to anybody.
-  const publicUrl = { publicUrl: `${FILE_ROUTE}/${encodePath(path)}` }
+    const { error: uploadError } = await supabase.storage.from('documents').upload(path, file, {
+      contentType: file.type,
+      upsert: false,
+    })
+    if (uploadError) {
+      redirect(
+        back(
+          issueId,
+          `photo=upload&reason=${encodeURIComponent(
+            done > 0 ? `${done} of ${files.length} were attached. ${uploadError.message}` : uploadError.message
+          )}`,
+          from
+        )
+      )
+    }
 
-  const { error } = await supabase.from('issue_photos').insert({
-    project_id: project.id,
-    issue_id: issueId,
-    kind,
-    file_name: file.name,
-    file_path: path,
-    file_url: publicUrl.publicUrl,
-    content_type: file.type,
-    size_bytes: file.size,
-    caption,
-    uploaded_by_name: actor.name ?? actor.email ?? null,
-  })
-  if (error) redirect(back(issueId, `photo=save&reason=${encodeURIComponent(error.message)}`, from))
+    // NOT getPublicUrl — see src/lib/file-url.ts. A site photograph behind a
+    // link that needs no sign-in is a client's site open to anybody.
+    const publicUrl = { publicUrl: `${FILE_ROUTE}/${encodePath(path)}` }
+
+    const { error } = await supabase.from('issue_photos').insert({
+      project_id: project.id,
+      issue_id: issueId,
+      kind,
+      file_name: file.name,
+      file_path: path,
+      file_url: publicUrl.publicUrl,
+      content_type: file.type,
+      size_bytes: file.size,
+      caption: caption ? (files.length > 1 ? `${caption} (${done + 1} of ${files.length})` : caption) : null,
+      uploaded_by_name: actor.name ?? actor.email ?? null,
+    })
+    if (error) {
+      redirect(
+        back(
+          issueId,
+          `photo=save&reason=${encodeURIComponent(
+            done > 0 ? `${done} of ${files.length} were attached. ${error.message}` : error.message
+          )}`,
+          from
+        )
+      )
+    }
+
+    done++
+  }
 
   await recordAudit({
     projectId: project.id,
     action: kind === 'fix' ? 'fix photo attached' : 'defect photo attached',
     entity: 'issue',
     entityId: issueId,
-    entityLabel: file.name,
-    comment: caption ? `${file.name} — "${caption}"` : file.name,
+    entityLabel: files.length === 1 ? files[0].name : `${files.length} photographs`,
+    comment: caption ? `${files.map((f) => f.name).join(', ')} — "${caption}"` : files.map((f) => f.name).join(', '),
   })
 
   refresh(issueId)
-  redirect(back(issueId, 'photo=ok', from))
+  redirect(back(issueId, `photo=ok&n=${done}`, from))
 }
 
 export async function deleteIssuePhoto(formData: FormData) {

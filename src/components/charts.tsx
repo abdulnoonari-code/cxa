@@ -51,12 +51,17 @@ export const PROGRESS_SERIES: Series[] = [
 export const PUNCH_SERIES: Series[] = [
   { key: 'open', label: 'Open', color: '#c40f45' },
   { key: 'awaiting', label: 'Awaiting acceptance', color: '#4f46e5' },
-  { key: 'closed', label: 'Closed', color: '#047a52' },
+  { key: 'closed', label: 'Closed', color: '#0F7034' },
 ]
 
+/* "Closed" is the same green here as it is on the punch chart above. It was
+   cyan, which is now the brand colour: a series drawn in the product's own
+   colour reads as the chart's furniture rather than as one of the things
+   being counted, and the two charts sat on the same screen disagreeing
+   about what closed looks like. */
 export const TREND_SERIES: Series[] = [
   { key: 'raised', label: 'Raised', color: '#4f46e5' },
-  { key: 'closed', label: 'Closed', color: '#0891b2' },
+  { key: 'closed', label: 'Closed', color: '#0F7034' },
 ]
 
 export type BarRow = { label: string; sublabel?: string; values: Record<string, number> }

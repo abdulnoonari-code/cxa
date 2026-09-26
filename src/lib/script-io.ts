@@ -1,4 +1,4 @@
-// The CxSentinel test script format.
+// The CxNivora test script format.
 //
 // One sheet is one script: the equipment it tests and the level named once at
 // the top, then a numbered run of checks. It is the shape a commissioning

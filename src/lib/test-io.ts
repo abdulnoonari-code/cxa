@@ -4,7 +4,7 @@
 // those sheets always carry a Result column with "Pass" typed in it. This
 // importer reads that column and then ignores it.
 //
-// The whole position of CxSentinel on test records is that you enter the
+// The whole position of CxNivora on test records is that you enter the
 // measured value and the system decides — an engineer never types "pass" next
 // to a number that does not meet the criteria. Honouring an imported Result
 // would open the one door the app was built to close. So the measured value

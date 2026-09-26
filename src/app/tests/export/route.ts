@@ -72,7 +72,7 @@ export async function GET() {
     INSPECTION_TYPES.find((t) => t.value === (v ?? 'surveillance'))?.label ?? 'Surveillance'
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Test records')
@@ -167,9 +167,9 @@ export async function GET() {
 
   note(
     'Result (computed)',
-    'READ ONLY. This column is never imported, from this file or any other. CxSentinel works the result out from the Measured value and the acceptance criteria every time. If a supplier sends a sheet that says PASS next to a number that does not meet the criteria, the number wins and the disagreement is reported to you by row number. That is the whole point of recording a measured value rather than a verdict.'
+    'READ ONLY. This column is never imported, from this file or any other. CxNivora works the result out from the Measured value and the acceptance criteria every time. If a supplier sends a sheet that says PASS next to a number that does not meet the criteria, the number wins and the disagreement is reported to you by row number. That is the whole point of recording a measured value rather than a verdict.'
   )
-  note('CXA ID / Test ref', 'How CxSentinel recognises a test you already have, so your edits update it rather than create a second copy. Leave both blank on a new row and a new test is created.')
+  note('CXA ID / Test ref', 'How CxNivora recognises a test you already have, so your edits update it rather than create a second copy. Leave both blank on a new row and a new test is created.')
   note('Tag / System', 'What was tested — an equipment tag, or a system or area name. Required on a new test. Blank on an existing one means "unchanged".')
   note('Test', 'The only column that is required. A row with nothing in it is skipped.')
   note('Acceptance criteria', 'Write it the way you would say it: "≥ 1000 MΩ", "≤ 60 ms", "540 – 560 V", "between 3 and 5 bar". A bare number with no ≥ or ≤ cannot be judged — 50 could be a floor or a ceiling — so it is kept as a criterion for a person to judge rather than guessed at.')

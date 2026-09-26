@@ -354,7 +354,7 @@ export function buildWorkbook(
   pictures: { planPng?: string | null; singlePng?: string | null } = {}
 ): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = input.generatedAt
 
   // ── 1 · BASIS ────────────────────────────────────────────────────────

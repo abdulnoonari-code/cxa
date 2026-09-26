@@ -194,7 +194,7 @@ export async function attachRevisionFile(formData: FormData) {
   const extraction = await extractDocument(buffer, file.name)
 
   // The file is kept whether or not its text could be read — a scanned PDF is
-  // still the controlled document, and refusing to file it because CxSentinel
+  // still the controlled document, and refusing to file it because CxNivora
   // cannot read it would be absurd.
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `revisions/${revisionId}/${Date.now()}-${safeName}`

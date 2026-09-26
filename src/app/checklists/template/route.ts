@@ -11,7 +11,7 @@ export async function GET() {
   const refused = await requireAccess()
   if (refused) return refused
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Checklist')
@@ -127,7 +127,7 @@ export async function GET() {
   return new Response(arrayBuffer, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="cxsentinel-checklist-template.xlsx"',
+      'Content-Disposition': 'attachment; filename="cxnivora-checklist-template.xlsx"',
     },
   })
 }

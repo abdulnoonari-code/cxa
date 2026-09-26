@@ -35,7 +35,8 @@ import { workOrder, actionCoverage, coverageLine } from '@/lib/remedy'
 import { cardFor, groupRows, isGroupBy, type GroupBy, type DefectRow } from '@/lib/defect-sheet'
 import { loadIssuePhotos, downloadPhotoBytes, type IssuePhoto } from '@/data/photos'
 import { prepareGallery, photoSources, omissionNote, canDownscale, MAX_PHOTOS } from '@/lib/photo-prep'
-import type { Report, ReportCard, ReportImage } from '@/lib/docgen'
+import { safeFileName, type Report, type ReportCard, type ReportImage } from '@/lib/docgen'
+import { getActor } from '@/lib/audit'
 
 const SETTLED = new Set(['verified', 'closed'])
 
@@ -127,6 +128,7 @@ export async function buildDefectReport(url: string): Promise<BuiltDefects | nul
         contentType: photo.contentType,
         caption: photo.caption,
         note: photo.note || undefined,
+        tag: photo.tag,
       }
       if (list) list.push(image)
       else carried.set(photo.owner, [image])
@@ -142,10 +144,10 @@ export async function buildDefectReport(url: string): Promise<BuiltDefects | nul
     const downscales = await canDownscale()
     note =
       [
-        omissionNote(gallery, 'the punch item in CxSentinel'),
+        omissionNote(gallery, 'the punch item in CxNivora'),
         downscales
           ? null
-          : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
+          : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxNivora.',
       ]
         .filter(Boolean)
         .join(' ') || null
@@ -189,10 +191,23 @@ export async function buildDefectReport(url: string): Promise<BuiltDefects | nul
   if (filter.status) narrowed.push(`state “${statusLabel(filter.status)}”`)
   narrowed.push(filter.openOnly ? 'outstanding items only' : 'every item, open and closed')
 
+  const actor = await getActor(project.id)
+
   const report: Report = {
     title: 'Defect Report',
     subtitle: narrowed.join(', '),
     project: project.name,
+    // The parts that make this an issued document rather than a printout.
+    // The revision is the date, because CxNivora does not hold a revision
+    // register for reports — saying "Rev 2026-09-26" is honest, and inventing
+    // "Rev C" would be a number nobody could reconcile with anything.
+    meta: {
+      docNumber: `${safeFileName(project.name).slice(0, 18).toUpperCase()}-DR`,
+      revision: new Date().toISOString().slice(0, 10),
+      issuedTo: filter.party ?? 'The project record',
+      preparedBy: actor.name ?? actor.email ?? 'CxNivora',
+      status: 'Issued for action',
+    },
     // The standfirst says what somebody pressing the button needs to know
     // BEFORE they send it: how much of this document is actually actionable.
     standfirst: `${rows.length} defect${rows.length === 1 ? '' : 's'} on this project${
@@ -219,11 +234,11 @@ export async function buildDefectReport(url: string): Promise<BuiltDefects | nul
       // action has been agreed" — true, and a completely misleading thing to
       // send to a contractor without this sentence beside it.
       punch.missing.length > 0
-        ? `THIS DATABASE CANNOT HOLD A REMEDY YET. Run ${ACTION_SQL} on the Setup page. Until then there is nowhere in CxSentinel to write what must be done, so every item in this report says nobody has decided — which reflects the database, not the job.`
+        ? `THIS DATABASE CANNOT HOLD A REMEDY YET. Run ${ACTION_SQL} on the Setup page. Until then there is nowhere in CxNivora to write what must be done, so every item in this report says nobody has decided — which reflects the database, not the job.`
         : null,
       // Then the sentence that decides whether the document can be acted on.
       coverage.agreed < coverage.total
-        ? `${coverage.total - coverage.agreed} of the ${coverage.total} defect${coverage.total === 1 ? '' : 's'} here carr${coverage.total - coverage.agreed === 1 ? 'ies' : 'y'} no agreed action. Anything shown under “what must be done” for those items is an AI suggestion or nothing at all — it has not been agreed with anybody and must not be treated as an instruction. Write the action on the item in CxSentinel and re-issue.`
+        ? `${coverage.total - coverage.agreed} of the ${coverage.total} defect${coverage.total === 1 ? '' : 's'} here carr${coverage.total - coverage.agreed === 1 ? 'ies' : 'y'} no agreed action. Anything shown under “what must be done” for those items is an AI suggestion or nothing at all — it has not been agreed with anybody and must not be treated as an instruction. Write the action on the item in CxNivora and re-issue.`
         : 'Every defect in this report carries an action agreed by a named person on a date.',
       withPhotos
         ? `Photographs are evidence of what was seen, not of what was decided. ${withPictures} of ${rows.length} defect${rows.length === 1 ? '' : 's'} here ${withPictures === 1 ? 'has' : 'have'} one. At most ${MAX_PHOTOS} are carried so the file stays small enough to send${omitted > 0 ? '' : ', which this report is within'}.`

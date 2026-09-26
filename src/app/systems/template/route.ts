@@ -10,7 +10,7 @@ export async function GET() {
   if (refused) return refused
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Systems')
@@ -104,7 +104,7 @@ export async function GET() {
   return new Response(buf, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="cxsentinel-systems-template.xlsx"',
+      'Content-Disposition': 'attachment; filename="cxnivora-systems-template.xlsx"',
       'Cache-Control': 'no-store',
     },
   })

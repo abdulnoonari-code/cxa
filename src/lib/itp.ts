@@ -1,6 +1,6 @@
 // The Inspection and Test Plan.
 //
-// CxSentinel already knows that an activity is a Hold Point. What it has never
+// CxNivora already knows that an activity is a Hold Point. What it has never
 // known is **whose** hold point it is — and that gap is the reason a pack can
 // say "1 hold point with no release signature" while naming nobody to chase.
 // On a real ITP every point belongs to somebody. The client holds energization;
@@ -328,7 +328,7 @@ export function summarise(rows: ItpActivity[]): ItpSummary {
 export type ItpVerdict = { label: string; tone: 'blocking' | 'gap' | 'ready' | 'empty'; detail: string }
 
 /**
- * As everywhere else in CxSentinel, the best case is a statement about the
+ * As everywhere else in CxNivora, the best case is a statement about the
  * record and not a permission. "The plan is being followed" is the strongest
  * thing this may say, and it is still followed by who holds what.
  */

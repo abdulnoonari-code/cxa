@@ -98,7 +98,7 @@ export function noticeBody(input: NoticeInput): string {
   lines.push(input.fromName)
   lines.push(input.fromRole + (input.fromCompany ? `, ${input.fromCompany}` : ''))
   lines.push('')
-  lines.push('— Sent from CxSentinel commissioning management')
+  lines.push('— Sent from CxNivora commissioning management')
 
   return lines.join('\n')
 }

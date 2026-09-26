@@ -18,7 +18,7 @@ import { uploadIssuePhoto } from '../issues/photo-actions'
 export const dynamic = 'force-dynamic'
 
 /**
- * On Site — CxSentinel on a phone, at the panel.
+ * On Site — CxNivora on a phone, at the panel.
  *
  * ── Why this is a different screen and not the punch list made narrower ──
  *
@@ -204,7 +204,11 @@ export default async function SitePage({
                 and it SHRINKS the photograph in the browser before sending.
                 A form submission over 4 MB never reaches the server, and
                 every photograph off a phone camera is bigger than that. */}
-            <PhotoInput name="photo" hint="Take it now. You can add the after-photo when it is fixed." />
+            <PhotoInput
+              name="photo"
+              multiple
+              hint="Take as many as you need — the defect, where it is, and the panel it sits in. You can add the after-photo when it is fixed."
+            />
           </label>
 
           <label className="phone-field">
@@ -411,7 +415,7 @@ export default async function SitePage({
                   <input type="radio" name="kind" value="fix" />
                   <span>After the fix</span>
                 </label>
-                <PhotoInput name="file" required />
+                <PhotoInput name="file" multiple required />
                 <input name="caption" placeholder="What it shows" className="input phone-input" />
                 <button type="submit" className="btn btn-secondary phone-btn">
                   Attach

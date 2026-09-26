@@ -12,12 +12,12 @@ export async function GET() {
   const refused = await requireAccess()
   if (refused) return refused
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Test Script')
 
-  sheet.getCell('A1').value = 'CxSentinel test script'
+  sheet.getCell('A1').value = 'CxNivora test script'
   sheet.getCell('A1').font = { name: 'Arial', bold: true, size: 13 }
 
   sheet.getCell('A2').value = 'Equipment / System:'
@@ -116,7 +116,7 @@ export async function GET() {
     ['Remark', 'No', 'What actually happened. Anything a reviewer would want to know six months from now.'],
     ['Links to', 'No', 'What this check is connected to. Several are allowed, separated by a semicolon. Four kinds are understood: a line number on this sheet (2), a tag or system (GIS-115-CB-02), a requirement or obligation (REQ-014, OBL-0002), or anything else — a drawing, a submittal, a standard clause — which is kept exactly as typed.'],
     ['Tag / System', 'No', 'Overrides the equipment at the top of the sheet for that one row, so one sheet can cover several tags.'],
-    ['CXA ID', 'No', 'Filled in by the export. Leave it alone — it is what tells CxSentinel which check a row already is, so an edited export updates instead of duplicating.'],
+    ['CXA ID', 'No', 'Filled in by the export. Leave it alone — it is what tells CxNivora which check a row already is, so an edited export updates instead of duplicating.'],
     ['Remove', 'No', 'Put Y here on an exported row to delete that check.'],
   ]
   for (const [c, n, w] of rows) {
@@ -137,7 +137,7 @@ export async function GET() {
   return new Response(buffer, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="cxsentinel-test-script-template.xlsx"',
+      'Content-Disposition': 'attachment; filename="cxnivora-test-script-template.xlsx"',
     },
   })
 }

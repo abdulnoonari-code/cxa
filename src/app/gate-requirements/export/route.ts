@@ -68,7 +68,7 @@ export async function GET(request: Request) {
   const gateById = new Map(gates.map((g) => [g.id, g]))
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Gate requirements')

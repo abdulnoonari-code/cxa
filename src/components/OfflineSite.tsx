@@ -11,7 +11,7 @@ import { categoryBadgeClass } from '@/lib/issues'
 import { useQueue } from '@/lib/use-queue'
 
 /**
- * CxSentinel with no signal at all.
+ * CxNivora with no signal at all.
  *
  * ── Why this screen exists separately from /site ───────────────────────
  *
@@ -80,10 +80,9 @@ export default function OfflineSite() {
       return
     }
 
-    const photo = data.get('photo')
-    const hasPhoto = photo instanceof File && photo.size > 0
+    const chosen = data.getAll('photo').filter((f): f is File => f instanceof File && f.size > 0)
 
-    const item: QueuedDefect & { photo?: Blob | null } = {
+    const item: QueuedDefect & { photoBlobs?: Blob[] } = {
       clientRef: makeRef(),
       createdAt: new Date().toISOString(),
       projectId: cache?.project?.id ?? '',
@@ -97,11 +96,11 @@ export default function OfflineSite() {
       responsibleParty: (String(data.get('responsible_party') ?? '').trim() || null) as string | null,
       dueDate: (String(data.get('due_date') ?? '').trim() || null) as string | null,
       location: null,
-      photoRef: hasPhoto ? makeRef() : null,
-      photoName: hasPhoto ? (photo as File).name : null,
-      photoType: hasPhoto ? (photo as File).type : null,
-      photoSize: hasPhoto ? (photo as File).size : null,
-      photo: hasPhoto ? (photo as File) : null,
+      // Each photograph gets its own id here, on the phone, before there is
+      // any signal — so a retry that reaches the server twice attaches each
+      // picture once. Same mechanism as the defect's own id.
+      photos: chosen.map((file) => ({ ref: makeRef(), name: file.name, type: file.type, size: file.size })),
+      photoBlobs: chosen,
       state: 'waiting',
       attempts: 0,
       lastTriedAt: null,
@@ -134,7 +133,7 @@ export default function OfflineSite() {
       <div className="phone-page">
         <h1 className="phone-title">On Site</h1>
         <div className="alert alert-danger">
-          <strong>This browser will not let CxSentinel keep anything on the phone.</strong> Without that, a defect
+          <strong>This browser will not let CxNivora keep anything on the phone.</strong> Without that, a defect
           raised here cannot be held until the signal comes back. Private browsing is the usual cause.
         </div>
       </div>
@@ -175,14 +174,14 @@ export default function OfflineSite() {
 
       {room && room.quotaMb > 0 && room.usedMb / room.quotaMb > 0.85 && (
         <div className="alert alert-warning">
-          <strong>This phone is nearly out of room for CxSentinel.</strong> Send what is queued as soon as you have a
+          <strong>This phone is nearly out of room for CxNivora.</strong> Send what is queued as soon as you have a
           signal — a browser short of space can start throwing things away.
         </div>
       )}
 
       {subjects.length === 0 ? (
         <div className="alert alert-warning">
-          <strong>This phone has no tag list yet.</strong> Open CxSentinel once where there is a signal and it will
+          <strong>This phone has no tag list yet.</strong> Open CxNivora once where there is a signal and it will
           bring down the tags and systems for this project. Until then there is nothing here to raise a defect
           against.
         </div>
@@ -199,7 +198,11 @@ export default function OfflineSite() {
 
           <label className="phone-field">
             <span className="phone-label">Photograph</span>
-            <PhotoInput name="photo" hint="Take it now. It is kept on the phone with the defect." />
+            <PhotoInput
+              name="photo"
+              multiple
+              hint="Take as many as you need — the defect, and enough around it to find the panel again. They are kept on the phone with the defect."
+            />
           </label>
 
           <label className="phone-field">

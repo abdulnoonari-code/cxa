@@ -248,7 +248,7 @@ export default async function ChecklistsPage({
         </p>
         <p className="text-secondary" style={{ fontSize: 13, marginBottom: 16 }}>
           Export the project, edit it in Excel and upload it back and nothing duplicates — the <strong>CXA ID</strong>{' '}
-          column tells CxSentinel which check each row already is. Put <strong>Y</strong> in the Remove column to
+          column tells CxNivora which check each row already is. Put <strong>Y</strong> in the Remove column to
           delete one. If any row cannot be read, <strong>nothing is imported at all</strong> and every bad row is
           reported with its row number.
         </p>

@@ -178,7 +178,7 @@ export default async function DailyReportPage({
             </table>
           </div>
           <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 8 }}>
-            This is who <em>entered</em> work into CxSentinel, which is not the same as who was on site. It is not a
+            This is who <em>entered</em> work into CxNivora, which is not the same as who was on site. It is not a
             manpower return.
           </p>
 

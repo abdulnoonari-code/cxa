@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { logout } from '@/app/login/actions'
+import { BrandMark } from '@/components/BrandMark'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProject, listProjects } from '@/lib/project'
 import { selectProject } from '@/app/projects/actions'
@@ -28,8 +29,8 @@ export async function Sidebar() {
   return (
     <div className="sidebar">
       <Link href="/projects" className="brand">
-        <span className="brand-mark">CX</span>
-        CxSentinel
+        <BrandMark size={28} onDark />
+        CxNivora
       </Link>
 
       {/* Which site you're looking at. Changing it re-scopes every screen. */}

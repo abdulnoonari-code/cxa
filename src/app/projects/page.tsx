@@ -173,7 +173,7 @@ export default async function ProjectsPage({
           <p style={{ fontSize: 13, margin: 0 }}>
             {reg.hidden > 0
               ? 'Projects exist on this account but your address is not on any of their teams. Whoever runs the project can add you on its Project Team page.'
-              : 'Create one below. Everything in CxSentinel is scoped to a project, so this is the first step.'}
+              : 'Create one below. Everything in CxNivora is scoped to a project, so this is the first step.'}
           </p>
         </div>
       ) : (

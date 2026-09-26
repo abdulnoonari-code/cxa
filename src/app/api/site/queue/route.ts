@@ -195,30 +195,37 @@ export async function POST(request: Request) {
   //
   // After the defect, and never allowed to take it down with it. A defect
   // with no picture is a defect; a picture with no defect is nothing.
-  let photo: { ok: boolean; reason?: string } = { ok: true }
-  const file = form.get('photo')
-  if (issueId && file instanceof File && file.size > 0) {
+  let photo: { ok: boolean; reason?: string; attached?: number; of?: number } = { ok: true }
+  const files = form.getAll('photo').filter((f): f is File => f instanceof File && f.size > 0)
+  const refs = form.getAll('photo_ref').map((r) => (typeof r === 'string' ? r : null))
+  let attached = 0
+
+  for (let i = 0; i < files.length && issueId; i++) {
     const stored = await storeIssuePhoto({
       projectId: project.id,
       issueId,
-      file,
+      file: files[i],
       kind: 'defect',
       caption: str(form, 'photo_caption'),
       uploadedByName: actor.name ?? actor.email ?? null,
-      clientRef: str(form, 'photo_ref'),
+      // Its own id, so a retry of this whole defect does not attach the same
+      // picture again — the same mechanism as the defect itself.
+      clientRef: refs[i] ?? null,
     })
-    if (!stored.ok) {
-      photo = { ok: false, reason: `${stored.reason} ${stored.hint}` }
+    if (stored.ok) attached++
+    else {
+      photo = { ok: false, reason: `${stored.reason} ${stored.hint}`, attached, of: files.length }
       await recordAudit({
         projectId: project.id,
         action: 'photo from a phone not attached',
         entity: 'issue',
         entityId: issueId,
         entityLabel: title,
-        comment: `${stored.reason} The defect itself was saved and is not affected.`,
+        comment: `${stored.reason} ${attached} of ${files.length} were attached. The defect itself was saved and is not affected.`,
       })
     }
   }
+  if (photo.ok) photo = { ok: true, attached, of: files.length }
 
   // 200 even when the photograph failed: the DEFECT is on the punch list,
   // and telling the phone to keep carrying it would create a second copy of

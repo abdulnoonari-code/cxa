@@ -17,7 +17,7 @@ export async function GET() {
   const roles = await loadRoles(project.id)
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Roles')

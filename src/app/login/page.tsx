@@ -1,3 +1,4 @@
+import { BrandTile } from '@/components/BrandMark'
 import { login } from './actions'
 
 export default async function LoginPage({
@@ -10,24 +11,10 @@ export default async function LoginPage({
   return (
     <main className="auth-shell">
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            background: 'var(--color-primary)',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: 16,
-            marginBottom: 14,
-          }}
-        >
-          CX
+        <div style={{ marginBottom: 14 }}>
+          <BrandTile size={44} />
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>CxSentinel</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>CxNivora</h1>
         <p className="text-secondary" style={{ fontSize: 14 }}>
           AI commissioning copilot — log in to continue
         </p>
@@ -64,7 +51,7 @@ export default async function LoginPage({
           invited to before typing a password into it. */}
       <div style={{ marginTop: 20, textAlign: 'center', fontSize: 13 }}>
         <a href="/about#what" className="link">
-          What CxSentinel is
+          What CxNivora is
         </a>{' '}
         ·{' '}
         <a href="/about#manual" className="link">

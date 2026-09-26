@@ -101,7 +101,7 @@ export async function GET() {
   const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) / 100 : 0)
 
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = 'CxSentinel'
+  workbook.creator = 'CxNivora'
 
   // ---- Summary -------------------------------------------------------------
   const summary = workbook.addWorksheet('Summary')
@@ -110,7 +110,7 @@ export async function GET() {
     { key: 'value', width: 46 },
   ]
 
-  summary.addRow({ label: 'CxSentinel — Progress Report' }).font = { name: 'Arial', size: 14, bold: true }
+  summary.addRow({ label: 'CxNivora — Progress Report' }).font = { name: 'Arial', size: 14, bold: true }
   summary.addRow({})
   const facts: [string, string | number][] = [
     ['Project', project.name],

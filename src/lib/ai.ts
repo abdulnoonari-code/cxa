@@ -1,6 +1,6 @@
 // The Claude layer.
 //
-// Everything else in CxSentinel is arithmetic: it reads records and reports
+// Everything else in CxNivora is arithmetic: it reads records and reports
 // what they contradict. That costs nothing, never varies, and can be defended
 // line by line. This file is the one place that asks a model to read wording
 // and form a judgement, and it is deliberately fenced:

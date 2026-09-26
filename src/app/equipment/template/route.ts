@@ -8,7 +8,7 @@ export async function GET() {
   const refused = await requireAccess()
   if (refused) return refused
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Equipment')
@@ -118,7 +118,7 @@ export async function GET() {
   guide.addRow({
     col: 'Floor',
     meaning:
-      'The storey: B2, B, LG, G, M, L1, L2, L10, R. Written as you write it — L3, Level 3, 3F and 3 all mean the third floor, and what you type is what is stored. NOT the commissioning level: L1 to L5 elsewhere in CxSentinel mean factory acceptance through to integrated testing. A heading of Level, Storey or Floor level is read as this column.',
+      'The storey: B2, B, LG, G, M, L1, L2, L10, R. Written as you write it — L3, Level 3, 3F and 3 all mean the third floor, and what you type is what is stored. NOT the commissioning level: L1 to L5 elsewhere in CxNivora mean factory acceptance through to integrated testing. A heading of Level, Storey or Floor level is read as this column.',
   })
   guide.addRow({ col: 'System', meaning: 'Created if it does not exist, filed under the Area on the same row. This is how the asset tree gets built.' })
   guide.addRow({ col: 'Subsystem', meaning: 'Created if it does not exist, filed under the System on the same row. A bay, a panel, a train.' })
@@ -158,7 +158,7 @@ export async function GET() {
   return new Response(buffer, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="cxsentinel_equipment_template.xlsx"',
+      'Content-Disposition': 'attachment; filename="cxnivora_equipment_template.xlsx"',
     },
   })
 }

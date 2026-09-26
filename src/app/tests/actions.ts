@@ -278,7 +278,7 @@ export async function importTests(formData: FormData) {
   const byRef = new Map(existing.filter((r) => r.test_ref).map((r) => [r.test_ref as string, r]))
 
   // Instruments are matched by the id printed on the label. An instrument the
-  // file names but CxSentinel does not have is a warning, not an error: the
+  // file names but CxNivora does not have is a warning, not an error: the
   // testing company's kit is not always registered here yet, and refusing the
   // whole file over it would be useless. The reading imports with no
   // instrument, and the Validity Review then reports exactly that.

@@ -1,6 +1,7 @@
+import { BrandTile } from '@/components/BrandMark'
 import Link from 'next/link'
 
-export const metadata = { title: 'About CxSentinel' }
+export const metadata = { title: 'About CxNivora' }
 
 // The public page. Reachable without logging in, because the login screen
 // links to it and somebody who has been sent an invitation should be able to
@@ -32,23 +33,8 @@ export default function AboutPage() {
   return (
     <div style={{ maxWidth: 820, margin: '0 auto', padding: '40px 20px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 40,
-            height: 40,
-            borderRadius: 11,
-            background: 'var(--color-primary)',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: 15,
-          }}
-        >
-          CX
-        </span>
-        <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>CxSentinel</h1>
+        <BrandTile size={40} />
+        <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>CxNivora</h1>
       </div>
       <p className="text-secondary" style={{ fontSize: 14.5, margin: '0 0 4px' }}>
         Commissioning management for data centres, substations and power plants.

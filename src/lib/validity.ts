@@ -428,7 +428,7 @@ export function review(input: ValidityInput): Finding[] {
           severity: 'medium',
           title: `No ${level.label.split('—')[0].trim()} checks recorded`,
           detail: `${label} has completed work at ${levelName(LEVELS[highestDone].value)} but nothing at all is recorded at ${level.label}.`,
-          why: 'The levels are sequential: the later one assumes the earlier one was done. Either the stage was skipped or its records are somewhere other than CxSentinel, and neither shows up in a dossier.',
+          why: 'The levels are sequential: the later one assumes the earlier one was done. Either the stage was skipped or its records are somewhere other than CxNivora, and neither shows up in a dossier.',
           href: '/checklists',
           subjectKey: key,
         })
@@ -477,7 +477,7 @@ export function summarise(findings: Finding[], recordsExamined: number): Validit
 }
 
 /**
- * The one-line reading. Like every other verdict in CxSentinel it refuses to
+ * The one-line reading. Like every other verdict in CxNivora it refuses to
  * authorise: a clean validity review means nothing contradicts itself, not
  * that the work is right.
  */

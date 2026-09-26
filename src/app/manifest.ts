@@ -1,12 +1,13 @@
 import type { MetadataRoute } from 'next'
+import { CXNIVORA } from '@/lib/brand'
 
 /**
- * What makes CxSentinel installable on a phone.
+ * What makes CxNivora installable on a phone.
  *
  * ── What this is, and what it deliberately is not ───────────────────────
  *
  * With this file, a phone browser offers "Add to Home Screen". Doing so gives
- * CxSentinel an icon beside the other apps, and opening it starts full screen
+ * CxNivora an icon beside the other apps, and opening it starts full screen
  * with no address bar and no browser furniture — it looks and behaves like an
  * app because, to the phone, it is one.
  *
@@ -30,16 +31,20 @@ import type { MetadataRoute } from 'next'
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'CxSentinel — Commissioning',
-    short_name: 'CxSentinel',
+    name: 'CxNivora — Commissioning',
+    short_name: 'CxNivora',
     description:
       'Raise a defect at the panel with a photograph and what must be done about it, and see what is still outstanding.',
     start_url: '/site',
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    background_color: '#f2f6fd',
-    theme_color: '#0369a1',
+    /* Read from the brand rather than typed here. These two were #f2f6fd
+       and #0369a1 — a palette two rebrands old, still tinting the status
+       bar of every installed phone, because a colour written into a file
+       nobody opens does not get rebranded with the rest. */
+    background_color: CXNIVORA.colors.ground,
+    theme_color: CXNIVORA.colors.anchor,
     categories: ['productivity', 'utilities'],
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

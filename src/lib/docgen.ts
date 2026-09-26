@@ -1,6 +1,6 @@
 // Word and PDF out.
 //
-// Everything CxSentinel produces has, until now, gone out as Excel — right for
+// Everything CxNivora produces has, until now, gone out as Excel — right for
 // a register somebody is going to edit and send back, wrong for a document
 // somebody is going to sign, file or attach to a claim. A contract obligation
 // register that reaches the client as an .xlsx says "here is a spreadsheet";
@@ -13,6 +13,8 @@
 
 import { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell, WidthType, BorderStyle, ImageRun } from 'docx'
 import PDFDocument from 'pdfkit'
+import { CXNIVORA, type Brand } from '@/lib/brand'
+import { drawMark } from '@/lib/mark'
 
 export type ReportTable = {
   title?: string
@@ -31,6 +33,14 @@ export type ReportImage = {
   bytes: Buffer
   contentType: string
   caption: string
+  /**
+   * A short word printed ON the photograph — "before", "after".
+   *
+   * On the photograph and not under it, because a caption is read after the
+   * picture, and by then the reader has already decided which one they are
+   * looking at. On a defect report that decision is the whole point.
+   */
+  tag?: string
   /** A line under the caption — who took it, when, what the AI made of it. */
   note?: string
 }
@@ -116,6 +126,33 @@ export type Report = {
   /** small print at the end: what this document is and is not */
   footnotes?: string[]
   generatedAt?: Date
+
+  /**
+   * Which brand to wear. Defaults to the first — every document in the
+   * application wears the same one, and it is passed rather than imported
+   * so a sample can be rendered in another without a global being changed.
+   */
+  brand?: Brand
+
+  /**
+   * The parts that make this an ISSUED DOCUMENT rather than a printout.
+   *
+   * A punch list somebody prints to walk the site with wants none of them,
+   * and passes `cover: false`. A defect report going to a contractor wants
+   * all of them, because the first three questions anybody asks of a
+   * document are which revision, who issued it, and to whom.
+   */
+  meta?: {
+    cover?: boolean
+    docNumber?: string
+    revision?: string
+    issuedTo?: string
+    preparedBy?: string
+    checkedBy?: string
+    acceptedBy?: string
+    status?: string
+    signatures?: boolean
+  }
 }
 
 function when(date: Date): string {
@@ -199,7 +236,7 @@ export async function toWord(report: Report): Promise<Buffer> {
   children.push(
     new Paragraph({
       spacing: { after: 200 },
-      children: [new TextRun({ text: `${report.project} · generated ${when(at)} by CxSentinel`, size: 18, color: '5B6B85' })],
+      children: [new TextRun({ text: `${report.project} · generated ${when(at)} by CxNivora`, size: 18, color: '5B6B85' })],
     })
   )
 
@@ -400,7 +437,7 @@ export async function toWord(report: Report): Promise<Buffer> {
   }
 
   const doc = new Document({
-    creator: 'CxSentinel',
+    creator: 'CxNivora',
     title: report.title,
     description: report.subtitle ?? report.project,
     sections: [{ properties: {}, children }],
@@ -538,7 +575,7 @@ function plainReport(report: Report): Report {
         strapline: s(c.strapline),
         facts: c.facts?.map((f) => ({ label: toWinAnsi(f.label), value: toWinAnsi(f.value) })),
         paragraphs: c.paragraphs?.map((p) => ({ label: toWinAnsi(p.label), text: toWinAnsi(p.text), note: s(p.note) })),
-        images: c.images?.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note) })),
+        images: c.images?.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note), tag: s(i.tag) })),
         missing: c.missing?.map((m) => ({ caption: toWinAnsi(m.caption), reason: toWinAnsi(m.reason) })),
         noImagesNote: s(c.noImagesNote),
       })),
@@ -548,20 +585,49 @@ function plainReport(report: Report): Report {
       title: s(g.title),
       note: s(g.note),
       emptyNote: s(g.emptyNote),
-      images: g.images.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note) })),
+      images: g.images.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note), tag: s(i.tag) })),
       missing: g.missing?.map((m) => ({ caption: toWinAnsi(m.caption), reason: toWinAnsi(m.reason) })),
     })),
     footnotes: report.footnotes?.map(toWinAnsi),
+    // The cover carries names and document numbers, and a Thai contractor
+    // name on a cover page would scramble the rest of the line exactly as it
+    // did in the body before this pass existed.
+    meta: report.meta
+      ? {
+          ...report.meta,
+          docNumber: s(report.meta.docNumber),
+          revision: s(report.meta.revision),
+          issuedTo: s(report.meta.issuedTo),
+          preparedBy: s(report.meta.preparedBy),
+          checkedBy: s(report.meta.checkedBy),
+          acceptedBy: s(report.meta.acceptedBy),
+          status: s(report.meta.status),
+        }
+      : undefined,
   }
 }
 
 // ── PDF ──────────────────────────────────────────────────────────────────
 
-const PAGE_MARGIN = 42
-const INK = '#1a2233'
-const MUTED = '#5b6b85'
-const RULE = '#d5deef'
-const DANGER = '#b42318'
+/**
+ * 48, not 42.
+ *
+ * The old margin was set when the page had no header on it. Now every page
+ * past the cover carries the mark and the document's name, and 42 put the
+ * first line of text six points under a hairline — which reads as cramped
+ * even to somebody who could not say why.
+ */
+const PAGE_MARGIN = 48
+
+/**
+ * The one colour that is NOT the brand's to choose.
+ *
+ * Red means failed, here and everywhere else in this application. A
+ * photograph that could not be fetched and a row that is overdue are printed
+ * in it whatever brand the document is wearing — see lib/brand.ts for why
+ * the brand accent is kept measurably far away from it.
+ */
+const DANGER = '#B42318'
 
 /** Widest a photograph is drawn in the PDF, in points. Two fit a row on A4. */
 const PDF_IMAGE_W = 250
@@ -581,103 +647,285 @@ export async function toPdf(original: Report): Promise<Buffer> {
   // `doc.text(...)` calls below, where the one that gets forgotten is the one
   // that scrambles a page.
   const report = plainReport(original)
+  const brand = report.brand ?? CXNIVORA
+  const c = brand.colors
   const at = report.generatedAt ?? new Date()
+  const meta = report.meta ?? {}
+  const wantsCover = meta.cover !== false
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'A4',
       margin: PAGE_MARGIN,
-      // Pages are buffered so the footers can be stamped at the end, when the
-      // total is known. Stamping them as pages appear cannot work: the handler
-      // has to move the text cursor to the bottom of the page to draw there,
-      // and the caller then writes its next line into that position, overflows
+      // Pages are buffered so the furniture can be stamped at the end, when
+      // the total is known. Stamping as pages appear cannot work: the handler
+      // has to move the text cursor to draw at the foot of the page, and the
+      // caller then writes its next line into that position, overflows
       // immediately, and adds another page. That loop turned a four-page pack
       // into two hundred and sixty-eight.
       bufferPages: true,
-      info: { Title: report.title, Author: 'CxSentinel', Subject: report.project },
+      info: { Title: report.title, Author: brand.name, Subject: report.project },
     })
     const chunks: Buffer[] = []
-    doc.on('data', (c: Buffer) => chunks.push(c))
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk))
     doc.on('end', () => resolve(Buffer.concat(chunks)))
     doc.on('error', reject)
 
     const width = doc.page.width - PAGE_MARGIN * 2
-    const bottom = doc.page.height - PAGE_MARGIN - 26
+    const pageW = doc.page.width
+    const pageH = doc.page.height
+    const bottom = pageH - PAGE_MARGIN - 30
 
-    // A running footer on every page, stamped at the end over the buffered
-    // pages so each one can say "page 3 of 11". A register without page
-    // numbers is not a document anybody can refer to in writing.
-    const stampFooters = () => {
-      const range = doc.bufferedPageRange()
-      for (let i = range.start; i < range.start + range.count; i++) {
-        doc.switchToPage(i)
-        const y = doc.page.height - PAGE_MARGIN - 16
-        doc
-          .save()
-          .strokeColor(RULE)
-          .lineWidth(0.5)
-          .moveTo(PAGE_MARGIN, y - 6)
-          .lineTo(PAGE_MARGIN + width, y - 6)
-          .stroke()
-          .fillColor(MUTED)
-          .font('Helvetica')
-          .fontSize(7.5)
-          .text(`${report.project} · ${report.title} · ${when(at)}`, PAGE_MARGIN, y, {
-            width: width - 70,
-            lineBreak: false,
-          })
-          .text(`Page ${i - range.start + 1} of ${range.count}`, PAGE_MARGIN + width - 70, y, {
-            width: 70,
-            align: 'right',
-            lineBreak: false,
-          })
-          .restore()
-      }
-    }
+    // Which page the content starts on, so the cover keeps its own furniture.
+    let firstContentPage = 0
 
     const ensure = (needed: number) => {
       if (doc.y + needed > bottom) doc.addPage()
     }
 
-    // ── Head ──────────────────────────────────────────────────────────
-    doc.fillColor(INK).fontSize(20).font('Helvetica-Bold').text(report.title, { width })
-    if (report.subtitle) {
-      doc.moveDown(0.2).fillColor(MUTED).fontSize(10).font('Helvetica').text(report.subtitle, { width })
-    }
-    doc.moveDown(0.2).fillColor(MUTED).fontSize(8.5).text(`${report.project} · generated ${when(at)} by CxSentinel`, { width })
-    doc.moveDown(0.6)
-    doc.strokeColor(RULE).lineWidth(1).moveTo(PAGE_MARGIN, doc.y).lineTo(PAGE_MARGIN + width, doc.y).stroke()
-    doc.moveDown(0.8)
-
-    if (report.standfirst) {
-      doc.fillColor(INK).fontSize(10.5).font('Helvetica').text(report.standfirst, { width })
-      doc.moveDown(0.8)
-    }
-
-    // ── Figures ───────────────────────────────────────────────────────
-    if (report.figures?.length) {
-      const columns = Math.min(4, report.figures.length)
-      const boxWidth = width / columns
-      let x = PAGE_MARGIN
-      const top = doc.y
-      ensure(56)
-      report.figures.forEach((f, i) => {
-        if (i > 0 && i % columns === 0) {
-          x = PAGE_MARGIN
-          doc.y = top + Math.floor(i / columns) * 54
-        }
-        const y = doc.y
-        doc.fillColor(MUTED).fontSize(7.5).font('Helvetica-Bold').text(f.label.toUpperCase(), x, y, { width: boxWidth - 8 })
-        doc.fillColor(INK).fontSize(17).font('Helvetica-Bold').text(String(f.value), x, y + 11, { width: boxWidth - 8 })
-        if (f.note) {
-          doc.fillColor(MUTED).fontSize(7.5).font('Helvetica').text(f.note, x, y + 32, { width: boxWidth - 8 })
-        }
-        doc.y = y
-        x += boxWidth
+    // ── A label above a thing ─────────────────────────────────────────
+    //
+    // Small, letterspaced, in the muted ink. Used for every "WHAT IS
+    // WRONG" / "DOCUMENT NUMBER" heading, so they are all identical and a
+    // reader learns the pattern once.
+    const label = (text: string, x: number, y: number, w: number) => {
+      doc.fillColor(c.muted).font('Helvetica-Bold').fontSize(7).text(text.toUpperCase(), x, y, {
+        width: w,
+        characterSpacing: 0.6,
       })
-      doc.y = top + Math.ceil(report.figures.length / columns) * 54
-      doc.x = PAGE_MARGIN
-      doc.moveDown(0.4)
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // THE COVER
+    //
+    // A document somebody issues to a client has a front. Without one this
+    // is a printout: it starts mid-thought, there is nowhere to put the
+    // revision or who it was issued to, and nothing on it says who made it.
+    // ══════════════════════════════════════════════════════════════════
+    if (wantsCover) {
+      const bandH = 232
+
+      doc.save().rect(0, 0, pageW, bandH).fill(c.anchor).restore()
+      // A thin accent line at the foot of the band: the one place the bright
+      // colour is spent on the cover.
+      doc.save().rect(0, bandH - 5, pageW, 5).fill(c.accent).restore()
+
+      drawMark(doc as unknown as Parameters<typeof drawMark>[0], brand, PAGE_MARGIN, 46, 38, true)
+
+      doc
+        .fillColor(c.ground)
+        .font('Helvetica-Bold')
+        .fontSize(19)
+        .text(brand.name, PAGE_MARGIN + 50, 52, { width: 300, lineBreak: false })
+      doc
+        .fillColor(c.accent)
+        .font('Helvetica')
+        .fontSize(8.5)
+        .text(brand.line.toUpperCase(), PAGE_MARGIN + 50, 74, { width: 300, characterSpacing: 1.1, lineBreak: false })
+
+      doc
+        .fillColor(c.ground)
+        .font('Helvetica-Bold')
+        .fontSize(29)
+        .text(report.title, PAGE_MARGIN, 128, { width: width - 40 })
+
+      if (report.subtitle) {
+        doc
+          .fillColor('#FFFFFF')
+          .opacity(0.72)
+          .font('Helvetica')
+          .fontSize(11)
+          .text(report.subtitle, PAGE_MARGIN, doc.y + 4, { width: width - 60 })
+          .opacity(1)
+      }
+
+      // ── Who, what, which revision ──────────────────────────────────
+      let y = bandH + 34
+      doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(15).text(report.project, PAGE_MARGIN, y, { width })
+      y = doc.y + 18
+
+      const facts: [string, string][] = [
+        ['Document', meta.docNumber ?? report.title],
+        ['Revision', meta.revision ?? '—'],
+        ['Date of issue', at.toISOString().slice(0, 10)],
+        ['Issued to', meta.issuedTo ?? 'The project record'],
+        ['Prepared by', meta.preparedBy ?? brand.name],
+        ['Status', meta.status ?? 'Issued'],
+      ]
+
+      const colW = width / 2
+      facts.forEach((fact, i) => {
+        const fx = PAGE_MARGIN + (i % 2) * colW
+        const fy = y + Math.floor(i / 2) * 42
+        label(fact[0], fx, fy, colW - 20)
+        doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(10.5).text(fact[1], fx, fy + 12, { width: colW - 20 })
+      })
+      y += Math.ceil(facts.length / 2) * 42 + 12
+
+      // ── The verdict, in a panel ────────────────────────────────────
+      if (report.standfirst) {
+        doc.font('Helvetica').fontSize(11)
+        const h = doc.heightOfString(report.standfirst, { width: width - 36 }) + 30
+        doc.save().roundedRect(PAGE_MARGIN, y, width, h, 6).fill(c.accentWash).restore()
+        doc.save().rect(PAGE_MARGIN, y, 4, h).fill(c.accent).restore()
+        doc.fillColor(c.ink).font('Helvetica').fontSize(11).text(report.standfirst, PAGE_MARGIN + 20, y + 15, { width: width - 36 })
+        y += h + 22
+      }
+
+      // ── The figures, as tiles ──────────────────────────────────────
+      if (report.figures?.length) {
+        const n = Math.min(4, report.figures.length)
+        const gap = 10
+        const tileW = (width - gap * (n - 1)) / n
+        report.figures.slice(0, n).forEach((figure, i) => {
+          const fx = PAGE_MARGIN + i * (tileW + gap)
+          doc.save().roundedRect(fx, y, tileW, 82, 6).fill(c.ground).restore()
+          doc.save().roundedRect(fx, y, tileW, 82, 6).lineWidth(0.8).stroke(c.rule).restore()
+          label(figure.label, fx + 12, y + 12, tileW - 20)
+          // The number is a WORD, not a shape, so it takes the darker step of the
+          // accent. The bright one measures 3.10 on this wash — enough for the
+          // tile's border to be found, not enough for a figure somebody is
+          // going to write down and act on.
+          doc.fillColor(c.accentInk).font('Helvetica-Bold').fontSize(22).text(String(figure.value), fx + 12, y + 24, {
+            width: tileW - 20,
+            lineBreak: false,
+          })
+          if (figure.note) {
+            // 82 tall and 24 of note, not 74 and 18: "Somebody has said what
+            // to do" wraps to two lines and the second one was being cut in
+            // half. A figure whose caption is clipped is a figure nobody
+            // trusts the rest of.
+            doc.fillColor(c.muted).font('Helvetica').fontSize(7.5).text(figure.note, fx + 12, y + 52, { width: tileW - 20, height: 24 })
+          }
+        })
+        y += 82 + 20
+      }
+
+      // A closing line at the foot of the cover.
+      doc
+        .fillColor(c.muted)
+        .font('Helvetica')
+        .fontSize(7.5)
+        .text(
+          `Generated by ${brand.name} on ${when(at)}. This document reflects the project record at that moment and is uncontrolled once printed.`,
+          PAGE_MARGIN,
+          pageH - PAGE_MARGIN - 54,
+          { width: width - 10 }
+        )
+
+      doc.addPage()
+      firstContentPage = 1
+      doc.y = PAGE_MARGIN + 30
+    }
+
+    // ── The running furniture, stamped at the end ─────────────────────
+    const stampFurniture = () => {
+      const range = doc.bufferedPageRange()
+      const total = range.count
+      for (let i = range.start; i < range.start + total; i++) {
+        doc.switchToPage(i)
+        const isCover = wantsCover && i === range.start
+
+        if (!isCover) {
+          // Header: the mark, the name, and what this document is.
+          drawMark(doc as unknown as Parameters<typeof drawMark>[0], brand, PAGE_MARGIN, PAGE_MARGIN - 18, 15)
+          doc
+            .fillColor(c.anchor)
+            .font('Helvetica-Bold')
+            .fontSize(9)
+            .text(brand.name, PAGE_MARGIN + 21, PAGE_MARGIN - 15, { width: 140, lineBreak: false })
+          doc
+            .fillColor(c.muted)
+            .font('Helvetica')
+            .fontSize(8)
+            .text(`${report.title} · ${report.project}`, PAGE_MARGIN + 150, PAGE_MARGIN - 15, {
+              width: width - 150,
+              align: 'right',
+              lineBreak: false,
+            })
+          doc
+            .save()
+            .rect(PAGE_MARGIN, PAGE_MARGIN - 1, width, 1.6)
+            .fill(c.accent)
+            .restore()
+        }
+
+        // Footer on every page, cover included: a page with no number is a
+        // page nobody can refer to in writing.
+        const fy = pageH - PAGE_MARGIN - 14
+        doc
+          .save()
+          .strokeColor(c.rule)
+          .lineWidth(0.6)
+          .moveTo(PAGE_MARGIN, fy - 7)
+          .lineTo(PAGE_MARGIN + width, fy - 7)
+          .stroke()
+          .restore()
+        doc
+          .fillColor(c.muted)
+          .font('Helvetica')
+          .fontSize(7.5)
+          .text(
+            isCover ? `${brand.name} · ${report.project}` : `${report.project} · ${report.title}${meta.revision ? ` · Rev ${meta.revision}` : ''}`,
+            PAGE_MARGIN,
+            fy,
+            { width: width - 90, lineBreak: false }
+          )
+          .text(`Page ${i - range.start + 1} of ${total}`, PAGE_MARGIN + width - 90, fy, {
+            width: 90,
+            align: 'right',
+            lineBreak: false,
+          })
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // CONTENT
+    // ══════════════════════════════════════════════════════════════════
+
+    // Without a cover, the report still needs a head — the punch list
+    // printed to walk the site with does not want a title page.
+    if (!wantsCover) {
+      drawMark(doc as unknown as Parameters<typeof drawMark>[0], brand, PAGE_MARGIN, doc.y, 26)
+      doc.fillColor(c.ink).fontSize(20).font('Helvetica-Bold').text(report.title, PAGE_MARGIN + 36, doc.y + 2, { width: width - 36 })
+      if (report.subtitle) {
+        doc.moveDown(0.2).fillColor(c.muted).fontSize(10).font('Helvetica').text(report.subtitle, PAGE_MARGIN, doc.y, { width })
+      }
+      doc.moveDown(0.2).fillColor(c.muted).fontSize(8.5).text(`${report.project} · ${when(at)}`, PAGE_MARGIN, doc.y, { width })
+      doc.moveDown(0.5)
+      doc.save().rect(PAGE_MARGIN, doc.y, width, 1.6).fill(c.accent).restore()
+      doc.moveDown(0.9)
+
+      if (report.standfirst) {
+        doc.fillColor(c.ink).fontSize(10.5).font('Helvetica').text(report.standfirst, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.8)
+      }
+
+      if (report.figures?.length) {
+        const n = Math.min(4, report.figures.length)
+        const gap = 10
+        const tileW = (width - gap * (n - 1)) / n
+        const top = doc.y
+        ensure(80)
+        report.figures.slice(0, n).forEach((figure, i) => {
+          const fx = PAGE_MARGIN + i * (tileW + gap)
+          doc.save().roundedRect(fx, top, tileW, 70, 6).fill(c.accentWash).restore()
+          label(figure.label, fx + 11, top + 11, tileW - 18)
+          // The number is a WORD, not a shape, so it takes the darker step of the
+          // accent. The bright one measures 3.10 on this wash — enough for the
+          // tile's border to be found, not enough for a figure somebody is
+          // going to write down and act on.
+          doc.fillColor(c.accentInk).font('Helvetica-Bold').fontSize(20).text(String(figure.value), fx + 11, top + 23, {
+            width: tileW - 18,
+            lineBreak: false,
+          })
+          if (figure.note) {
+            doc.fillColor(c.muted).font('Helvetica').fontSize(7.5).text(figure.note, fx + 11, top + 50, { width: tileW - 18, height: 16 })
+          }
+        })
+        doc.y = top + 70 + 16
+        doc.x = PAGE_MARGIN
+      }
     }
 
     // ── Tables ────────────────────────────────────────────────────────
@@ -687,177 +935,195 @@ export async function toPdf(original: Report): Promise<Buffer> {
       const cols = widths.map((w) => (w / total) * width)
 
       if (table.title) {
-        ensure(40)
-        doc.moveDown(0.5)
-        doc.fillColor(INK).fontSize(12).font('Helvetica-Bold').text(table.title, PAGE_MARGIN, doc.y, { width })
-        doc.moveDown(0.3)
+        ensure(46)
+        doc.moveDown(0.7)
+        doc.fillColor(c.ink).fontSize(12.5).font('Helvetica-Bold').text(table.title, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.35)
       }
 
       const drawHeader = () => {
         const y = doc.y
-        doc.save().rect(PAGE_MARGIN, y - 2, width, 16).fill('#eaf1ff').restore()
+        doc.save().rect(PAGE_MARGIN, y - 3, width, 19).fill(c.anchor).restore()
         let x = PAGE_MARGIN
-        doc.fillColor(INK).fontSize(8).font('Helvetica-Bold')
+        doc.fillColor(c.ground).fontSize(7.5).font('Helvetica-Bold')
         table.columns.forEach((column, i) => {
-          doc.text(column, x + 3, y + 2, { width: cols[i] - 6, lineBreak: false })
+          doc.text(column.toUpperCase(), x + 5, y + 3, { width: cols[i] - 10, lineBreak: false, characterSpacing: 0.4 })
           x += cols[i]
         })
-        doc.y = y + 18
+        doc.y = y + 21
       }
 
-      ensure(48)
+      ensure(52)
       drawHeader()
 
       doc.font('Helvetica').fontSize(8)
       table.rows.forEach((row, r) => {
-        // How tall this row needs to be, measured before anything is drawn,
-        // so a long cell is never clipped by the page break.
-        const height = Math.max(
-          ...row.map((value, i) => doc.heightOfString(cell(value), { width: cols[i] - 6 })),
-          10
-        )
-        if (doc.y + height + 6 > bottom) {
+        const height = Math.max(...row.map((value, i) => doc.heightOfString(cell(value), { width: cols[i] - 10 })), 11)
+        if (doc.y + height + 8 > bottom) {
           doc.addPage()
+          doc.y = PAGE_MARGIN + 30
           drawHeader()
           doc.font('Helvetica').fontSize(8)
         }
         const y = doc.y
+        // Banding, so an eye can cross eight columns without losing the row.
+        if (r % 2 === 1) doc.save().rect(PAGE_MARGIN, y - 3, width, height + 7).fill(c.ground).restore()
+
         let x = PAGE_MARGIN
-        doc.fillColor(table.emphasise?.has(r) ? DANGER : INK)
+        doc.fillColor(table.emphasise?.has(r) ? DANGER : c.ink)
         row.forEach((value, i) => {
-          doc.text(cell(value), x + 3, y, { width: cols[i] - 6 })
+          doc.text(cell(value), x + 5, y, { width: cols[i] - 10 })
           x += cols[i]
         })
-        doc.y = y + height + 4
-        doc
-          .save()
-          .strokeColor('#eef2fa')
-          .lineWidth(0.5)
-          .moveTo(PAGE_MARGIN, doc.y - 2)
-          .lineTo(PAGE_MARGIN + width, doc.y - 2)
-          .stroke()
-          .restore()
+        doc.y = y + height + 5
+        doc.save().strokeColor(c.rule).lineWidth(0.4).moveTo(PAGE_MARGIN, doc.y - 2).lineTo(PAGE_MARGIN + width, doc.y - 2).stroke().restore()
       })
-      doc.moveDown(0.5)
+      doc.moveDown(0.6)
     }
 
     // ── Cards ─────────────────────────────────────────────────────────
     //
     // One defect, one block: the words and the photograph of the thing they
-    // describe, together.
-    //
-    // The whole block is MEASURED BEFORE ANY OF IT IS DRAWN, and moved to the
-    // next page if it will not fit. That is the difference between a document
-    // somebody can hand to a foreman and one where item P-014's photograph is
-    // on page 6 and what to do about it is on page 7 — which is how a defect
-    // gets closed against the wrong picture.
-    //
-    // A card taller than a whole page cannot be kept together by anybody, so
-    // that one is allowed to flow; it only reserves enough for its heading so
-    // the heading is never left alone at the foot of a page.
+    // describe, together. Measured whole before any of it is drawn and moved
+    // to the next page if it will not fit, so a defect's number is never on
+    // one page and what to do about it on the next.
     for (const set of report.cards ?? []) {
-      const gap = 14
+      const gap = 16
       const cellW = (width - gap) / 2
       const imgW = Math.min(cellW, CARD_IMAGE_W)
       const frameH = Math.round(imgW * 0.72)
-      const imgRowH = frameH + 30
-      const pageH = bottom - PAGE_MARGIN
+      const imgRowH = frameH + 38
+      const pageSpace = bottom - PAGE_MARGIN - 30
 
-      ensure(50)
-      doc.moveDown(0.8)
+      ensure(56)
+      doc.moveDown(0.9)
       if (set.title) {
-        doc.fillColor(INK).fontSize(12).font('Helvetica-Bold').text(set.title, PAGE_MARGIN, doc.y, { width })
-        doc.moveDown(0.3)
+        doc.save().rect(PAGE_MARGIN, doc.y, 4, 17).fill(c.accent).restore()
+        doc.fillColor(c.ink).fontSize(13).font('Helvetica-Bold').text(set.title, PAGE_MARGIN + 13, doc.y + 1, { width: width - 13 })
+        doc.moveDown(0.35)
       }
       if (set.intro) {
-        doc.fillColor(MUTED).fontSize(9).font('Helvetica').text(set.intro, PAGE_MARGIN, doc.y, { width })
-        doc.moveDown(0.3)
+        doc.fillColor(c.muted).fontSize(9).font('Helvetica').text(set.intro, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.35)
       }
       if (set.cards.length === 0) {
-        doc.fillColor(MUTED).fontSize(9).font('Helvetica-Oblique')
-          .text(set.emptyNote ?? 'Nothing to report.', PAGE_MARGIN, doc.y, { width })
-        doc.moveDown(0.4)
+        doc.fillColor(c.muted).fontSize(9).font('Helvetica-Oblique').text(set.emptyNote ?? 'Nothing to report.', PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.5)
       }
 
-      const factsLine = (card: ReportCard) =>
-        (card.facts ?? []).map((f) => `${f.label}: ${f.value}`).join('    ·    ')
+      const factsLine = (card: ReportCard) => (card.facts ?? []).map((f) => `${f.label}: ${f.value}`).join('     ')
 
       for (const card of set.cards) {
-        // Measure. Every fontSize/font call here is matched by the same pair
-        // below — a mismatch would measure one thing and draw another, which
-        // reads as a random extra gap under some cards and not others.
-        let needed = 12
-        doc.font('Helvetica-Bold').fontSize(11.5)
-        needed += doc.heightOfString(card.heading, { width }) + 3
+        const inset = 14
+        const textW = width - inset - 6
+
+        // Measure. Every font call here is matched below — a mismatch reads
+        // as a random extra gap under some cards and not others.
+        let needed = 20
+        doc.font('Helvetica-Bold').fontSize(12.5)
+        needed += doc.heightOfString(card.heading, { width: textW }) + 4
         if (card.strapline) {
           doc.font('Helvetica').fontSize(8.5)
-          needed += doc.heightOfString(card.strapline, { width }) + 4
+          needed += doc.heightOfString(card.strapline, { width: textW }) + 6
         }
         const facts = factsLine(card)
         if (facts) {
           doc.font('Helvetica').fontSize(8.5)
-          needed += doc.heightOfString(facts, { width }) + 6
+          needed += doc.heightOfString(facts, { width: textW - 22 }) + 20
         }
         for (const block of card.paragraphs ?? []) {
-          needed += 12
+          needed += 13
           doc.font('Helvetica').fontSize(9.5)
-          needed += doc.heightOfString(block.text, { width }) + 3
+          needed += doc.heightOfString(block.text, { width: textW }) + 4
           if (block.note) {
             doc.font('Helvetica-Oblique').fontSize(7.5)
-            needed += doc.heightOfString(block.note, { width }) + 4
+            needed += doc.heightOfString(block.note, { width: textW }) + 5
           }
         }
         const images = card.images ?? []
         const missing = card.missing ?? []
-        if (images.length > 0) needed += 6 + Math.ceil(images.length / 2) * imgRowH
-        needed += missing.length * 14
-        if (images.length === 0 && missing.length === 0 && card.noImagesNote) needed += 16
+        if (images.length > 0) needed += 8 + Math.ceil(images.length / 2) * imgRowH
+        needed += missing.length * 15
+        if (images.length === 0 && missing.length === 0 && card.noImagesNote) needed += 17
 
-        // Keep it whole if it can be whole.
-        if (needed <= pageH) ensure(needed)
-        else ensure(64)
+        if (needed <= pageSpace) ensure(needed)
+        else ensure(70)
 
-        // Draw.
-        doc.moveDown(0.5)
-        doc.save().strokeColor(RULE).lineWidth(1)
-          .moveTo(PAGE_MARGIN, doc.y).lineTo(PAGE_MARGIN + width, doc.y).stroke().restore()
-        doc.moveDown(0.4)
+        const cardTop = doc.y + 8
 
-        doc.fillColor(INK).font('Helvetica-Bold').fontSize(11.5).text(card.heading, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.6)
+        doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(12.5).text(card.heading, PAGE_MARGIN + inset, doc.y, { width: textW })
         if (card.strapline) {
-          doc.fillColor(MUTED).font('Helvetica').fontSize(8.5).text(card.strapline, PAGE_MARGIN, doc.y + 1, { width })
+          doc.fillColor(c.muted).font('Helvetica').fontSize(8.5).text(card.strapline, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
         }
+
         if (facts) {
-          doc.fillColor(INK).font('Helvetica').fontSize(8.5).text(facts, PAGE_MARGIN, doc.y + 3, { width })
+          const fy = doc.y + 8
+          doc.font('Helvetica').fontSize(8.5)
+          const fh = doc.heightOfString(facts, { width: textW - 22 }) + 13
+          doc.save().roundedRect(PAGE_MARGIN + inset, fy, textW, fh, 4).fill(c.accentWash).restore()
+          doc.fillColor(c.ink).font('Helvetica').fontSize(8.5).text(facts, PAGE_MARGIN + inset + 11, fy + 6, { width: textW - 22 })
+          doc.y = fy + fh
         }
 
         for (const block of card.paragraphs ?? []) {
-          doc.fillColor(MUTED).font('Helvetica-Bold').fontSize(7).text(block.label.toUpperCase(), PAGE_MARGIN, doc.y + 6, { width, characterSpacing: 0.4 })
-          doc.fillColor(INK).font('Helvetica').fontSize(9.5).text(block.text, PAGE_MARGIN, doc.y + 1, { width })
+          label(block.label, PAGE_MARGIN + inset, doc.y + 8, textW)
+          doc.fillColor(c.ink).font('Helvetica').fontSize(9.5).text(block.text, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
           if (block.note) {
-            doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(7.5).text(block.note, PAGE_MARGIN, doc.y + 1, { width })
+            doc.fillColor(c.muted).font('Helvetica-Oblique').fontSize(7.5).text(block.note, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
           }
         }
 
-        if (images.length > 0) doc.moveDown(0.5)
+        if (images.length > 0) doc.moveDown(0.6)
         for (let i = 0; i < images.length; i += 2) {
-          ensure(imgRowH + 4)
+          ensure(imgRowH + 6)
           const top = doc.y
           images.slice(i, i + 2).forEach((image, n) => {
-            const x = PAGE_MARGIN + n * (cellW + gap)
+            const x = PAGE_MARGIN + inset + n * (cellW + gap)
+            doc.save().roundedRect(x, top, imgW, frameH, 4).fill(c.ground).restore()
             try {
               doc.image(image.bytes, x, top, { fit: [imgW, frameH], align: 'center', valign: 'center' })
             } catch {
-              doc.save().fillColor(MUTED).fontSize(8).font('Helvetica-Oblique')
+              // A file the renderer cannot decode must not take the document
+              // down with it.
+              doc
+                .save()
+                .fillColor(c.muted)
+                .fontSize(8)
+                .font('Helvetica-Oblique')
                 .text('This image could not be rendered.', x, top + frameH / 2, { width: imgW, align: 'center' })
                 .restore()
             }
+            doc.save().roundedRect(x, top, imgW, frameH, 4).lineWidth(0.7).stroke(c.rule).restore()
+
+            // BEFORE / AFTER, as a chip on the photograph itself. A caption
+            // underneath is read after the picture, which is too late — the
+            // reader has already decided which one they are looking at.
+            if (image.tag) {
+              const text = image.tag.toUpperCase()
+              doc.font('Helvetica-Bold').fontSize(6.5)
+              const tw = doc.widthOfString(text, { characterSpacing: 0.7 }) + 14
+              doc.save().roundedRect(x + 7, top + 7, tw, 14, 3).fill(c.anchor).restore()
+              doc.fillColor(c.ground).font('Helvetica-Bold').fontSize(6.5).text(text, x + 7, top + 11, {
+                width: tw,
+                align: 'center',
+                characterSpacing: 0.7,
+                lineBreak: false,
+              })
+            }
+
             doc.save()
-            doc.fillColor(INK).fontSize(8).font('Helvetica-Bold')
-              .text(image.caption, x, top + frameH + 4, { width: imgW, height: 10, ellipsis: true })
+            doc.fillColor(c.ink).fontSize(8).font('Helvetica-Bold').text(image.caption, x, top + frameH + 6, {
+              width: imgW,
+              height: 11,
+              ellipsis: true,
+            })
             if (image.note) {
-              doc.fillColor(MUTED).fontSize(7).font('Helvetica')
-                .text(image.note, x, top + frameH + 15, { width: imgW, height: 13, ellipsis: true })
+              doc.fillColor(c.muted).fontSize(7).font('Helvetica').text(image.note, x, top + frameH + 18, {
+                width: imgW,
+                height: 16,
+                ellipsis: true,
+              })
             }
             doc.restore()
           })
@@ -867,98 +1133,91 @@ export async function toPdf(original: Report): Promise<Buffer> {
         for (const gone of missing) {
           ensure(22)
           doc.save()
-          doc.fillColor(DANGER).fontSize(8).font('Helvetica-Bold')
-            .text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y + 3, { width, continued: true })
-          doc.fillColor(MUTED).font('Helvetica').text(` ${gone.reason}`)
+          doc.fillColor(DANGER).fontSize(8).font('Helvetica-Bold').text(`${gone.caption} — not shown.`, PAGE_MARGIN + inset, doc.y + 3, {
+            width: textW,
+            continued: true,
+          })
+          doc.fillColor(c.muted).font('Helvetica').text(` ${gone.reason}`)
           doc.restore()
         }
 
         if (images.length === 0 && missing.length === 0 && card.noImagesNote) {
           ensure(20)
-          doc.fillColor(MUTED).fontSize(7.5).font('Helvetica-Oblique')
-            .text(card.noImagesNote, PAGE_MARGIN, doc.y + 4, { width })
+          doc.fillColor(c.muted).fontSize(7.5).font('Helvetica-Oblique').text(card.noImagesNote, PAGE_MARGIN + inset, doc.y + 4, { width: textW })
+        }
+
+        // The accent rule down the left of the whole block, drawn last now
+        // that its height is known. It is what makes a page of defects read
+        // as a list of separate things rather than a wall.
+        const cardBottom = doc.y + 4
+        if (cardBottom > cardTop) {
+          doc.save().roundedRect(PAGE_MARGIN, cardTop, 3.5, cardBottom - cardTop, 2).fill(c.accent).restore()
         }
 
         doc.x = PAGE_MARGIN
+        doc.moveDown(0.5)
       }
-      doc.moveDown(0.6)
+      doc.moveDown(0.5)
     }
 
-    // ── Photographs ───────────────────────────────────────────────────
-    //
-    // Two to a row, so a pack of twenty does not run to twenty pages. The
-    // height is reserved BEFORE the image is drawn, because pdfkit will
-    // happily place an image past the bottom margin and the footer then
-    // overlaps it.
+    // ── Photographs gathered together ─────────────────────────────────
     for (const gallery of report.galleries ?? []) {
       const images = gallery.images
       const missing = gallery.missing ?? []
 
-      ensure(46)
-      doc.moveDown(0.8)
+      ensure(50)
+      doc.moveDown(0.9)
       if (gallery.title) {
-        doc.fillColor(INK).fontSize(12).font('Helvetica-Bold').text(gallery.title, PAGE_MARGIN, doc.y, { width })
+        doc.save().rect(PAGE_MARGIN, doc.y, 4, 17).fill(c.accent).restore()
+        doc.fillColor(c.ink).fontSize(13).font('Helvetica-Bold').text(gallery.title, PAGE_MARGIN + 13, doc.y + 1, { width: width - 13 })
         doc.moveDown(0.4)
       }
 
       if (images.length === 0 && missing.length === 0) {
-        doc
-          .fillColor(MUTED)
-          .fontSize(9)
-          .font('Helvetica')
-          .text(gallery.emptyNote ?? 'No photographs.', PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.muted).fontSize(9).font('Helvetica').text(gallery.emptyNote ?? 'No photographs.', PAGE_MARGIN, doc.y, { width })
         doc.moveDown(0.4)
       }
 
       const gap = 16
       const cellW = (width - gap) / 2
       const imgW = Math.min(cellW, PDF_IMAGE_W)
-      // Reserve a 4:3 frame plus two lines of caption. Photographs come in
-      // every shape and pdfkit reports the drawn height only after the fact,
-      // so the row advances by a fixed amount and the image is fitted inside.
-      const frameH = Math.round(imgW * 0.75)
-      const rowH = frameH + 34
+      const frameH = Math.round(imgW * 0.72)
+      const rowH = frameH + 38
 
       for (let i = 0; i < images.length; i += 2) {
         ensure(rowH + 6)
         const top = doc.y
-        const pair = images.slice(i, i + 2)
-
-        pair.forEach((image, n) => {
+        images.slice(i, i + 2).forEach((image, n) => {
           const x = PAGE_MARGIN + n * (cellW + gap)
+          doc.save().roundedRect(x, top, imgW, frameH, 4).fill(c.ground).restore()
           try {
             doc.image(image.bytes, x, top, { fit: [imgW, frameH], align: 'center', valign: 'center' })
           } catch {
-            // A file the renderer cannot decode must not take the document
-            // down with it.
-            doc.save().fillColor(MUTED).fontSize(8).font('Helvetica-Oblique')
+            doc
+              .save()
+              .fillColor(c.muted)
+              .fontSize(8)
+              .font('Helvetica-Oblique')
               .text('This image could not be rendered.', x, top + frameH / 2, { width: imgW, align: 'center' })
               .restore()
           }
+          doc.save().roundedRect(x, top, imgW, frameH, 4).lineWidth(0.7).stroke(c.rule).restore()
           doc.save()
-          doc.fillColor(INK).fontSize(8.5).font('Helvetica-Bold')
-            .text(image.caption, x, top + frameH + 5, { width: imgW, height: 11, ellipsis: true })
+          doc.fillColor(c.ink).fontSize(8).font('Helvetica-Bold').text(image.caption, x, top + frameH + 6, { width: imgW, height: 11, ellipsis: true })
           if (image.note) {
-            doc.fillColor(MUTED).fontSize(7.5).font('Helvetica')
-              .text(image.note, x, top + frameH + 17, { width: imgW, height: 14, ellipsis: true })
+            doc.fillColor(c.muted).fontSize(7).font('Helvetica').text(image.note, x, top + frameH + 18, { width: imgW, height: 16, ellipsis: true })
           }
           doc.restore()
         })
-
         doc.y = top + rowH
       }
 
-      // A gap before the first one. Without it the red line lands directly
-      // under the last caption and reads as a note about THAT photograph
-      // rather than about one that is absent.
       if (missing.length > 0) doc.moveDown(0.7)
-
       for (const gone of missing) {
         ensure(24)
         doc.save()
-        doc.fillColor(DANGER).fontSize(8.5).font('Helvetica-Bold')
-          .text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y, { width, continued: true })
-        doc.fillColor(MUTED).font('Helvetica').text(` ${gone.reason}`)
+        doc.fillColor(DANGER).fontSize(8.5).font('Helvetica-Bold').text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y, { width, continued: true })
+        doc.fillColor(c.muted).font('Helvetica').text(` ${gone.reason}`)
         doc.restore()
         doc.moveDown(0.2)
       }
@@ -966,18 +1225,57 @@ export async function toPdf(original: Report): Promise<Buffer> {
       if (gallery.note) {
         ensure(26)
         doc.moveDown(0.3)
-        doc.fillColor(MUTED).fontSize(8).font('Helvetica-Oblique').text(gallery.note, PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.muted).fontSize(8).font('Helvetica-Oblique').text(gallery.note, PAGE_MARGIN, doc.y, { width })
       }
+    }
+
+    // ── Signatures ────────────────────────────────────────────────────
+    //
+    // A document issued to another party is signed, or it is a printout of
+    // a screen. Three boxes and nothing clever: who made it, who checked
+    // it, who accepted it.
+    if (meta.signatures !== false) {
+      ensure(120)
+      doc.moveDown(1.2)
+      doc.save().rect(PAGE_MARGIN, doc.y, width, 1).fill(c.rule).restore()
+      doc.moveDown(0.6)
+      label('Issued and accepted', PAGE_MARGIN, doc.y, width)
+      doc.moveDown(1.1)
+
+      const boxes: [string, string][] = [
+        ['Prepared by', meta.preparedBy ?? ''],
+        ['Checked by', meta.checkedBy ?? ''],
+        ['Accepted by', meta.acceptedBy ?? ''],
+      ]
+      const gap = 14
+      const boxW = (width - gap * 2) / 3
+      const top = doc.y
+      boxes.forEach(([role, name], i) => {
+        const x = PAGE_MARGIN + i * (boxW + gap)
+        doc.save().roundedRect(x, top, boxW, 78, 5).lineWidth(0.8).stroke(c.rule).restore()
+        label(role, x + 11, top + 10, boxW - 22)
+        // Two lines, not one. "A. Jabbar, Commissioning Manager" was being
+        // cut to "A. Jabbar, Commissioning" — a signature block that clips
+        // somebody's job title is the one part of the document people look
+        // at hardest.
+        doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(9).text(name || ' ', x + 11, top + 22, { width: boxW - 22, height: 24 })
+        doc.save().strokeColor(c.rule).lineWidth(0.7).moveTo(x + 11, top + 52).lineTo(x + boxW - 11, top + 52).stroke().restore()
+        doc.fillColor(c.muted).font('Helvetica').fontSize(6.8).text('Signature', x + 11, top + 55, { width: boxW - 22 })
+        doc.save().strokeColor(c.rule).lineWidth(0.7).moveTo(x + 11, top + 70).lineTo(x + boxW - 11, top + 70).stroke().restore()
+        doc.fillColor(c.muted).font('Helvetica').fontSize(6.8).text('Date', x + 11, top + 68, { width: boxW - 22 })
+      })
+      doc.y = top + 78
     }
 
     // ── Small print ───────────────────────────────────────────────────
     for (const note of report.footnotes ?? []) {
-      ensure(30)
-      doc.moveDown(0.4)
-      doc.fillColor(MUTED).fontSize(8).font('Helvetica-Oblique').text(note, PAGE_MARGIN, doc.y, { width })
+      ensure(32)
+      doc.moveDown(0.5)
+      doc.fillColor(c.muted).fontSize(8).font('Helvetica-Oblique').text(note, PAGE_MARGIN, doc.y, { width })
     }
 
-    stampFooters()
+    void firstContentPage
+    stampFurniture()
     doc.flushPages()
     doc.end()
   })

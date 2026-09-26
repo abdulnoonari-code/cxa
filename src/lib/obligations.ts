@@ -383,7 +383,7 @@ export function summarise(items: ObligationLike[], today: Date = new Date()): Ob
 export type ObligationVerdict = { label: string; tone: 'danger' | 'warning' | 'neutral' | 'success'; detail: string }
 
 /**
- * The one-line reading. Like every other verdict in CxSentinel it refuses to
+ * The one-line reading. Like every other verdict in CxNivora it refuses to
  * authorise: a clean obligation register means nobody currently owes anything
  * that is recorded here, not that the contract has been performed.
  */
@@ -393,7 +393,7 @@ export function verdict(summary: ObligationSummary): ObligationVerdict {
       label: 'NOTHING RECORDED',
       tone: 'neutral',
       detail:
-        'No obligations on record. That does not mean nobody owes anything — it means no contract or specification has been read into CxSentinel yet.',
+        'No obligations on record. That does not mean nobody owes anything — it means no contract or specification has been read into CxNivora yet.',
     }
   }
   // A register can be both late and half-assigned, and reporting only the

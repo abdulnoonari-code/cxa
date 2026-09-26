@@ -454,6 +454,7 @@ export default async function IssuesPage({
                 silently failed before. */}
             <PhotoInput
               name="photo"
+              multiple
               className="io-file"
               hint={`Optional. JPEG, PNG or WebP. A large photo is made smaller before sending. More can be added afterwards, including the after-photo.`}
             />

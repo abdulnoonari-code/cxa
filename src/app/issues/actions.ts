@@ -217,22 +217,32 @@ export async function createIssue(formData: FormData) {
   // defect because the file was a HEIC off an iPhone would be far worse than
   // a punch item with no picture — the defect is the thing that matters, the
   // photograph is evidence for it.
-  const photo = formData.get('photo')
+  // Several, not one. A loose gland wants three photographs: the gland, the
+  // panel it sits in so somebody can find it among forty, and the
+  // termination once it is re-made. They are stored one at a time and
+  // INDEPENDENTLY — one that fails must not take the others with it, and
+  // none of them may take the defect with it.
+  const photos = formData.getAll('photo').filter((f): f is File => f instanceof File && f.size > 0)
+  const caption = str(formData, 'photo_caption')
   let photoNote: string | null = null
-  const photoAttempted = photo instanceof File && photo.size > 0
-  const photoName = photo instanceof File ? photo.name : 'the photograph'
+  let attached = 0
 
-  if (newId && photo instanceof File && photo.size > 0) {
+  for (const photo of photos) {
+    if (!newId) break
     const stored = await storeIssuePhoto({
       projectId: project.id,
       issueId: newId,
       file: photo,
       kind: 'defect',
-      caption: str(formData, 'photo_caption'),
+      // One caption typed for several photographs describes all of them;
+      // numbering them "(1 of 3)" is the honest way to say so rather than
+      // repeating one sentence three times as though each were separate.
+      caption: caption ? (photos.length > 1 ? `${caption} (${attached + 1} of ${photos.length})` : caption) : null,
       uploadedByName: actor.name ?? actor.email ?? null,
     })
 
     if (stored.ok) {
+      attached++
       await recordAudit({
         projectId: project.id,
         action: 'defect photo attached',
@@ -242,17 +252,28 @@ export async function createIssue(formData: FormData) {
         comment: 'Attached when the item was raised.',
       })
     } else {
-      photoNote = `${stored.reason} ${stored.hint}`
+      // The FIRST failure is the one reported. A list of five identical
+      // "that is a HEIC" sentences tells somebody nothing they did not learn
+      // from the first.
+      photoNote = photoNote ?? `${stored.reason} ${stored.hint}`
       await recordAudit({
         projectId: project.id,
         action: 'photo not attached to new punch item',
         entity: 'issue',
         entityId: newId,
         entityLabel: `${ref} — ${photo.name}`,
-        comment: `${photoNote} The punch item itself was raised and is not affected.`,
+        comment: `${stored.reason} The punch item itself was raised and is not affected.`,
       })
     }
   }
+
+  const photoAttempted = photos.length > 0
+  const photoName =
+    photos.length === 0
+      ? 'the photograph'
+      : photos.length === 1
+        ? photos[0].name
+        : `${photos.length} photographs`
 
   refresh(equipment)
   if (checklist_item_id && equipment) revalidatePath(`/equipment/${equipment}/checklist`)
@@ -265,7 +286,15 @@ export async function createIssue(formData: FormData) {
 
   if (photoAttempted) {
     const outcome = photoNote
-      ? { ok: false, file: photoName, reason: photoNote, hint: 'The punch item itself was raised and is fine — open it and attach the photograph there once this is sorted.' }
+      ? {
+          ok: false,
+          file: photoName,
+          reason:
+            attached > 0
+              ? `${attached} of ${photos.length} were attached. ${photoNote}`
+              : photoNote,
+          hint: 'The punch item itself was raised and is fine — open it and attach the rest there once this is sorted.',
+        }
       : { ok: true, file: photoName, against: ref }
     const to = home ?? '/issues'
     redirect(`${to}${to.includes('?') ? '&' : '?'}raised=${encodeURIComponent(ref)}&${outcomeParams(outcome)}`)

@@ -26,6 +26,7 @@ export type PreparedPhoto = {
   contentType: string
   caption: string
   note: string
+  tag?: string
   /**
    * Which item this photograph belongs to.
    *
@@ -219,6 +220,8 @@ export function storagePathOf(source: { path?: string | null; url?: string | nul
 }
 
 export type PhotoSource = {
+  /** "before" / "after", printed on the photograph itself. */
+  tag?: string
   /** The path inside the storage bucket. Preferred — see `fetchBytes`. */
   path?: string | null
   url: string | null
@@ -336,6 +339,7 @@ export async function prepareGallery(
         caption: source.caption,
         note: source.note,
         owner: source.owner,
+        tag: source.tag,
       })
       bytes += small.bytes.byteLength
       used += 1
@@ -393,6 +397,10 @@ export function photoSources<T extends PhotoRowLike>(
     }
     return {
       owner: row.issue_id ?? undefined,
+      // Printed as a chip ON the photograph. A caption underneath is read
+      // after the picture, and by then the reader has already decided which
+      // one they are looking at.
+      tag: row.kind === 'fix' ? 'after' : 'before',
       path: row.file_path ?? null,
       url: row.file_url,
       contentType: row.content_type,

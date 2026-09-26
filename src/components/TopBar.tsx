@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { logout } from '@/app/login/actions'
+import { BrandMark } from '@/components/BrandMark'
 import { createClient } from '@/lib/supabase/server'
 
 // The frame for the screens that have no rail.
@@ -26,8 +27,8 @@ export async function TopBar() {
   return (
     <header className="topbar">
       <Link href="/projects" className="topbar-brand">
-        <span className="topbar-mark">CX</span>
-        <span className="topbar-name">CxSentinel</span>
+        <BrandMark size={26} />
+        <span className="topbar-name">CxNivora</span>
       </Link>
 
       <nav className="topbar-links">

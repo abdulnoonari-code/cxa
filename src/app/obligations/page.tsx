@@ -341,7 +341,7 @@ export default async function ObligationsPage({
           </button>
         </form>
         <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0 }}>
-          A party the file names that CxSentinel does not recognise <strong>stops the import</strong> rather than
+          A party the file names that CxNivora does not recognise <strong>stops the import</strong> rather than
           being filed as unassigned — an obligation quietly orphaned on a re-import is the one nobody chases. And
           &ldquo;Done&rdquo; is read as <em>Submitted</em>, never Accepted: accepting is your decision, not a cell in
           their spreadsheet.
@@ -528,7 +528,7 @@ export default async function ObligationsPage({
         <div className="card" style={{ marginTop: 12 }}>
           <p className="text-secondary" style={{ fontSize: 14, marginBottom: 0 }}>
             {summary.total === 0
-              ? 'Nothing on the register yet. Upload a contract or a specification above and CxSentinel will read the duties out of it.'
+              ? 'Nothing on the register yet. Upload a contract or a specification above and CxNivora will read the duties out of it.'
               : 'Nothing matches this filter.'}
           </p>
         </div>
@@ -792,7 +792,7 @@ export default async function ObligationsPage({
       )}
 
       <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 18 }}>
-        This register records what the documents read into CxSentinel say is owed. It is not a legal opinion, it does
+        This register records what the documents read into CxNivora say is owed. It is not a legal opinion, it does
         not discharge anything, and a clause absent from it has not stopped applying — it means nobody has read that
         document in here yet.
       </p>

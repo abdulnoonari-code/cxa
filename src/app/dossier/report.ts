@@ -1,6 +1,6 @@
 // The handover pack, as one document.
 //
-// Everything CxSentinel records converges here. The order of the sections is
+// Everything CxNivora records converges here. The order of the sections is
 // the order the receiving party reads them in: what it says on the front, who
 // is being asked to sign, what is outstanding, and only then the evidence.
 //
@@ -236,7 +236,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
         widths: [3, 9],
         rows: missing.map((l) => [
           l.label,
-          'Nothing is recorded at this level for this system. Either the stage was not required, or its records are not in CxSentinel.',
+          'Nothing is recorded at this level for this system. Either the stage was not required, or its records are not in CxNivora.',
         ]),
       })
     }
@@ -422,7 +422,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
         })),
         missing: gallery.failed,
         note: [
-          omissionNote(gallery, 'the punch list in CxSentinel'),
+          omissionNote(gallery, 'the punch list in CxNivora'),
           // Said out loud rather than left to be inferred from a short
           // gallery. Without the image library the photographs go in at
           // their original size, the byte budget fills after two or three,
@@ -430,7 +430,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
           // three had been uploaded.
           downscales
             ? null
-            : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
+            : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxNivora.',
         ]
           .filter(Boolean)
           .join(' ') || undefined,
@@ -439,7 +439,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
             ? undefined
             : store.all.length > 0
               ? `No photographs are attached to the punch items in this pack. There ${store.all.length === 1 ? 'is 1 photograph' : `are ${store.all.length} photographs`} elsewhere in this project, on items outside this pack's scope. That is not evidence that no defect was photographed here — only that none was uploaded against these items.`
-              : 'No photographs have been uploaded anywhere in this project. That is not evidence that no defect was photographed — it is evidence that none reached CxSentinel.',
+              : 'No photographs have been uploaded anywhere in this project. That is not evidence that no defect was photographed — it is evidence that none reached CxNivora.',
       })
     }
   }
@@ -469,7 +469,7 @@ export async function buildDossier(url: string, type: string, id: string): Promi
         : photosInScope.length > 0
           ? `${photosInScope.length} photograph${photosInScope.length === 1 ? ' has' : 's have'} been uploaded against the punch items in this pack and ${photosInScope.length === 1 ? 'is' : 'are'} NOT in this document. Use the “Full pack, with photographs” button for a copy that carries them.`
           : 'No photographs have been uploaded against the punch items in this pack, so there are none this document could carry.',
-      'This pack is assembled from the records in CxSentinel at the moment it was generated. Nothing in it is stored — regenerate it and it will reflect whatever has changed since.',
+      'This pack is assembled from the records in CxNivora at the moment it was generated. Nothing in it is stored — regenerate it and it will reflect whatever has changed since.',
       'It does not certify anything. It states what the record shows, and provides the blocks for the people entitled to decide. Handover is agreed by the signatures above, not by this document.',
       'Every section appears whether or not it has records in it. An empty section says so, and says what that absence means — a pack that omits an empty register lies by omission.',
       showAll

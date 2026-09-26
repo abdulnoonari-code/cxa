@@ -60,7 +60,7 @@ export async function GET() {
     options.find((o) => o.value === value)?.label ?? value ?? ''
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Equipment')

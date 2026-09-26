@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const levelLabel = (v: string | null) => LEVELS.find((l) => l.value === v)?.label ?? ''
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Obligations')
@@ -125,7 +125,7 @@ export async function GET(request: Request) {
     r.alignment = { vertical: 'top', wrapText: true }
   }
 
-  note('CXA ID / Ref', 'How CxSentinel recognises an obligation it already has, so your edits update it rather than create a second copy. Leave both blank on a new row and a new obligation is created with the next free reference. References are never reused.')
+  note('CXA ID / Ref', 'How CxNivora recognises an obligation it already has, so your edits update it rather than create a second copy. Leave both blank on a new row and a new obligation is created with the next free reference. References are never reused.')
   note('Obligation', 'The only column that is required. A row with nothing in it is skipped.')
   note('Party', `Who owes it: ${PARTIES.map((p) => p.label).join(' · ')}. Blank means nobody owns it — the register counts those separately and says so, because an obligation nobody owns is one nobody will discharge.`)
   note('Kind', `${OBLIGATION_TYPES.map((t) => t.label).join(', ')}.`)

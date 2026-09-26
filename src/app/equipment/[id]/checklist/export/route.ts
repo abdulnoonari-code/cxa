@@ -32,7 +32,7 @@ export async function GET(
   const statusLabel = (value: string) => STATUSES.find((s) => s.value === value)?.label ?? value
 
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = 'CxSentinel'
+  workbook.creator = 'CxNivora'
   const sheet = workbook.addWorksheet('Checklist')
 
   sheet.columns = [

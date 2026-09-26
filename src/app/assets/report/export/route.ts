@@ -18,7 +18,7 @@ export async function GET() {
   const { report, missing } = await loadAssetReport(project.id)
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const head = (sheet: ExcelJS.Worksheet) => {

@@ -134,7 +134,7 @@ export default async function ContactsPage() {
             </div>
           </form>
           <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 12, marginBottom: 0 }}>
-            A contact is not a login. These people do not get access to CxSentinel — this is only so notices can be
+            A contact is not a login. These people do not get access to CxNivora — this is only so notices can be
             addressed to them. To give somebody an account, use{' '}
             <Link href="/team" className="link">
               Project Team

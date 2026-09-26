@@ -26,7 +26,7 @@ export async function GET() {
   const categoryLabelOf = (v: string | null) => (v ? `Category ${v}` : '')
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Punch list')
@@ -160,7 +160,7 @@ export async function GET() {
     r.alignment = { vertical: 'top', wrapText: true }
   }
 
-  note('CXA ID / Punch no', 'Do not change either. They are how CxSentinel knows which item each row already is, so your edits update the right rows instead of creating a second copy of the list. Add a row with both left blank and it is raised as a new item with the next free number.')
+  note('CXA ID / Punch no', 'Do not change either. They are how CxNivora knows which item each row already is, so your edits update the right rows instead of creating a second copy of the list. Add a row with both left blank and it is raised as a new item with the next free number.')
   note('Tag / System', 'What the defect is against — an equipment tag, or a system or area name. Required on a new item. Left blank on an existing one it means "unchanged", not "detach".')
   note('Punch item', 'The only column that is required. A row with nothing in it is skipped.')
   note('Detail', 'What needs to happen before it can be closed.')

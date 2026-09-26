@@ -4,18 +4,19 @@ import { Sidebar } from "@/components/Sidebar";
 import { Chrome } from "@/components/Chrome";
 import { TopBar } from "@/components/TopBar";
 import { createClient } from "@/lib/supabase/server";
+import { CXNIVORA } from "@/lib/brand";
 import { accessVerdict } from "@/data/gate";
 import { mayUseApp, openDoorWarning } from "@/lib/gate";
 import NoAccess from "@/components/NoAccess";
 
 export const metadata: Metadata = {
-  title: "CxSentinel — AI Commissioning Copilot",
+  title: "CxNivora — AI Commissioning Copilot",
   description:
     "AI-assisted commissioning copilot for data centers, substations, and power plants — checklists, documents, and issue tracking in one place.",
   // What an iPhone needs before "Add to Home Screen" gives an icon that opens
   // without the browser bars. Android reads app/manifest.ts for the same
   // thing; Safari has never read the manifest for this and wants its own tags.
-  appleWebApp: { capable: true, title: "CxSentinel", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "CxNivora", statusBarStyle: "default" },
   icons: { icon: "/icon-192.png", apple: "/apple-icon.png" },
 };
 
@@ -33,7 +34,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0369a1",
+  // Same source as the manifest. See src/app/manifest.ts for why.
+  themeColor: CXNIVORA.colors.anchor,
 };
 
 // The sidebar appears once you're logged in AND you have a project open, so

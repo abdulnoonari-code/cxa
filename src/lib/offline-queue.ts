@@ -73,11 +73,26 @@ export type QueuedDefect = {
   dueDate: string | null
   location: string | null
 
-  /** The photograph's own id, for the same reason. Null when there is none. */
-  photoRef: string | null
-  photoName: string | null
-  photoType: string | null
-  photoSize: number | null
+  /**
+   * The photographs, each with its own id for the same reason the defect has
+   * one: a photograph upload can be lost on the way back exactly as a defect
+   * can, and without an id the retry attaches the same picture twice.
+   *
+   * The single-photograph fields below are what this looked like before, and
+   * they are READ but never written — see `migrate`. A phone that queued a
+   * defect on the old shape and updated the app before it found a signal
+   * must not lose its picture.
+   */
+  photos?: { ref: string; name: string; type: string; size: number }[]
+
+  /** @deprecated Read for items queued before several were allowed. */
+  photoRef?: string | null
+  /** @deprecated */
+  photoName?: string | null
+  /** @deprecated */
+  photoType?: string | null
+  /** @deprecated */
+  photoSize?: number | null
 
   state: QueueState
   attempts: number
@@ -265,6 +280,40 @@ export function reclaimStranded(queue: QueuedDefect[]): QueuedDefect[] {
       ? { ...item, state: 'waiting', lastError: item.lastError ?? 'Sending was interrupted. It is still on this phone.' }
       : item
   )
+}
+
+/**
+ * An item queued before one defect could carry several photographs.
+ *
+ * ── Why this exists at all ─────────────────────────────────────────────
+ *
+ * Somebody raises a defect in a basement on a Tuesday, with a photograph.
+ * On Wednesday the app updates. On Thursday they find signal. If the new
+ * code only looks at `photos` and the old item only has `photo`, that
+ * picture is silently dropped — the defect goes up, the evidence does not,
+ * and nothing anywhere says so.
+ *
+ * A shape change to something stored on somebody's device is a migration,
+ * not a refactor, and it is owed the same care as a database one.
+ */
+export function migrate(item: QueuedDefect): QueuedDefect {
+  if (item.photos || !item.photoRef) return item
+  return {
+    ...item,
+    photos: [
+      {
+        ref: item.photoRef,
+        name: item.photoName ?? 'photo.jpg',
+        type: item.photoType ?? 'image/jpeg',
+        size: item.photoSize ?? 0,
+      },
+    ],
+  }
+}
+
+/** How many photographs are being carried with this defect. */
+export function photoCount(item: QueuedDefect): number {
+  return migrate(item).photos?.length ?? 0
 }
 
 /** Which of them were stranded — so the caller knows what to write back. */

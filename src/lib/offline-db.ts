@@ -24,8 +24,20 @@
 // as soon as there is anything worth keeping — not on first load, when
 // there is nothing to lose and the prompt would mean nothing.
 
-import type { QueuedDefect } from '@/lib/offline-queue'
+import { migrate, type QueuedDefect } from '@/lib/offline-queue'
 
+/**
+ * NOT RENAMED WITH THE PRODUCT, AND IT MUST NOT BE.
+ *
+ * This is the name of a database sitting on somebody's phone. Change it and
+ * the next time they open the app the browser hands them a brand-new empty
+ * one — while the old database, with every defect they raised in a basement
+ * and have not yet sent, is still there, orphaned, unreachable and invisible.
+ * They would see a clean screen and conclude their work had gone up.
+ *
+ * A rename is a change of name. It is not worth one lost defect, and the day
+ * this application is renamed again the same reasoning applies.
+ */
 const DB_NAME = 'cxsentinel-site'
 const DB_VERSION = 1
 const QUEUE = 'queue'
@@ -51,8 +63,18 @@ export type SiteCache = {
   at: string | null
 }
 
-/** A queued defect, with its photograph. */
-export type StoredDefect = QueuedDefect & { photo?: Blob | null }
+/**
+ * A queued defect, with its photographs.
+ *
+ * The Blobs are stored WITH the defect rather than in a second store,
+ * because two stores mean two writes and a phone closed between them leaves
+ * a defect with no pictures.
+ *
+ * `photo` — singular — is what this was before one defect could carry
+ * several. It is still read, because a phone may have queued something on
+ * the old shape and not yet found a signal. It is never written.
+ */
+export type StoredDefect = QueuedDefect & { photoBlobs?: Blob[]; photo?: Blob | null }
 
 // ── Telling the screen when the store changes ───────────────────────────
 //
@@ -124,7 +146,16 @@ export function available(): boolean {
 
 export async function listQueue(): Promise<StoredDefect[]> {
   const rows = await run<StoredDefect[]>(QUEUE, 'readonly', (s) => s.getAll() as IDBRequest<StoredDefect[]>)
-  return [...rows].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  return [...rows]
+    .map((row) => {
+      // Anything queued before several photographs were allowed is brought
+      // forward on the way out, so nothing downstream has to know there were
+      // ever two shapes — and nothing downstream can forget.
+      const moved = migrate(row) as StoredDefect
+      if (!moved.photoBlobs && row.photo) return { ...moved, photoBlobs: [row.photo] }
+      return moved
+    })
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 }
 
 export async function putQueued(item: StoredDefect): Promise<void> {

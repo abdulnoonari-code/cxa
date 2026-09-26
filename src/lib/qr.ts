@@ -121,5 +121,5 @@ export function labelSize(value: string | null | undefined): (typeof LABEL_SIZES
 export function scanNote(origin: string | null): string {
   return origin
     ? `Each code opens that item on ${origin.replace(/^https?:\/\//, '')} — its checks, its punch items and its documents.`
-    : 'Each code opens that item in CxSentinel — its checks, its punch items and its documents.'
+    : 'Each code opens that item in CxNivora — its checks, its punch items and its documents.'
 }

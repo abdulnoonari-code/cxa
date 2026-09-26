@@ -41,7 +41,7 @@ export type DefectContext = {
   against: string
   /** "L3 — Point to point" and so on, already shortened by the caller. */
   level?: string
-  /** How many photographs this item has in CxSentinel, carried or not. */
+  /** How many photographs this item has in CxNivora, carried or not. */
   photos?: number
 }
 

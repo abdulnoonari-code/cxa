@@ -42,7 +42,7 @@ export async function GET(request: Request) {
   const overall = rollupFor(rollup, index.root ? { type: 'project', id: index.root.id } : null)
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   // ── Cover ───────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
     for (const p of report.people) line(p.name, `${p.role ?? '—'} · ${p.entries} entries`)
     const caveat = cover.addRow({
       a: '',
-      b: 'This is who entered work into CxSentinel, which is not the same as who was on site. It is not a manpower return.',
+      b: 'This is who entered work into CxNivora, which is not the same as who was on site. It is not a manpower return.',
     })
     caveat.font = { italic: true, size: 9 }
     caveat.getCell('b').alignment = { wrapText: true }
@@ -107,7 +107,7 @@ export async function GET(request: Request) {
 
   const provenance = cover.addRow({
     a: 'HOW THIS WAS MADE',
-    b: 'Built from the CxSentinel audit log, which the database will not allow anyone to edit or delete. Every line traces to a record. To change what this report says, change the record it came from — the correction appears in the audit trail alongside the original.',
+    b: 'Built from the CxNivora audit log, which the database will not allow anyone to edit or delete. Every line traces to a record. To change what this report says, change the record it came from — the correction appears in the audit trail alongside the original.',
   })
   provenance.font = { italic: true, size: 9 }
   provenance.getCell('b').alignment = { wrapText: true }

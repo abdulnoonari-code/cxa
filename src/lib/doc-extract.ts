@@ -144,7 +144,7 @@ export async function extractDocument(
   if (!format) {
     return {
       ...empty,
-      reason: `CxSentinel can read .docx, .pdf, .txt and .md. "${fileName}" is none of those. If it is an old .doc, open it in Word and save it as .docx.`,
+      reason: `CxNivora can read .docx, .pdf, .txt and .md. "${fileName}" is none of those. If it is an old .doc, open it in Word and save it as .docx.`,
     }
   }
 

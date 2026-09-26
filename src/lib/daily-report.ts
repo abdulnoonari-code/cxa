@@ -177,5 +177,5 @@ export function timeOf(iso: string): string {
 // not show any, which is a different statement and the only one the app is
 // entitled to make.
 export function emptyDayNote(day: string): string {
-  return `No entries were recorded on ${longDate(day)}. This does not mean no work took place — only that nothing was entered into CxSentinel that day.`
+  return `No entries were recorded on ${longDate(day)}. This does not mean no work took place — only that nothing was entered into CxNivora that day.`
 }

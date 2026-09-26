@@ -78,7 +78,7 @@ export function remedyFor(row: RemedyLike): Remedy {
   if (agreed) {
     const by = trimmed(row.action_set_by)
     const at = onDate(row.action_set_at)
-    const who = by && at ? `recorded by ${by} on ${at}` : by ? `recorded by ${by}` : at ? `recorded on ${at}` : 'recorded in CxSentinel'
+    const who = by && at ? `recorded by ${by} on ${at}` : by ? `recorded by ${by}` : at ? `recorded on ${at}` : 'recorded in CxNivora'
     return {
       state: 'agreed',
       text: agreed,

@@ -1,6 +1,6 @@
 // The handover dossier.
 //
-// Everything else in CxSentinel records something. This is the thing all of it
+// Everything else in CxNivora records something. This is the thing all of it
 // was recorded *for*: the pack you hand over when a system is finished, that
 // proves it was commissioned rather than merely built.
 //
@@ -36,7 +36,7 @@ export const SECTIONS: { key: SectionKey; title: string; whatItProves: string; e
     title: 'Requirements',
     whatItProves: 'What this system was required to do, where each requirement came from, and what proves it was met.',
     emptyMeans:
-      'No requirements are recorded against this system. That does not mean none apply — it means none have been read into CxSentinel from the specification.',
+      'No requirements are recorded against this system. That does not mean none apply — it means none have been read into CxNivora from the specification.',
   },
   {
     key: 'checks',
@@ -213,7 +213,7 @@ export type DossierVerdict = {
  *
  * Note what the best case says. Not "complete", not "accepted", not "approved
  * for handover" — **the records in this pack support handover**. The pack
- * reports; the people signing it decide. Every verdict in CxSentinel refuses
+ * reports; the people signing it decide. Every verdict in CxNivora refuses
  * to authorise, and the one on the front of the handover document is the one
  * where that matters most.
  */

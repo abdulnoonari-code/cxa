@@ -133,7 +133,7 @@ export function IssuePhotos({
         </select>
         {/* Shrunk in the browser before it is sent — a form submission over
             4 MB never reaches the server at all. See components/PhotoInput. */}
-        <PhotoInput name="file" required className="io-file" />
+        <PhotoInput name="file" multiple required className="io-file" />
         <input
           name="caption"
           placeholder="What the photo shows (optional)"

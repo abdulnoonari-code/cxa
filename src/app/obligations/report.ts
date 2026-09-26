@@ -142,7 +142,7 @@ export async function buildObligationReport(url: string): Promise<Filtered | nul
         : []),
     ],
     footnotes: [
-      'This register records what the documents read into CxSentinel say is owed. It is not a legal opinion, it does not discharge anything, and a clause absent from it has not stopped applying — it means the document it lives in has not been read into CxSentinel.',
+      'This register records what the documents read into CxNivora say is owed. It is not a legal opinion, it does not discharge anything, and a clause absent from it has not stopped applying — it means the document it lives in has not been read into CxNivora.',
       'Submitted and Accepted are separate states on purpose: the first is the owing party saying a duty is discharged, the second is the receiving party agreeing. Only Accepted, Waived and Not applicable close an obligation.',
     ],
   }

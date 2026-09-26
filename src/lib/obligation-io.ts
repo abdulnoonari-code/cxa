@@ -7,7 +7,7 @@
 //
 // One thing is deliberately harder to change here than anywhere else. The
 // **party** is the whole content of an obligation — it is the answer to "whose
-// was this?" — so a party the file names but CxSentinel does not recognise
+// was this?" — so a party the file names but CxNivora does not recognise
 // stops the import rather than quietly filing the row as unassigned. Getting
 // that wrong on a re-import would silently orphan somebody's obligations.
 

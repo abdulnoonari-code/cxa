@@ -203,7 +203,7 @@ export default async function ItpPage({
         <p className="text-secondary" style={{ fontSize: 13, margin: '0 0 10px' }}>
           Download the Excel, send it to the client or the CxA, and let them put an <strong>H</strong>,{' '}
           <strong>W</strong>, <strong>S</strong> or <strong>R</strong> in the column of the party who holds each point.
-          Upload the same file back and CxSentinel changes only the rows that differ.
+          Upload the same file back and CxNivora changes only the rows that differ.
         </p>
         <ul className="text-secondary" style={{ fontSize: 12.5, margin: '0 0 12px', paddingLeft: 18 }}>
           <li>

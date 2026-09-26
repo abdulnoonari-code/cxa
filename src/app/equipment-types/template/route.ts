@@ -8,7 +8,7 @@ export async function GET() {
   const refused = await requireAccess()
   if (refused) return refused
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Types')
@@ -108,7 +108,7 @@ export async function GET() {
   return new Response(buf, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="cxsentinel-equipment-types-template.xlsx"',
+      'Content-Disposition': 'attachment; filename="cxnivora-equipment-types-template.xlsx"',
       'Cache-Control': 'no-store',
     },
   })

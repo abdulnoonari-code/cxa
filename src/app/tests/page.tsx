@@ -216,7 +216,7 @@ export default async function TestsPage({
           rather than duplicated.
         </p>
         <p className="text-secondary" style={{ fontSize: 13, marginBottom: 14 }}>
-          <strong>The Result column in their file is read and then overruled.</strong> CxSentinel works out pass or
+          <strong>The Result column in their file is read and then overruled.</strong> CxNivora works out pass or
           fail from the measured value and the acceptance criteria, every time — and tells you, by row number, every
           place the sheet claimed something its own numbers do not support. That is the whole reason for recording a
           reading instead of a verdict.

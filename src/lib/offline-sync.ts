@@ -41,10 +41,15 @@ function body(item: StoredDefect): FormData {
   if (item.responsibleParty) form.set('responsible_party', item.responsibleParty)
   if (item.dueDate) form.set('due_date', item.dueDate)
   if (item.location) form.set('location', item.location)
-  if (item.photo && item.photoRef) {
-    form.set('photo_ref', item.photoRef)
-    form.set('photo', new File([item.photo], item.photoName ?? 'photo.jpg', { type: item.photoType ?? 'image/jpeg' }))
-  }
+  // Several photographs, each with its own id so a retry cannot attach the
+  // same picture twice. `append`, not `set` — `set` would leave one.
+  const blobs = item.photoBlobs ?? (item.photo ? [item.photo] : [])
+  const meta = item.photos ?? []
+  blobs.forEach((blob, i) => {
+    const info = meta[i]
+    form.append('photo_ref', info?.ref ?? `${item.clientRef}-p${i}`)
+    form.append('photo', new File([blob], info?.name ?? `photo-${i + 1}.jpg`, { type: info?.type ?? 'image/jpeg' }))
+  })
   return form
 }
 

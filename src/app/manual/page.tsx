@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { MANUAL_GROUPS, type ScreenEntry, type ManualGroup } from '@/lib/manual'
 
-export const metadata = { title: 'Manual — CxSentinel' }
+export const metadata = { title: 'Manual — CxNivora' }
 
 // The manual, inside the application.
 //
@@ -233,7 +233,7 @@ export default function ManualPage() {
           Site Manual
         </h1>
         <p className="text-secondary" style={{ fontSize: 14, margin: '0 0 4px', maxWidth: '62ch' }}>
-          How to run a commissioning campaign in CxSentinel — every screen, every spreadsheet, and every
+          How to run a commissioning campaign in CxNivora — every screen, every spreadsheet, and every
           rule the application applies to your records without being asked.
         </p>
         <div className="mn-toc">
@@ -259,7 +259,7 @@ export default function ManualPage() {
         <p className="mn-stand">Everything else in this manual follows from this paragraph.</p>
 
         <p className="mn-p">
-          CxSentinel does not ask you how complete the job is. It holds the records — the equipment
+          CxNivora does not ask you how complete the job is. It holds the records — the equipment
           register, the checks at every level, the test readings, the punch list, the signatures, the
           documents — and it <strong>works out</strong> completion from those records every time a screen
           opens. Nothing is stored as a percentage. Nothing carries forward from yesterday&rsquo;s number.

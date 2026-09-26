@@ -129,7 +129,7 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
         })),
         missing: gallery.failed,
         note: [
-          omissionNote(gallery, 'the punch item in CxSentinel'),
+          omissionNote(gallery, 'the punch item in CxNivora'),
           // Said out loud rather than left to be inferred from a short
           // gallery. Without the image library the photographs go in at
           // their original size, the byte budget fills after two or three,
@@ -137,7 +137,7 @@ export async function buildPunchReport(url: string): Promise<BuiltPunch | null> 
           // three had been uploaded.
           downscales
             ? null
-            : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxSentinel.',
+            : 'This deployment cannot resize photographs, so they are carried at full size and fewer fit within the size limit. Everything uploaded is still in CxNivora.',
         ]
           .filter(Boolean)
           .join(' ') || undefined,

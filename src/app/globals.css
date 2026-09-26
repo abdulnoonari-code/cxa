@@ -1,5 +1,5 @@
 /* ============================================================================
-   CxSentinel design system
+   CxNivora design system
    Type:  IBM Plex Sans (interface) + IBM Plex Mono (tags, figures, labels)
    Color: near-black graphite command rail, deep azure brand, engineering
           semantics
@@ -26,30 +26,79 @@
        3. A state that is neither good nor bad — in progress, submitted,
           awaiting somebody — uses --color-progress, which is deliberately
           neither green nor the brand. */
-  --color-primary: #0369a1;
-  --color-primary-dark: #075985;
-  --color-primary-light: #e8f4fd;
-  --color-accent: #22d3ee;
-  --color-accent-2: #7c3aed;
+  /* CxNivora. Graphite, cyan, paper — and they are the same colours the
+     documents are drawn in. src/lib/brand.ts is the source of truth for
+     both; a screen and a PDF that disagree about the brand is exactly the
+     small wrongness that makes a product look like a side project.
+
+     THE CYAN EXISTS AT TWO STEPS, AND THE SPLIT IS NOT DECORATION.
+
+       --color-brand    #0097B8  shapes only: the mark, a rule, a band, a
+                                 focus ring. Reaches 3.25 against paper,
+                                 and a shape needs 3.0.
+       --color-primary  #046C86  anything carrying words: a filled button,
+                                 a link, a heading in brand colour.
+                                 Reaches 5.69 against paper and 6.01 with
+                                 white on it, and text needs 4.5.
+
+     The bright one is 3.43 with white on it. A filled button in it with a
+     white label is unreadable to anybody over about fifty in daylight, and
+     that is most of the people who will open this on a site. So the bright
+     one is never the fill of anything with a word in it. If you ever find
+     yourself putting --color-brand behind text, the answer is
+     --color-primary, not a heavier font weight.
+
+     Distance from the three colours that already mean something: 193 from
+     the green that means passed, 488 from amber, 473 from red. The green
+     moved to make the first of those numbers — see RESERVED in
+     src/lib/brand.ts. */
+  --color-brand: #0097B8;
+  --color-primary: #046C86;
+  --color-primary-dark: #03566B;
+  --color-primary-light: #E7F6FA;
+  /* Light cyan, for text on the graphite surfaces only — the rail and the
+     hero. 9.22 on the rail. It would be 2.0 on paper, which is why it is
+     not a general-purpose accent. */
+  --color-accent: #4FC8E0;
+  --color-accent-2: #11161E;
 
   /* Neither good nor bad: in progress, submitted, awaiting acceptance.
      Never green, on purpose. */
-  --color-progress: #4f46e5;
+  /* Neither good nor bad: in progress, submitted, awaiting acceptance.
 
-  /* Command rail — near-black graphite. The darkest surface in the
-     application, and deliberately almost neutral so the azure on it is the
-     only thing that reads as brand. */
-  --rail-bg: #0b1017;
-  --rail-bg-2: #16232e;
-  --rail-text: #9fb3c4;
-  --rail-text-strong: #f2f7fb;
+     Not indigo any more — that is the brand now, and a state badge in the
+     brand colour reads as furniture rather than as a state. Not teal either,
+     which was the first replacement and measured 157 from the green that
+     means passed: close enough to be mistaken at a glance, which is all
+     anybody gives a status chip.
+
+     These two pull against each other — every colour far from green is
+     nearer the violet, and vice versa. #1E40AF is the best of them: 274
+     from green, 480 from amber, 378 from red, and a navy-blue nobody reads
+     as violet. */
+  --color-progress: #1E40AF;
+
+  /* Command rail — the anchor itself, #11161E, with one step up for the
+     gradient. Very nearly neutral, on purpose: the cyan on it is then the
+     only thing on the screen that reads as brand, which is the whole
+     argument for a near-black anchor. */
+  --rail-bg: #11161E;
+  --rail-bg-2: #1E2630;
+  --rail-text: #9AA6B4;
+  --rail-text-strong: #F3F7F9;
   --rail-border: rgba(255, 255, 255, 0.1);
-  --rail-active: rgba(3, 105, 161, 0.34);
+  --rail-active: rgba(0, 151, 184, 0.34);
 
   /* Semantic — brighter solids for charts, calm tints for badges */
-  --color-success: #047a52;
-  --color-success-bg: #e2fbef;
-  --color-success-solid: #05c07a;
+  --color-success: #0F7034;
+  --color-success-bg: #E6F7EC;
+  /* Was #05c07a, a teal-green. It leaned towards the brand cyan instead of
+     away from it — 20 apart from what is now --level-2 and 135 from the
+     brand — and a teal dot that might mean "passed" and might mean
+     "nothing, it is just the product's colour" is how a witness point gets
+     signed off twice or not at all. This green leans yellow. 193 from the
+     brand, 385 from amber, 443 from red. */
+  --color-success-solid: #16A34A;
   --color-warning: #a35700;
   --color-warning-bg: #fff3de;
   --color-warning-solid: #ff9d0a;
@@ -63,19 +112,26 @@
   --color-info-bg: #f1ebff;
 
   /* Surfaces & text */
-  --color-bg: #f2f6fd;
+  --color-bg: #F5F8F9;
   --color-surface: #ffffff;
-  --color-border: #dbe3f2;
-  --color-border-soft: #e9eefa;
-  --color-text: #0a1428;
-  --color-text-secondary: #56658a;
+  --color-border: #D8DFE5;
+  --color-border-soft: #E8EDF0;
+  --color-text: #11161E;
+  --color-text-secondary: #586471;
 
   /* The five commissioning levels. Mirrors lib/levels.ts, which is the source
      of truth for anything data-driven; these exist for static styling. Cool
      ramp, in order, and deliberately clear of the green/amber/red that mean
      Pass, Warning and Fail. */
   --level-1: #64748b;
-  --level-2: #0891b2;
+  /* Was #0891b2 — a cyan, which measured 20 from the brand cyan once the
+     brand became cyan. Twenty is the same colour. An L2 chip beside a
+     brand rule would have read as the same kind of thing, and the level of
+     a check is not decoration. #2563EB is 146 from the brand, 188 from L1
+     and 86 from L3 — and the ramp's own tightest pair, L3 against L4, has
+     always been 75, so this sits outside the resolution the ramp already
+     works at. */
+  --level-2: #2563EB;
   --level-3: #4f46e5;
   --level-4: #7c3aed;
   --level-5: #c026d3;
@@ -212,12 +268,8 @@ a {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
-  background: linear-gradient(140deg, var(--color-primary) 0%, var(--color-accent) 130%);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  /* No box and no gradient: the mark IS the shape now, and a coloured tile
+     behind it was the thing that made "CX" look like a placeholder. */
   flex-shrink: 0;
   box-shadow: 0 4px 12px -2px rgba(3, 105, 161, 0.55);
 }
@@ -1291,11 +1343,6 @@ textarea.input {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: var(--color-primary);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
 }
 
 .topbar-name {
@@ -1420,7 +1467,11 @@ textarea.input {
 }
 
 .project-card.is-open .project-card-accent {
-  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  /* Ends in --color-brand, not --color-accent. The light cyan is for text
+     on graphite; on a white card it measures 2.0 and the right-hand end of
+     this strip simply disappeared, so a half-open project and a fully open
+     one looked the same. */
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-brand) 100%);
 }
 
 .project-card-body {
@@ -1469,7 +1520,9 @@ textarea.input {
 .project-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  /* See .project-card-accent: the pale end of this gradient vanished into
+     the track, so you could not see where the fill stopped. */
+  background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-brand) 100%);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2715,7 +2768,7 @@ textarea.input {
   vertical-align: middle;
 }
 
-/* ── On Site: CxSentinel on a phone ──────────────────────────────────────
+/* ── On Site: CxNivora on a phone ──────────────────────────────────────
    Written for one hand, in daylight, in gloves.
 
    Three rules, and they are the only reason this is not just the desktop CSS

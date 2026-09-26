@@ -10,7 +10,7 @@ export async function GET() {
   if (refused) return refused
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
 
   const sheet = wb.addWorksheet('Test records')
@@ -121,7 +121,7 @@ export async function GET() {
 
   note(
     'There is no Result column',
-    'On purpose. You record the measured value; CxSentinel works out whether it passed. If you upload a supplier sheet that has a Result column, it is read and then overruled by the arithmetic — and every row where the two disagreed is reported to you with its row number. A result typed next to a number that does not meet the criteria is the single easiest thing for an auditor to find.'
+    'On purpose. You record the measured value; CxNivora works out whether it passed. If you upload a supplier sheet that has a Result column, it is read and then overruled by the arithmetic — and every row where the two disagreed is reported to you with its row number. A result typed next to a number that does not meet the criteria is the single easiest thing for an auditor to find.'
   )
   note('CXA ID / Test ref', 'Leave both blank on a new sheet. They appear when you export tests that already exist, and they are what makes a second upload update those tests rather than duplicate them.')
   note('Tag / System', 'What was tested — an equipment tag, or a system or area name for a test that is not against one piece of kit. Required on every new test.')
@@ -176,7 +176,7 @@ export async function GET() {
   return new Response(buffer, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': 'attachment; filename="cxsentinel-test-records-template.xlsx"',
+      'Content-Disposition': 'attachment; filename="cxnivora-test-records-template.xlsx"',
     },
   })
 }

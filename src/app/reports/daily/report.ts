@@ -60,7 +60,7 @@ export async function buildDailyDocument(url: string): Promise<BuiltDaily | null
             daily.people.length === 1 ? 'person' : 'people'
           }.`,
     figures: [
-      { label: 'Entries today', value: daily.total, note: 'Recorded in CxSentinel' },
+      { label: 'Entries today', value: daily.total, note: 'Recorded in CxNivora' },
       { label: 'People', value: daily.people.length, note: 'Who recorded something' },
       { label: 'Project readiness', value: `${overall.readiness.percent}%`, note: 'Worked out live' },
       { label: 'Open issues', value: overall.openIssues, note: `${overall.categoryA} Category A` },
@@ -89,7 +89,7 @@ export async function buildDailyDocument(url: string): Promise<BuiltDaily | null
       })),
     ],
     footnotes: [
-      'This report is built from what was entered into CxSentinel on the day. It records what was written down, not everything that happened on site — an activity carried out and not entered does not appear here.',
+      'This report is built from what was entered into CxNivora on the day. It records what was written down, not everything that happened on site — an activity carried out and not entered does not appear here.',
       'The readiness figure is worked out at the moment this document was generated and is never stored. It authorises nothing.',
     ],
   }

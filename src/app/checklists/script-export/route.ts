@@ -10,7 +10,7 @@ import { requireAccess } from '@/data/require-access'
 // The whole project as a test script, in the same shape the template comes in.
 //
 // This is the file to mark up on site. Edit the answers, write the remarks,
-// upload it back and nothing duplicates — the CXA ID column tells CxSentinel
+// upload it back and nothing duplicates — the CXA ID column tells CxNivora
 // which check each row already is.
 //
 // It round-trips: an export that goes straight back in changes nothing.
@@ -21,11 +21,11 @@ export async function GET() {
   const project = await getCurrentProject()
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CxSentinel'
+  wb.creator = 'CxNivora'
   wb.created = new Date()
   const sheet = wb.addWorksheet('Test Script')
 
-  sheet.getCell('A1').value = project ? `${project.name} — test script` : 'CxSentinel test script'
+  sheet.getCell('A1').value = project ? `${project.name} — test script` : 'CxNivora test script'
   sheet.getCell('A1').font = { name: 'Arial', bold: true, size: 13 }
 
   sheet.getCell('A2').value = 'Equipment / System:'

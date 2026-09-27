@@ -4,7 +4,8 @@ import { getCurrentProject } from '@/lib/project'
 import { getActor } from '@/lib/audit'
 import { can } from '@/lib/roles'
 import { loadSubjectIndex } from '@/data/subjects'
-import { loadProjectRollup } from '@/data/rollup'
+import { loadProjectRollup, rollupFor } from '@/data/rollup'
+import { forecast, forecastLine, against } from '@/lib/forecast'
 import { loadGates } from '@/data/gates'
 import { getSubject, subjectTitle, subjectLabel, SUBJECT_TYPES } from '@/lib/subjects'
 import { GATE_TEMPLATES, gateVerdict, gateBadgeClass } from '@/lib/gates'
@@ -197,6 +198,33 @@ export default async function GatesPage() {
       {gates.map((g) => {
         const subject =
           g.subject_type && g.subject_id ? getSubject(index, { type: g.subject_type as never, id: g.subject_id }) : null
+
+        // ── Will this gate make its date? ─────────────────────────────
+        //
+        // A gate already knows two things: what it is on, and when it is
+        // planned for. The rollup already knows every check underneath
+        // that subject. So the question "is this going to be ready" can
+        // be answered from work actually signed, rather than from
+        // somebody's impression of how it is going.
+        //
+        // Every level under the gate is counted, not just one. A gate is
+        // held by whatever is outstanding beneath it, and a reader asking
+        // "will this be ready" means all of it.
+        const ref = g.subject_type && g.subject_id ? { type: g.subject_type as never, id: g.subject_id } : null
+        const under = ref ? rollupFor(rollup, ref).checks : rollup.checks
+        const finished = under.filter((c) => c.status === 'pass' || c.status === 'na')
+        const view = forecast({
+          total: under.length,
+          done: finished.length,
+          completions: finished
+            .map((c) => ({ at: new Date(c.updated_at ?? '') }))
+            .filter((c) => !Number.isNaN(c.at.getTime())),
+          windowDays: 14,
+          now: new Date(),
+        })
+        const planned = g.planned_for ? new Date(g.planned_for) : null
+        const slip = against(view, planned)
+
         return (
           <div
             key={g.id}
@@ -237,6 +265,52 @@ export default async function GatesPage() {
                 Open gate
               </Link>
             </div>
+
+            {(view.state === 'ok' || planned) && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '9px 12px',
+                  borderRadius: 9,
+                  background: 'var(--color-bg)',
+                  borderLeft: `3px solid ${
+                    slip !== null && slip > 0 ? 'var(--color-danger-solid)' : 'var(--color-progress)'
+                  }`,
+                }}
+              >
+                <div
+                  className="text-secondary mono"
+                  style={{ fontSize: 10.5, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}
+                >
+                  At the rate it is going
+                </div>
+                <div style={{ fontSize: 13.5 }}>
+                  {view.state === 'ok' ? (
+                    <>
+                      {forecastLine(view)}{' '}
+                      <strong>
+                        Ready{' '}
+                        {view.finishes.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </strong>
+                      {slip === null ? (
+                        <span className="text-secondary"> — no date planned for this gate.</span>
+                      ) : slip > 0 ? (
+                        <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                          {' '}
+                          — {slip} day{slip === 1 ? '' : 's'} after the planned date.
+                        </span>
+                      ) : slip === 0 ? (
+                        <span> — on the planned date.</span>
+                      ) : (
+                        <span> — {-slip} day{slip === -1 ? '' : 's'} before the planned date.</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-secondary">{forecastLine(view)}</span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {g.result.blockers.length > 0 && (
               <div style={{ marginTop: 12 }}>

@@ -24,6 +24,13 @@ export type CheckRecord = {
   item: string
   level: string
   status: string
+  /**
+   * When the row was last written — NOT when the check was passed. There
+   * is no passed_at column. Used by lib/forecast.ts to read a rate of
+   * work, which says so on the screen rather than implying a precision it
+   * does not have.
+   */
+  updated_at: string | null
   review_state: string | null
   inspection_type: string | null
   notified_at: string | null
@@ -146,7 +153,7 @@ export async function loadProjectRollup(
   const [checkRes, testRes, issueRes, instrumentRes, signatureRes, reqRes, linkRes] = await Promise.all([
     supabase
       .from('checklist_items')
-      .select('id, item, level, status, review_state, inspection_type, notified_at, subject_type, subject_id, equipment_id')
+      .select('id, item, level, status, updated_at, review_state, inspection_type, notified_at, subject_type, subject_id, equipment_id')
       .eq('project_id', projectId),
     supabase
       .from('test_records')
@@ -178,6 +185,7 @@ export async function loadProjectRollup(
     item: string
     level: string
     status: string
+    updated_at: string | null
     review_state: string | null
     inspection_type: string | null
     notified_at: string | null
@@ -193,6 +201,7 @@ export async function loadProjectRollup(
         item: c.item,
         level: c.level,
         status: c.status,
+        updated_at: c.updated_at,
         review_state: c.review_state,
         inspection_type: c.inspection_type,
         notified_at: c.notified_at,

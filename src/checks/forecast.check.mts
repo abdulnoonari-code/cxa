@@ -6,6 +6,11 @@
 // those improvements produces a confident wrong answer rather than a
 // visible failure.
 import { forecast, against, forecastLine, type Completion } from '@/lib/forecast'
+import { readFileSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 let pass = 0, fail = 0
 function ok(n: string, c: boolean, extra = '') { if (c) pass++; else { fail++; console.log('FAIL: ' + n + (extra ? ' — ' + extra : '')) } }
@@ -160,6 +165,40 @@ const sameDay = (n: number, daysAgo = 3): Completion[] =>
     windowDays: 14, now: NOW,
   })
   if (f.state === 'ok') eq('tomorrow’s timestamps do not count towards today’s rate', Math.round(f.perDay * 100) / 100, 1)
+}
+
+// ════════ THE TWO SCREENS AGREE ════════
+//
+// The forecast is shown in two places — Project Plan & Rollup, per level,
+// and on each Readiness Gate. They read the same checks and they must use
+// the same window, or the same job is 12 days late on one screen and 4
+// days early on the other and neither number can be trusted again.
+//
+// Nothing in the type system stops somebody tuning one of them.
+{
+  const files = [
+    'src/app/plan/page.tsx',
+    'src/app/gates/page.tsx',
+  ].map((f) => ({ f, text: readFileSync(join(ROOT, f), 'utf8') }))
+
+  for (const { f, text } of files) {
+    ok(`${f} calls forecast()`, /forecast\(\{/.test(text), f)
+  }
+  const windows = files.flatMap(({ f, text }) =>
+    [...text.matchAll(/windowDays:\s*(\d+)/g)].map((m) => ({ f, days: m[1] })),
+  )
+  ok('both screens set a window', windows.length >= 2, JSON.stringify(windows))
+  ok('and it is the same window on both',
+     new Set(windows.map((w) => w.days)).size === 1,
+     windows.map((w) => `${w.f}: ${w.days}`).join(', '))
+
+  // A date that will not parse must be dropped, not turned into NaN and
+  // counted. `new Date(null)` is 1970 and `new Date(undefined)` is
+  // Invalid — one of those silently backdates the rate and the other
+  // poisons the arithmetic.
+  for (const { f, text } of files) {
+    ok(`${f} drops timestamps it cannot parse`, /Number\.isNaN\(c\.at\.getTime\(\)\)/.test(text), f)
+  }
 }
 
 console.log(`${pass} passed, ${fail} failed`)

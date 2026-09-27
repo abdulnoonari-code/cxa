@@ -544,24 +544,25 @@ export function toWinAnsi(text: string): string {
 
 /** The same, over every string in a report. */
 function plainReport(report: Report): Report {
-  const s = (v: string | undefined) => (v === undefined ? undefined : toWinAnsi(v))
-  const cellOf = (v: string | number | null) => (typeof v === 'string' ? toWinAnsi(v) : v)
+  const tw = (v: string) => toWinAnsi(v)
+  const s = (v: string | undefined) => (v === undefined ? undefined : tw(v))
+  const cellOf = (v: string | number | null) => (typeof v === 'string' ? tw(v) : v)
 
   return {
     ...report,
-    title: toWinAnsi(report.title),
+    title: tw(report.title),
     subtitle: s(report.subtitle),
-    project: toWinAnsi(report.project),
+    project: tw(report.project),
     standfirst: s(report.standfirst),
     figures: report.figures?.map((f) => ({
-      label: toWinAnsi(f.label),
-      value: typeof f.value === 'string' ? toWinAnsi(f.value) : f.value,
+      label: tw(f.label),
+      value: typeof f.value === 'string' ? tw(f.value) : f.value,
       note: s(f.note),
     })),
     tables: report.tables?.map((t) => ({
       ...t,
       title: s(t.title),
-      columns: t.columns.map(toWinAnsi),
+      columns: t.columns.map((v) => tw(v)),
       rows: t.rows.map((r) => r.map(cellOf)),
     })),
     cards: report.cards?.map((set) => ({
@@ -571,12 +572,12 @@ function plainReport(report: Report): Report {
       emptyNote: s(set.emptyNote),
       cards: set.cards.map((c) => ({
         ...c,
-        heading: toWinAnsi(c.heading),
+        heading: tw(c.heading),
         strapline: s(c.strapline),
-        facts: c.facts?.map((f) => ({ label: toWinAnsi(f.label), value: toWinAnsi(f.value) })),
-        paragraphs: c.paragraphs?.map((p) => ({ label: toWinAnsi(p.label), text: toWinAnsi(p.text), note: s(p.note) })),
-        images: c.images?.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note), tag: s(i.tag) })),
-        missing: c.missing?.map((m) => ({ caption: toWinAnsi(m.caption), reason: toWinAnsi(m.reason) })),
+        facts: c.facts?.map((f) => ({ label: tw(f.label), value: tw(f.value) })),
+        paragraphs: c.paragraphs?.map((p) => ({ label: tw(p.label), text: tw(p.text), note: s(p.note) })),
+        images: c.images?.map((i) => ({ ...i, caption: tw(i.caption), note: s(i.note), tag: s(i.tag) })),
+        missing: c.missing?.map((m) => ({ caption: tw(m.caption), reason: tw(m.reason) })),
         noImagesNote: s(c.noImagesNote),
       })),
     })),
@@ -585,10 +586,10 @@ function plainReport(report: Report): Report {
       title: s(g.title),
       note: s(g.note),
       emptyNote: s(g.emptyNote),
-      images: g.images.map((i) => ({ ...i, caption: toWinAnsi(i.caption), note: s(i.note), tag: s(i.tag) })),
-      missing: g.missing?.map((m) => ({ caption: toWinAnsi(m.caption), reason: toWinAnsi(m.reason) })),
+      images: g.images.map((i) => ({ ...i, caption: tw(i.caption), note: s(i.note), tag: s(i.tag) })),
+      missing: g.missing?.map((m) => ({ caption: tw(m.caption), reason: tw(m.reason) })),
     })),
-    footnotes: report.footnotes?.map(toWinAnsi),
+    footnotes: report.footnotes?.map((v) => tw(v)),
     // The cover carries names and document numbers, and a Thai contractor
     // name on a cover page would scramble the rest of the line exactly as it
     // did in the body before this pass existed.
@@ -643,6 +644,19 @@ const PDF_IMAGE_W = 250
 const CARD_IMAGE_W = 210
 
 export async function toPdf(original: Report): Promise<Buffer> {
+  // ── The three fonts, named once ───────────────────────────────────────
+  //
+  // There are about sixty doc.font(...) calls below and they all go through
+  // these three. That is worth keeping even though all three are constants
+  // today, because the one time this application tried to change the font
+  // it changed BODY and BOLD and missed the eight italic runs — and a font
+  // that is named at the call site is a font that does not follow when the
+  // decision changes. An assertion in src/checks/document.check.mts fails if
+  // any call below names a font directly.
+  const BODY = 'Helvetica'
+  const BOLD = 'Helvetica-Bold'
+  const ASIDE = 'Helvetica-Oblique'
+
   // Once, here, over the whole report — rather than at each of the forty
   // `doc.text(...)` calls below, where the one that gets forgotten is the one
   // that scrambles a page.
@@ -689,7 +703,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
     // WRONG" / "DOCUMENT NUMBER" heading, so they are all identical and a
     // reader learns the pattern once.
     const label = (text: string, x: number, y: number, w: number) => {
-      doc.fillColor(c.muted).font('Helvetica-Bold').fontSize(7).text(text.toUpperCase(), x, y, {
+      doc.fillColor(c.muted).font(BOLD).fontSize(7).text(text.toUpperCase(), x, y, {
         width: w,
         characterSpacing: 0.6,
       })
@@ -703,7 +717,26 @@ export async function toPdf(original: Report): Promise<Buffer> {
     // revision or who it was issued to, and nothing on it says who made it.
     // ══════════════════════════════════════════════════════════════════
     if (wantsCover) {
-      const bandH = 232
+      // ── The band grows to fit its own contents ────────────────────
+      //
+      // It was a fixed 232pt, which is right for a one-line title and
+      // wrong the moment a title wraps: the subtitle is pushed down onto
+      // the accent strip at the foot of the band and is cut in half by it.
+      //
+      // Found by rendering a Thai report — "รายงานข้อบกพร่อง — Defect
+      // Report" is two lines — but it was never a Thai problem. "Integrated
+      // Systems Test — Readiness and Outstanding Items" would have done it
+      // in English on any day since the cover was built.
+      //
+      // So the height is measured rather than assumed. 232 stays as the
+      // minimum, so every document that fitted before is unchanged to the
+      // point.
+      const titleTop = 128
+      const titleH = doc.font(BOLD).fontSize(29).heightOfString(report.title, { width: width - 40 })
+      const subH = report.subtitle
+        ? doc.font(BODY).fontSize(11).heightOfString(report.subtitle, { width: width - 60 }) + 4
+        : 0
+      const bandH = Math.max(232, titleTop + titleH + subH + 30)
 
       doc.save().rect(0, 0, pageW, bandH).fill(c.anchor).restore()
       // A thin accent line at the foot of the band: the one place the bright
@@ -714,26 +747,26 @@ export async function toPdf(original: Report): Promise<Buffer> {
 
       doc
         .fillColor(c.ground)
-        .font('Helvetica-Bold')
+        .font(BOLD)
         .fontSize(19)
         .text(brand.name, PAGE_MARGIN + 50, 52, { width: 300, lineBreak: false })
       doc
         .fillColor(c.accent)
-        .font('Helvetica')
+        .font(BODY)
         .fontSize(8.5)
         .text(brand.line.toUpperCase(), PAGE_MARGIN + 50, 74, { width: 300, characterSpacing: 1.1, lineBreak: false })
 
       doc
         .fillColor(c.ground)
-        .font('Helvetica-Bold')
+        .font(BOLD)
         .fontSize(29)
-        .text(report.title, PAGE_MARGIN, 128, { width: width - 40 })
+        .text(report.title, PAGE_MARGIN, titleTop, { width: width - 40 })
 
       if (report.subtitle) {
         doc
           .fillColor('#FFFFFF')
           .opacity(0.72)
-          .font('Helvetica')
+          .font(BODY)
           .fontSize(11)
           .text(report.subtitle, PAGE_MARGIN, doc.y + 4, { width: width - 60 })
           .opacity(1)
@@ -741,7 +774,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
 
       // ── Who, what, which revision ──────────────────────────────────
       let y = bandH + 34
-      doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(15).text(report.project, PAGE_MARGIN, y, { width })
+      doc.fillColor(c.ink).font(BOLD).fontSize(15).text(report.project, PAGE_MARGIN, y, { width })
       y = doc.y + 18
 
       const facts: [string, string][] = [
@@ -758,17 +791,17 @@ export async function toPdf(original: Report): Promise<Buffer> {
         const fx = PAGE_MARGIN + (i % 2) * colW
         const fy = y + Math.floor(i / 2) * 42
         label(fact[0], fx, fy, colW - 20)
-        doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(10.5).text(fact[1], fx, fy + 12, { width: colW - 20 })
+        doc.fillColor(c.ink).font(BOLD).fontSize(10.5).text(fact[1], fx, fy + 12, { width: colW - 20 })
       })
       y += Math.ceil(facts.length / 2) * 42 + 12
 
       // ── The verdict, in a panel ────────────────────────────────────
       if (report.standfirst) {
-        doc.font('Helvetica').fontSize(11)
+        doc.font(BODY).fontSize(11)
         const h = doc.heightOfString(report.standfirst, { width: width - 36 }) + 30
         doc.save().roundedRect(PAGE_MARGIN, y, width, h, 6).fill(c.accentWash).restore()
         doc.save().rect(PAGE_MARGIN, y, 4, h).fill(c.accent).restore()
-        doc.fillColor(c.ink).font('Helvetica').fontSize(11).text(report.standfirst, PAGE_MARGIN + 20, y + 15, { width: width - 36 })
+        doc.fillColor(c.ink).font(BODY).fontSize(11).text(report.standfirst, PAGE_MARGIN + 20, y + 15, { width: width - 36 })
         y += h + 22
       }
 
@@ -786,7 +819,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
           // accent. The bright one measures 3.10 on this wash — enough for the
           // tile's border to be found, not enough for a figure somebody is
           // going to write down and act on.
-          doc.fillColor(c.accentInk).font('Helvetica-Bold').fontSize(22).text(String(figure.value), fx + 12, y + 24, {
+          doc.fillColor(c.accentInk).font(BOLD).fontSize(22).text(String(figure.value), fx + 12, y + 24, {
             width: tileW - 20,
             lineBreak: false,
           })
@@ -795,7 +828,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
             // to do" wraps to two lines and the second one was being cut in
             // half. A figure whose caption is clipped is a figure nobody
             // trusts the rest of.
-            doc.fillColor(c.muted).font('Helvetica').fontSize(7.5).text(figure.note, fx + 12, y + 52, { width: tileW - 20, height: 24 })
+            doc.fillColor(c.muted).font(BODY).fontSize(7.5).text(figure.note, fx + 12, y + 52, { width: tileW - 20, height: 24 })
           }
         })
         y += 82 + 20
@@ -804,7 +837,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
       // A closing line at the foot of the cover.
       doc
         .fillColor(c.muted)
-        .font('Helvetica')
+        .font(BODY)
         .fontSize(7.5)
         .text(
           `Generated by ${brand.name} on ${when(at)}. This document reflects the project record at that moment and is uncontrolled once printed.`,
@@ -831,12 +864,12 @@ export async function toPdf(original: Report): Promise<Buffer> {
           drawMark(doc as unknown as Parameters<typeof drawMark>[0], brand, PAGE_MARGIN, PAGE_MARGIN - 18, 15)
           doc
             .fillColor(c.anchor)
-            .font('Helvetica-Bold')
+            .font(BOLD)
             .fontSize(9)
             .text(brand.name, PAGE_MARGIN + 21, PAGE_MARGIN - 15, { width: 140, lineBreak: false })
           doc
             .fillColor(c.muted)
-            .font('Helvetica')
+            .font(BODY)
             .fontSize(8)
             .text(`${report.title} · ${report.project}`, PAGE_MARGIN + 150, PAGE_MARGIN - 15, {
               width: width - 150,
@@ -863,7 +896,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
           .restore()
         doc
           .fillColor(c.muted)
-          .font('Helvetica')
+          .font(BODY)
           .fontSize(7.5)
           .text(
             isCover ? `${brand.name} · ${report.project}` : `${report.project} · ${report.title}${meta.revision ? ` · Rev ${meta.revision}` : ''}`,
@@ -887,9 +920,9 @@ export async function toPdf(original: Report): Promise<Buffer> {
     // printed to walk the site with does not want a title page.
     if (!wantsCover) {
       drawMark(doc as unknown as Parameters<typeof drawMark>[0], brand, PAGE_MARGIN, doc.y, 26)
-      doc.fillColor(c.ink).fontSize(20).font('Helvetica-Bold').text(report.title, PAGE_MARGIN + 36, doc.y + 2, { width: width - 36 })
+      doc.fillColor(c.ink).fontSize(20).font(BOLD).text(report.title, PAGE_MARGIN + 36, doc.y + 2, { width: width - 36 })
       if (report.subtitle) {
-        doc.moveDown(0.2).fillColor(c.muted).fontSize(10).font('Helvetica').text(report.subtitle, PAGE_MARGIN, doc.y, { width })
+        doc.moveDown(0.2).fillColor(c.muted).fontSize(10).font(BODY).text(report.subtitle, PAGE_MARGIN, doc.y, { width })
       }
       doc.moveDown(0.2).fillColor(c.muted).fontSize(8.5).text(`${report.project} · ${when(at)}`, PAGE_MARGIN, doc.y, { width })
       doc.moveDown(0.5)
@@ -897,7 +930,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
       doc.moveDown(0.9)
 
       if (report.standfirst) {
-        doc.fillColor(c.ink).fontSize(10.5).font('Helvetica').text(report.standfirst, PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.ink).fontSize(10.5).font(BODY).text(report.standfirst, PAGE_MARGIN, doc.y, { width })
         doc.moveDown(0.8)
       }
 
@@ -915,12 +948,12 @@ export async function toPdf(original: Report): Promise<Buffer> {
           // accent. The bright one measures 3.10 on this wash — enough for the
           // tile's border to be found, not enough for a figure somebody is
           // going to write down and act on.
-          doc.fillColor(c.accentInk).font('Helvetica-Bold').fontSize(20).text(String(figure.value), fx + 11, top + 23, {
+          doc.fillColor(c.accentInk).font(BOLD).fontSize(20).text(String(figure.value), fx + 11, top + 23, {
             width: tileW - 18,
             lineBreak: false,
           })
           if (figure.note) {
-            doc.fillColor(c.muted).font('Helvetica').fontSize(7.5).text(figure.note, fx + 11, top + 50, { width: tileW - 18, height: 16 })
+            doc.fillColor(c.muted).font(BODY).fontSize(7.5).text(figure.note, fx + 11, top + 50, { width: tileW - 18, height: 16 })
           }
         })
         doc.y = top + 70 + 16
@@ -937,7 +970,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
       if (table.title) {
         ensure(46)
         doc.moveDown(0.7)
-        doc.fillColor(c.ink).fontSize(12.5).font('Helvetica-Bold').text(table.title, PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.ink).fontSize(12.5).font(BOLD).text(table.title, PAGE_MARGIN, doc.y, { width })
         doc.moveDown(0.35)
       }
 
@@ -945,7 +978,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
         const y = doc.y
         doc.save().rect(PAGE_MARGIN, y - 3, width, 19).fill(c.anchor).restore()
         let x = PAGE_MARGIN
-        doc.fillColor(c.ground).fontSize(7.5).font('Helvetica-Bold')
+        doc.fillColor(c.ground).fontSize(7.5).font(BOLD)
         table.columns.forEach((column, i) => {
           doc.text(column.toUpperCase(), x + 5, y + 3, { width: cols[i] - 10, lineBreak: false, characterSpacing: 0.4 })
           x += cols[i]
@@ -956,14 +989,14 @@ export async function toPdf(original: Report): Promise<Buffer> {
       ensure(52)
       drawHeader()
 
-      doc.font('Helvetica').fontSize(8)
+      doc.font(BODY).fontSize(8)
       table.rows.forEach((row, r) => {
         const height = Math.max(...row.map((value, i) => doc.heightOfString(cell(value), { width: cols[i] - 10 })), 11)
         if (doc.y + height + 8 > bottom) {
           doc.addPage()
           doc.y = PAGE_MARGIN + 30
           drawHeader()
-          doc.font('Helvetica').fontSize(8)
+          doc.font(BODY).fontSize(8)
         }
         const y = doc.y
         // Banding, so an eye can cross eight columns without losing the row.
@@ -999,15 +1032,15 @@ export async function toPdf(original: Report): Promise<Buffer> {
       doc.moveDown(0.9)
       if (set.title) {
         doc.save().rect(PAGE_MARGIN, doc.y, 4, 17).fill(c.accent).restore()
-        doc.fillColor(c.ink).fontSize(13).font('Helvetica-Bold').text(set.title, PAGE_MARGIN + 13, doc.y + 1, { width: width - 13 })
+        doc.fillColor(c.ink).fontSize(13).font(BOLD).text(set.title, PAGE_MARGIN + 13, doc.y + 1, { width: width - 13 })
         doc.moveDown(0.35)
       }
       if (set.intro) {
-        doc.fillColor(c.muted).fontSize(9).font('Helvetica').text(set.intro, PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.muted).fontSize(9).font(BODY).text(set.intro, PAGE_MARGIN, doc.y, { width })
         doc.moveDown(0.35)
       }
       if (set.cards.length === 0) {
-        doc.fillColor(c.muted).fontSize(9).font('Helvetica-Oblique').text(set.emptyNote ?? 'Nothing to report.', PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.muted).fontSize(9).font(ASIDE).text(set.emptyNote ?? 'Nothing to report.', PAGE_MARGIN, doc.y, { width })
         doc.moveDown(0.5)
       }
 
@@ -1020,23 +1053,23 @@ export async function toPdf(original: Report): Promise<Buffer> {
         // Measure. Every font call here is matched below — a mismatch reads
         // as a random extra gap under some cards and not others.
         let needed = 20
-        doc.font('Helvetica-Bold').fontSize(12.5)
+        doc.font(BOLD).fontSize(12.5)
         needed += doc.heightOfString(card.heading, { width: textW }) + 4
         if (card.strapline) {
-          doc.font('Helvetica').fontSize(8.5)
+          doc.font(BODY).fontSize(8.5)
           needed += doc.heightOfString(card.strapline, { width: textW }) + 6
         }
         const facts = factsLine(card)
         if (facts) {
-          doc.font('Helvetica').fontSize(8.5)
+          doc.font(BODY).fontSize(8.5)
           needed += doc.heightOfString(facts, { width: textW - 22 }) + 20
         }
         for (const block of card.paragraphs ?? []) {
           needed += 13
-          doc.font('Helvetica').fontSize(9.5)
+          doc.font(BODY).fontSize(9.5)
           needed += doc.heightOfString(block.text, { width: textW }) + 4
           if (block.note) {
-            doc.font('Helvetica-Oblique').fontSize(7.5)
+            doc.font(ASIDE).fontSize(7.5)
             needed += doc.heightOfString(block.note, { width: textW }) + 5
           }
         }
@@ -1052,25 +1085,25 @@ export async function toPdf(original: Report): Promise<Buffer> {
         const cardTop = doc.y + 8
 
         doc.moveDown(0.6)
-        doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(12.5).text(card.heading, PAGE_MARGIN + inset, doc.y, { width: textW })
+        doc.fillColor(c.ink).font(BOLD).fontSize(12.5).text(card.heading, PAGE_MARGIN + inset, doc.y, { width: textW })
         if (card.strapline) {
-          doc.fillColor(c.muted).font('Helvetica').fontSize(8.5).text(card.strapline, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
+          doc.fillColor(c.muted).font(BODY).fontSize(8.5).text(card.strapline, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
         }
 
         if (facts) {
           const fy = doc.y + 8
-          doc.font('Helvetica').fontSize(8.5)
+          doc.font(BODY).fontSize(8.5)
           const fh = doc.heightOfString(facts, { width: textW - 22 }) + 13
           doc.save().roundedRect(PAGE_MARGIN + inset, fy, textW, fh, 4).fill(c.accentWash).restore()
-          doc.fillColor(c.ink).font('Helvetica').fontSize(8.5).text(facts, PAGE_MARGIN + inset + 11, fy + 6, { width: textW - 22 })
+          doc.fillColor(c.ink).font(BODY).fontSize(8.5).text(facts, PAGE_MARGIN + inset + 11, fy + 6, { width: textW - 22 })
           doc.y = fy + fh
         }
 
         for (const block of card.paragraphs ?? []) {
           label(block.label, PAGE_MARGIN + inset, doc.y + 8, textW)
-          doc.fillColor(c.ink).font('Helvetica').fontSize(9.5).text(block.text, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
+          doc.fillColor(c.ink).font(BODY).fontSize(9.5).text(block.text, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
           if (block.note) {
-            doc.fillColor(c.muted).font('Helvetica-Oblique').fontSize(7.5).text(block.note, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
+            doc.fillColor(c.muted).font(ASIDE).fontSize(7.5).text(block.note, PAGE_MARGIN + inset, doc.y + 2, { width: textW })
           }
         }
 
@@ -1090,7 +1123,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
                 .save()
                 .fillColor(c.muted)
                 .fontSize(8)
-                .font('Helvetica-Oblique')
+                .font(ASIDE)
                 .text('This image could not be rendered.', x, top + frameH / 2, { width: imgW, align: 'center' })
                 .restore()
             }
@@ -1101,10 +1134,10 @@ export async function toPdf(original: Report): Promise<Buffer> {
             // reader has already decided which one they are looking at.
             if (image.tag) {
               const text = image.tag.toUpperCase()
-              doc.font('Helvetica-Bold').fontSize(6.5)
+              doc.font(BOLD).fontSize(6.5)
               const tw = doc.widthOfString(text, { characterSpacing: 0.7 }) + 14
               doc.save().roundedRect(x + 7, top + 7, tw, 14, 3).fill(c.anchor).restore()
-              doc.fillColor(c.ground).font('Helvetica-Bold').fontSize(6.5).text(text, x + 7, top + 11, {
+              doc.fillColor(c.ground).font(BOLD).fontSize(6.5).text(text, x + 7, top + 11, {
                 width: tw,
                 align: 'center',
                 characterSpacing: 0.7,
@@ -1113,13 +1146,13 @@ export async function toPdf(original: Report): Promise<Buffer> {
             }
 
             doc.save()
-            doc.fillColor(c.ink).fontSize(8).font('Helvetica-Bold').text(image.caption, x, top + frameH + 6, {
+            doc.fillColor(c.ink).fontSize(8).font(BOLD).text(image.caption, x, top + frameH + 6, {
               width: imgW,
               height: 11,
               ellipsis: true,
             })
             if (image.note) {
-              doc.fillColor(c.muted).fontSize(7).font('Helvetica').text(image.note, x, top + frameH + 18, {
+              doc.fillColor(c.muted).fontSize(7).font(BODY).text(image.note, x, top + frameH + 18, {
                 width: imgW,
                 height: 16,
                 ellipsis: true,
@@ -1133,17 +1166,17 @@ export async function toPdf(original: Report): Promise<Buffer> {
         for (const gone of missing) {
           ensure(22)
           doc.save()
-          doc.fillColor(DANGER).fontSize(8).font('Helvetica-Bold').text(`${gone.caption} — not shown.`, PAGE_MARGIN + inset, doc.y + 3, {
+          doc.fillColor(DANGER).fontSize(8).font(BOLD).text(`${gone.caption} — not shown.`, PAGE_MARGIN + inset, doc.y + 3, {
             width: textW,
             continued: true,
           })
-          doc.fillColor(c.muted).font('Helvetica').text(` ${gone.reason}`)
+          doc.fillColor(c.muted).font(BODY).text(` ${gone.reason}`)
           doc.restore()
         }
 
         if (images.length === 0 && missing.length === 0 && card.noImagesNote) {
           ensure(20)
-          doc.fillColor(c.muted).fontSize(7.5).font('Helvetica-Oblique').text(card.noImagesNote, PAGE_MARGIN + inset, doc.y + 4, { width: textW })
+          doc.fillColor(c.muted).fontSize(7.5).font(ASIDE).text(card.noImagesNote, PAGE_MARGIN + inset, doc.y + 4, { width: textW })
         }
 
         // The accent rule down the left of the whole block, drawn last now
@@ -1169,12 +1202,12 @@ export async function toPdf(original: Report): Promise<Buffer> {
       doc.moveDown(0.9)
       if (gallery.title) {
         doc.save().rect(PAGE_MARGIN, doc.y, 4, 17).fill(c.accent).restore()
-        doc.fillColor(c.ink).fontSize(13).font('Helvetica-Bold').text(gallery.title, PAGE_MARGIN + 13, doc.y + 1, { width: width - 13 })
+        doc.fillColor(c.ink).fontSize(13).font(BOLD).text(gallery.title, PAGE_MARGIN + 13, doc.y + 1, { width: width - 13 })
         doc.moveDown(0.4)
       }
 
       if (images.length === 0 && missing.length === 0) {
-        doc.fillColor(c.muted).fontSize(9).font('Helvetica').text(gallery.emptyNote ?? 'No photographs.', PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.muted).fontSize(9).font(BODY).text(gallery.emptyNote ?? 'No photographs.', PAGE_MARGIN, doc.y, { width })
         doc.moveDown(0.4)
       }
 
@@ -1197,15 +1230,15 @@ export async function toPdf(original: Report): Promise<Buffer> {
               .save()
               .fillColor(c.muted)
               .fontSize(8)
-              .font('Helvetica-Oblique')
+              .font(ASIDE)
               .text('This image could not be rendered.', x, top + frameH / 2, { width: imgW, align: 'center' })
               .restore()
           }
           doc.save().roundedRect(x, top, imgW, frameH, 4).lineWidth(0.7).stroke(c.rule).restore()
           doc.save()
-          doc.fillColor(c.ink).fontSize(8).font('Helvetica-Bold').text(image.caption, x, top + frameH + 6, { width: imgW, height: 11, ellipsis: true })
+          doc.fillColor(c.ink).fontSize(8).font(BOLD).text(image.caption, x, top + frameH + 6, { width: imgW, height: 11, ellipsis: true })
           if (image.note) {
-            doc.fillColor(c.muted).fontSize(7).font('Helvetica').text(image.note, x, top + frameH + 18, { width: imgW, height: 16, ellipsis: true })
+            doc.fillColor(c.muted).fontSize(7).font(BODY).text(image.note, x, top + frameH + 18, { width: imgW, height: 16, ellipsis: true })
           }
           doc.restore()
         })
@@ -1216,8 +1249,8 @@ export async function toPdf(original: Report): Promise<Buffer> {
       for (const gone of missing) {
         ensure(24)
         doc.save()
-        doc.fillColor(DANGER).fontSize(8.5).font('Helvetica-Bold').text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y, { width, continued: true })
-        doc.fillColor(c.muted).font('Helvetica').text(` ${gone.reason}`)
+        doc.fillColor(DANGER).fontSize(8.5).font(BOLD).text(`${gone.caption} — not shown.`, PAGE_MARGIN, doc.y, { width, continued: true })
+        doc.fillColor(c.muted).font(BODY).text(` ${gone.reason}`)
         doc.restore()
         doc.moveDown(0.2)
       }
@@ -1225,7 +1258,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
       if (gallery.note) {
         ensure(26)
         doc.moveDown(0.3)
-        doc.fillColor(c.muted).fontSize(8).font('Helvetica-Oblique').text(gallery.note, PAGE_MARGIN, doc.y, { width })
+        doc.fillColor(c.muted).fontSize(8).font(ASIDE).text(gallery.note, PAGE_MARGIN, doc.y, { width })
       }
     }
 
@@ -1258,11 +1291,11 @@ export async function toPdf(original: Report): Promise<Buffer> {
         // cut to "A. Jabbar, Commissioning" — a signature block that clips
         // somebody's job title is the one part of the document people look
         // at hardest.
-        doc.fillColor(c.ink).font('Helvetica-Bold').fontSize(9).text(name || ' ', x + 11, top + 22, { width: boxW - 22, height: 24 })
+        doc.fillColor(c.ink).font(BOLD).fontSize(9).text(name || ' ', x + 11, top + 22, { width: boxW - 22, height: 24 })
         doc.save().strokeColor(c.rule).lineWidth(0.7).moveTo(x + 11, top + 52).lineTo(x + boxW - 11, top + 52).stroke().restore()
-        doc.fillColor(c.muted).font('Helvetica').fontSize(6.8).text('Signature', x + 11, top + 55, { width: boxW - 22 })
+        doc.fillColor(c.muted).font(BODY).fontSize(6.8).text('Signature', x + 11, top + 55, { width: boxW - 22 })
         doc.save().strokeColor(c.rule).lineWidth(0.7).moveTo(x + 11, top + 70).lineTo(x + boxW - 11, top + 70).stroke().restore()
-        doc.fillColor(c.muted).font('Helvetica').fontSize(6.8).text('Date', x + 11, top + 68, { width: boxW - 22 })
+        doc.fillColor(c.muted).font(BODY).fontSize(6.8).text('Date', x + 11, top + 68, { width: boxW - 22 })
       })
       doc.y = top + 78
     }
@@ -1271,7 +1304,7 @@ export async function toPdf(original: Report): Promise<Buffer> {
     for (const note of report.footnotes ?? []) {
       ensure(32)
       doc.moveDown(0.5)
-      doc.fillColor(c.muted).fontSize(8).font('Helvetica-Oblique').text(note, PAGE_MARGIN, doc.y, { width })
+      doc.fillColor(c.muted).fontSize(8).font(ASIDE).text(note, PAGE_MARGIN, doc.y, { width })
     }
 
     void firstContentPage

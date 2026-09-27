@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -57,6 +58,9 @@ export async function updateType(formData: FormData) {
     if (formData.has(key)) values[key] = str(formData, key)
   }
   if (Object.keys(values).length === 0) return
+  const project = await getCurrentProject()
+  await ownedBy(project, 'equipment_types', id)
+
 
   await supabase.from('equipment_types').update(values).eq('id', id)
   refresh()
@@ -69,6 +73,9 @@ export async function deleteType(formData: FormData) {
   if (!id) return
   // The tags that referenced it are NOT deleted — the database sets their
   // type_id to null. Deleting a catalogue entry must never delete plant.
+  const project = await getCurrentProject()
+  await ownedBy(project, 'equipment_types', id)
+
   await supabase.from('equipment_types').delete().eq('id', id)
   refresh()
 }

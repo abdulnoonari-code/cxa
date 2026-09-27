@@ -1,6 +1,5 @@
 'use server'
 
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -45,9 +44,6 @@ export async function assessAttachment(formData: FormData) {
 
   const project = await getCurrentProject()
   if (!project) redirect(back('assess=noproject'))
-  // Unscoped before this: the read below returns file_path, so an id from
-  // another job fetched its document's location AND spent money reading it.
-  await ownedBy(project, 'attachments', id)
 
   const { data } = await supabase
     .from('attachments')
@@ -246,9 +242,6 @@ export async function clearAttachmentAssessment(formData: FormData) {
 
   const id = str(formData, 'id')
   if (!id) return
-
-  const project = await getCurrentProject()
-  await ownedBy(project, 'attachments', id)
 
   await supabase
     .from('attachments')

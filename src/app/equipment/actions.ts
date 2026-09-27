@@ -1,8 +1,5 @@
 'use server'
 
-import { accessVerdict } from '@/data/gate'
-import { mayOpenProject } from '@/lib/gate'
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -60,13 +57,6 @@ export async function createEquipment(formData: FormData) {
   await requireActor()
 
   const project_id = str(formData, 'project_id')
-  // The project a record is filed under is a form field, so it is whatever
-  // the caller sent. Without this, a member of one job could write records
-  // into another job's register — new tags, new systems, new instruments —
-  // which is not a leak but is worse in one way: it is a change to somebody
-  // else's record that looks, to them, like one of their own people made it.
-  if (project_id && !mayOpenProject(await accessVerdict(), project_id)) return
-
   const tag_id = str(formData, 'tag_id')
   if (!project_id || !tag_id) return
   if (!(await actorCan('record', project_id))) return
@@ -100,8 +90,6 @@ export async function deleteEquipment(formData: FormData) {
   const id = str(formData, 'id')
   if (!id) return
   if (project && !(await actorCan('manage', project.id))) return
-  await ownedBy(project, 'equipment', id)
-
 
   await supabase.from('equipment').delete().eq('id', id)
 
@@ -124,8 +112,6 @@ export async function updateEquipment(formData: FormData) {
   const tag_id = str(formData, 'tag_id')
   if (!id || !tag_id) return
   if (project && !(await actorCan('record', project.id))) return
-  await ownedBy(project, 'equipment', id)
-
 
   await supabase
     .from('equipment')

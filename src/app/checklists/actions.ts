@@ -1,6 +1,5 @@
 'use server'
 
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -282,9 +281,6 @@ export async function saveCheck(formData: FormData) {
   const status = str(formData, 'status') ?? 'pending'
   const notes = str(formData, 'notes')
   if (!id) return
-  const project = await getCurrentProject()
-  await ownedBy(project, 'checklist_items', id)
-
 
   await supabase
     .from('checklist_items')
@@ -300,9 +296,6 @@ export async function deleteCheck(formData: FormData) {
   const id = str(formData, 'id')
   const equipment_id = str(formData, 'equipment_id')
   if (!id) return
-  const project = await getCurrentProject()
-  await ownedBy(project, 'checklist_items', id)
-
 
   await supabase.from('checklist_items').delete().eq('id', id)
   refresh(equipment_id)

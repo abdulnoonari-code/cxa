@@ -1,7 +1,5 @@
 'use server'
 
-import { getCurrentProject } from '@/lib/project'
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
@@ -59,9 +57,6 @@ export async function updateChecklistItem(formData: FormData) {
   // means today (rule-based, free); Part 2 swaps this for a real API call
   // without changing this call site.
   const ai_comment = generateCheckComment(status, notes)
-  const project = await getCurrentProject()
-  await ownedBy(project, 'checklist_items', id)
-
 
   await supabase.from('checklist_items').update({ status, notes, ai_comment }).eq('id', id)
 
@@ -74,9 +69,6 @@ export async function deleteChecklistItem(formData: FormData) {
   const id = str(formData, 'id')
   const equipment_id = str(formData, 'equipment_id')
   if (!id || !equipment_id) return
-  const project = await getCurrentProject()
-  await ownedBy(project, 'checklist_items', id)
-
 
   await supabase.from('checklist_items').delete().eq('id', id)
 
@@ -121,30 +113,14 @@ export async function deleteAttachment(formData: FormData) {
   await requireActor()
 
   const id = str(formData, 'id')
+  const file_path = str(formData, 'file_path')
   const equipment_id = str(formData, 'equipment_id')
   if (!id || !equipment_id) return
 
-  const project = await getCurrentProject()
-  await ownedBy(project, 'attachments', id)
-
-  // The path is read back from the row. It used to be a form field handed
-  // straight to storage.remove(), which deletes whatever it is given
-  // anywhere in the bucket — so checking the row and deleting the path they
-  // sent checked one thing and did another. Same fix as
-  // src/app/files/actions.ts and src/app/documents/actions.ts; this is the
-  // third of the three, and the assertion that found it sweeps for the
-  // shape rather than for these three names.
-  const { data: row } = await supabase
-    .from('attachments')
-    .select('file_path')
-    .eq('id', id)
-    .eq('project_id', project!.id)
-    .maybeSingle()
-
-  const stored = (row as { file_path: string | null } | null)?.file_path
-  if (stored) await supabase.storage.from('documents').remove([stored])
-
-  await supabase.from('attachments').delete().eq('id', id).eq('project_id', project!.id)
+  if (file_path) {
+    await supabase.storage.from('documents').remove([file_path])
+  }
+  await supabase.from('attachments').delete().eq('id', id)
 
   revalidatePath(`/equipment/${equipment_id}/checklist`)
 }
@@ -164,12 +140,6 @@ export async function importChecklist(formData: FormData) {
   const equipment_id = str(formData, 'equipment_id')
   const file = formData.get('file')
   if (!equipment_id || !(file instanceof File) || file.size === 0) return
-
-  // The tag is a form field and every row written, updated and deleted below
-  // is keyed on it. Before parsing, not after: a refusal that arrives after
-  // the workbook has been read is a refusal that has already done the work.
-  const project = await getCurrentProject()
-  await ownedBy(project, 'equipment', equipment_id)
 
   const parsed = await parseChecklistWorkbook(await file.arrayBuffer(), { fileName: file.name })
   if (parsed.errors.length > 0 || parsed.rows.length === 0) {

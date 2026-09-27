@@ -1,6 +1,5 @@
 'use server'
 
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -33,7 +32,6 @@ export async function runRulesOnAttachment(formData: FormData) {
 
   const project = await getCurrentProject()
   if (!project) redirect('/documents?rules=noproject')
-  await ownedBy(project, 'attachments', id)
 
   const { data } = await supabase
     .from('attachments')

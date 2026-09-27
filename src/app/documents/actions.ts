@@ -1,7 +1,5 @@
 'use server'
 
-import { getCurrentProject } from '@/lib/project'
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -26,9 +24,6 @@ export async function uploadDocument(formData: FormData) {
   const file = formData.get('file')
 
   if (!checklist_item_id || !(file instanceof File) || file.size === 0) return
-
-  const project = await getCurrentProject()
-  await ownedBy(project, 'checklist_items', checklist_item_id)
 
   const { data: item } = await supabase
     .from('checklist_items')
@@ -76,24 +71,13 @@ export async function deleteDocument(formData: FormData) {
   await requireActor()
 
   const id = str(formData, 'id')
+  const file_path = str(formData, 'file_path')
   if (!id) return
 
-  const project = await getCurrentProject()
-  await ownedBy(project, 'attachments', id)
-
-  // See src/app/files/actions.ts: the path comes from the row, because a
-  // path from the form is a delete of anything in the bucket.
-  const { data: row } = await supabase
-    .from('attachments')
-    .select('file_path')
-    .eq('id', id)
-    .eq('project_id', project!.id)
-    .maybeSingle()
-
-  const stored = (row as { file_path: string | null } | null)?.file_path
-  if (stored) await supabase.storage.from('documents').remove([stored])
-
-  await supabase.from('attachments').delete().eq('id', id).eq('project_id', project!.id)
+  if (file_path) {
+    await supabase.storage.from('documents').remove([file_path])
+  }
+  await supabase.from('attachments').delete().eq('id', id)
 
   revalidatePath('/documents')
 }

@@ -1,6 +1,5 @@
 'use server'
 
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
@@ -100,10 +99,6 @@ export async function addRevision(formData: FormData) {
   const rev = str(formData, 'rev')
   if (!documentId || !rev) return
 
-  // The document is a form field, so a revision could be filed against
-  // another job's controlled document.
-  await ownedBy(project, 'controlled_documents', documentId)
-
   const status = str(formData, 'status') ?? 'issued'
 
   const { data } = await supabase
@@ -165,8 +160,6 @@ export async function deleteDocument(formData: FormData) {
 
   // Requirements citing it keep their revision text; they simply stop showing
   // a linked document. Nothing silently loses its stated source.
-  await ownedBy(project, 'controlled_documents', id)
-
   await supabase.from('requirements').update({ document_id: null }).eq('document_id', id)
   await supabase.from('controlled_documents').delete().eq('id', id)
 
@@ -206,10 +199,6 @@ export async function attachRevisionFile(formData: FormData) {
   const file = formData.get('file')
   if (!revisionId || !(file instanceof File) || file.size === 0) redirect('/doc-control?read=nofile')
 
-  // Before the upload, not after: a file written into storage and then
-  // refused is still a file in somebody else's folder.
-  await ownedBy(project, 'document_revisions', revisionId)
-
   const buffer = await file.arrayBuffer()
   const extraction = await extractDocument(buffer, file.name)
 
@@ -218,7 +207,6 @@ export async function attachRevisionFile(formData: FormData) {
   // cannot read it would be absurd.
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `revisions/${revisionId}/${Date.now()}-${safeName}`
-
   const { error: uploadError } = await supabase.storage.from('documents').upload(path, file)
   // NOT getPublicUrl. That returns an address anybody holding the link can
   // open — no sign-in, no cookie, nothing. Everything now goes through the

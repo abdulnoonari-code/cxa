@@ -1,6 +1,5 @@
 'use server'
 
-import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
@@ -65,8 +64,6 @@ export async function toggleWitness(formData: FormData) {
   const id = str(formData, 'id')
   const next = formData.get('next') === 'true'
   if (!id) return
-  await ownedBy(project, 'project_contacts', id)
-
 
   await supabase.from('project_contacts').update({ is_witness: next }).eq('id', id)
 
@@ -90,8 +87,6 @@ export async function removeContact(formData: FormData) {
 
   const id = str(formData, 'id')
   if (!id) return
-  await ownedBy(project, 'project_contacts', id)
-
 
   await supabase.from('project_contacts').delete().eq('id', id)
 

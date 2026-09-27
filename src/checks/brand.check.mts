@@ -352,5 +352,71 @@ print(';'.join(f'{r},{g},{b}' for r, g, b in seen))
   ok('  …and nothing left of the violet either', !near('#6D4AFF') && !near('#1E1B4B'))
 }
 
+
+// ════════ GREEN MEANS PASSED, AND ONLY PASSED ════════
+//
+// The rule at the top of lib/brand.ts says the BRAND may not borrow a
+// verdict colour. This is the other direction, and it is the one that
+// actually went wrong: a verdict colour borrowed for something that is not
+// a verdict.
+//
+// `.phone-remedy-ok` — the bar down the left of WHAT MUST BE DONE on a
+// defect card — was green, meaning "a person has agreed this action". That
+// is a reasonable thing to want to show. But the card it sits on also says
+// "Open" and, in red, "2 days overdue", and a green bar read at arm's
+// length going down a list of forty says the defect is dealt with.
+//
+// It was not caught by any check, because every check asked whether the
+// BRAND was too close to green. Nothing asked whether green was being used
+// to mean something other than passed. Found by looking at a screenshot of
+// the live site.
+{
+  const css = readFileSync(join(SRC, 'app/globals.css'), 'utf8')
+
+  // The rules that may wear the passed-green, and what each one means.
+  // Anything else using --color-success-solid is a new claim that
+  // something is passed, and should be read before it is allowed.
+  const MAY_BE_GREEN = [
+    'badge-success', 'alert-success', 'color-success',
+  ]
+
+  // Pull every selector block that mentions the passed green.
+  const blocks = [...css.matchAll(/([^{}]+)\{([^}]*--color-success-solid[^}]*)\}/g)]
+    .map((m) => m[1].trim().split('\n').pop()!.trim())
+    .filter((sel) => !sel.startsWith('/*') && !sel.startsWith(':root'))
+
+  const suspect = blocks.filter((sel) => !MAY_BE_GREEN.some((ok) => sel.includes(ok)))
+  ok('no stylesheet rule paints the passed-green onto something that is not a verdict',
+     suspect.length === 0, suspect.join(' | '))
+
+  // And the specific one, by name, so the fix cannot be quietly undone.
+  const remedy = /\.phone-remedy-ok\s*\{[^}]*border-left-color:\s*var\(--([a-z-]+)\)/.exec(css)
+  ok('the agreed-action bar is declared', !!remedy, 'phone-remedy-ok is gone')
+  ok('  …and is not the green that means passed',
+     remedy?.[1] !== 'color-success-solid', remedy?.[1] ?? '?')
+  ok('  …and is the colour meant for a state that is neither good nor bad',
+     remedy?.[1] === 'color-progress', remedy?.[1] ?? '?')
+
+  // The three states on that panel must stay tellable apart from one
+  // another — that requirement predates this change and survives it.
+  const tok = (n: string) => css.match(new RegExp(`--${n}:\\s*(#[0-9A-Fa-f]{6})`))?.[1] ?? ''
+  const states = { agreed: tok('color-progress'), suggested: tok('color-warning-solid'), nothing: tok('color-neutral-solid') }
+  for (const [a, b] of [['agreed', 'suggested'], ['agreed', 'nothing'], ['suggested', 'nothing']] as const) {
+    const d = distance(states[a], states[b])
+    ok(`remedy states ${a} and ${b} are tellable apart (${Math.round(d)})`, d >= 200, `${Math.round(d)}`)
+  }
+  for (const [k, v] of Object.entries(states)) {
+    ok(`  …and "${k}" is not the passed-green`, distance(v, RESERVED.passed) >= 200, `${Math.round(distance(v, RESERVED.passed))}`)
+  }
+}
+
+// ════════ A CONTROL IS THE BRAND'S COLOUR, NOT THE BROWSER'S ════════
+{
+  const css = readFileSync(join(SRC, 'app/globals.css'), 'utf8')
+  ok('every radio and checkbox takes the brand colour',
+     /input\[type='radio'\],\s*\n\s*input\[type='checkbox'\]\s*\{[^}]*accent-color/.test(css),
+     'only some screens set accent-color, so the rest draw Chrome blue')
+}
+
 console.log(`${pass} passed, ${fail} failed`)
 if (fail > 0) process.exit(1)

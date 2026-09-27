@@ -957,6 +957,26 @@ textarea.input {
   color: #9fadc6;
 }
 
+/* Every radio and every checkbox, everywhere.
+ *
+ * `accent-color` was already set in four places — two on the project
+ * configuration screen and two on chips — which is four screens out of
+ * however many have a checkbox on them. Everywhere else the browser drew
+ * its own blue, so a form could have a brand-coloured checkbox at the top
+ * and a Chrome-blue radio button eight rows down, and the phone screens
+ * (which are the ones used in front of a client) were all Chrome-blue.
+ *
+ * It belongs on the element, not on the screens somebody remembered. The
+ * four earlier rules are now redundant and harmless, and are left where
+ * they are rather than swept up in a colour change.
+ *
+ * --color-primary, not --color-brand: this is a control somebody has to be
+ * able to see the state of, and the bright step is a shape colour. */
+input[type='radio'],
+input[type='checkbox'] {
+  accent-color: var(--color-primary);
+}
+
 /* ---------- Buttons ---------- */
 
 .btn {
@@ -3031,8 +3051,23 @@ textarea.phone-input {
 }
 
 /* The remedy, and where it came from. The border colour is the whole point:
-   green means a person signed it, amber means a machine suggested it and
-   nobody has agreed it. They must never look alike. */
+   one colour means a person signed it, amber means a machine suggested it
+   and nobody has agreed it, grey means there is nothing. They must never
+   look alike.
+
+   THE FIRST ONE WAS GREEN AND IS NOT ANY MORE, and the reason is worth
+   keeping. The rule here has always been that green means PASSED. This bar
+   sits on a defect card that also says "Open" and, in red, "2 days
+   overdue" — and a green bar on that card, read at arm's length going down
+   a list of forty, says the defect is dealt with. It does not mean that.
+   It means somebody has written down what to do about it, which is the
+   beginning of the work rather than the end.
+
+   So this is --color-progress: the colour that already exists in this
+   stylesheet for a state that is neither good nor bad. 262 from the green
+   that means passed, 480 from the amber beside it, 372 from the grey.
+   Contrast 8.17 on the panel. Nothing was lost — the three states are
+   further apart than they were. */
 .phone-remedy {
   display: flex;
   flex-direction: column;
@@ -3046,7 +3081,7 @@ textarea.phone-input {
 }
 
 .phone-remedy-ok {
-  border-left-color: var(--color-success-solid);
+  border-left-color: var(--color-progress);
 }
 
 .phone-remedy-warning {

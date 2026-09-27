@@ -53,6 +53,34 @@ function walk(dir: string): string[] {
 }
 const FILES = walk(SRC)
 
+// The two table lists are read out of the SOURCE, not imported.
+//
+// Importing them would pull in lib/supabase, which builds a client at module
+// load and needs the project's URL in the environment — so the suite would
+// only run where the application's secrets are, which is the one place a
+// check like this is least useful. Reading the text has a second virtue:
+// what is asserted is what somebody editing the file will see.
+function listIn(file: string, name: string): string[] {
+  const text = readFileSync(join(SRC, file), 'utf8')
+  const at = text.indexOf(name)
+  const body = text.slice(at, text.indexOf('])', at) >= 0 ? text.indexOf('])', at) : text.indexOf(']', at))
+  return [...body.matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
+}
+const OWNED_TABLES = {
+  DIRECT: listIn('data/owned.ts', 'const DIRECT = new Set(['),
+  PARENTS: (() => {
+    const text = readFileSync(join(SRC, 'data/owned.ts'), 'utf8')
+    const at = text.indexOf('const PARENTS')
+    const body = text.slice(at, text.indexOf('\n}', at))
+    const out: Record<string, { via: string; parent: string }> = {}
+    for (const m of body.matchAll(/(\w+):\s*\{\s*via:\s*'(\w+)',\s*parent:\s*'(\w+)'\s*\}/g)) {
+      out[m[1]] = { via: m[2], parent: m[3] }
+    }
+    return out
+  })(),
+}
+const FILE_PATH_TABLES = listIn('data/file-owner.ts', 'const PATH_COLUMNS')
+
 // ════════ PAGES ════════
 //
 // Every page.tsx either calls requirePage() or is named below.
@@ -195,6 +223,149 @@ const FILES = walk(SRC)
   ok('  …and no longer claims to be the only check',
      /require-page|not the door|does not stop/i.test(layout),
      'the comment still says a gate here is enough. It is not — see require-page.tsx.')
+}
+
+
+// ════════ THE SECOND QUESTION: IS THIS RECORD YOURS? ════════
+//
+// Update 116 put a gate on every page, action and route handler. It answers
+// "may this account use the application at all?" — and it does answer that.
+//
+// It cannot answer "may this account touch THIS RECORD", and about fifty
+// actions needed that answer. They took a record id straight out of the
+// submitted form and did `.eq('id', id)` with it. The id is whatever the
+// caller typed, so anybody on the team of any one job could rename another
+// job, delete its tags, forge a measured value on its test records, confirm
+// its readiness gates, or — the worst one — post another project's
+// project_members row id to updateMemberRole and make themselves an admin
+// there.
+//
+// The gate was working. It was answering the wrong question.
+//
+// This block holds the second question. It is written as a sweep rather
+// than a list because the first version of this audit, done by reading,
+// missed eight of them — addRevision, unlinkVerification, giveNotice and
+// the five AI actions. The sweep found those the same afternoon.
+{
+  const actionFiles = FILES.filter((p) => /\.tsx?$/.test(p) && readFileSync(p, 'utf8').trimStart().startsWith("'use server'"))
+
+  // A function is exempt only if it cannot act on a caller-supplied id at
+  // all. There is no "this one is fine" exemption, because "this one is
+  // fine" is what was believed about all fifty.
+  const EXEMPT: Record<string, string> = {
+    'src/app/login/actions.ts': 'sign in, sign up, sign out — no project records',
+  }
+
+  const unguarded: string[] = []
+  let swept = 0
+  for (const path of actionFiles) {
+    const name = rel(path)
+    if (name in EXEMPT) continue
+    const text = readFileSync(path, 'utf8')
+
+    for (const m of text.matchAll(/export async function\s+(\w+)\s*\(/g)) {
+      // The function body, by brace matching. A regex window would stop
+      // short of the mutation in the longer importers.
+      let i = m.index! + m[0].length - 1, depth = 0
+      while (i < text.length) {
+        if ('([{'.includes(text[i])) depth++
+        else if (')]}'.includes(text[i])) { depth--; if (depth === 0) break }
+        i++
+      }
+      const start = text.indexOf('{', i)
+      let j = start
+      depth = 0
+      while (j < text.length) {
+        if (text[j] === '{') depth++
+        else if (text[j] === '}') { depth--; if (depth === 0) break }
+        j++
+      }
+      const body = text.slice(start, j)
+
+      const takesId = /str\(formData, '(id|\w+_id)'\)|formData\.getAll\('ids'\)/.test(body)
+      const mutates = /\.(update|delete|upsert)\(/.test(body)
+      if (!takesId || !mutates) continue
+      swept++
+
+      // Any of the five ways a record is proved to be this project's:
+      //   ownedBy / ownedAllBy   the lookup, for a posted row id
+      //   mayOpenProject         for a posted PROJECT id
+      //   pickedIds / idsFor     intersect posted ids with this project's
+      const guarded = /ownedBy\(|ownedAllBy\(|mayOpenProject\(|pickedIds\(|idsFor\(/.test(body)
+      if (!guarded) unguarded.push(`${name}:${m[1]}`)
+    }
+  }
+
+  ok('there are id-taking mutations to sweep', swept > 40, `${swept}`)
+  ok('every action that mutates by a posted id proves the record is this project’s',
+     unguarded.length === 0,
+     unguarded.slice(0, 10).join(', ') + (unguarded.length > 10 ? ` …and ${unguarded.length - 10} more` : ''))
+}
+
+// ════════ THE TABLE LISTS MATCH THE SCHEMA ════════
+//
+// owned.ts carries two lists: tables with project_id, and tables that reach
+// a project through a parent. Both are copies of what schema.sql says, and
+// a copy drifts. A table that GAINS project_id and stays in the parent list
+// is only slow; a table that LOSES it and stays in the direct list is a
+// check that silently matches nothing.
+{
+  const schema = readFileSync(join(SRC, '..', 'schema.sql'), 'utf8')
+  const withPid = new Set<string>()
+  const without = new Set<string>()
+  for (const block of schema.split(/(?=CREATE TABLE )/)) {
+    const m = /^CREATE TABLE (?:IF NOT EXISTS )?public\.(\w+)/.exec(block)
+    if (!m) continue
+    const body = block.slice(0, block.indexOf(');'))
+    ;(/\bproject_id\b/.test(body) ? withPid : without).add(m[1])
+  }
+  ok('schema.sql was read', withPid.size > 20, `${withPid.size} with, ${without.size} without`)
+
+  for (const t of OWNED_TABLES.DIRECT) {
+    ok(`owned.ts: ${t} really does carry project_id`, withPid.has(t), t)
+  }
+  for (const [t, step] of Object.entries(OWNED_TABLES.PARENTS)) {
+    ok(`owned.ts: ${t} really has no project_id`, without.has(t), t)
+    ok(`  …and its parent ${step.parent} does`, withPid.has(step.parent), step.parent)
+  }
+
+  // Every table with project_id should be listed, or ownedBy throws on it
+  // the first time somebody uses it — which is the safe direction, but a
+  // throw in front of a person doing their job is still a fault.
+  const missing = [...withPid].filter((t) => !OWNED_TABLES.DIRECT.includes(t) && t !== 'projects')
+  ok('owned.ts lists every project-scoped table', missing.length === 0, missing.join(', '))
+}
+
+// ════════ EVERY STORED-PATH COLUMN IS GUARDED ════════
+//
+// /file/[...path] signs a URL for a path. Before this, being allowed into
+// the application was the whole check, and every path is built by this
+// application and therefore guessable. The fix asks whether a record on a
+// project you may open points at that file — so the list of tables holding
+// a path has to be complete.
+{
+  const schema = readFileSync(join(SRC, '..', 'schema.sql'), 'utf8')
+  const holders = new Set<string>()
+  for (const block of schema.split(/(?=CREATE TABLE )/)) {
+    const m = /^CREATE TABLE (?:IF NOT EXISTS )?public\.(\w+)/.exec(block)
+    if (!m) continue
+    if (/^\s*file_path\s+text/m.test(block.slice(0, block.indexOf(');')))) holders.add(m[1])
+  }
+  ok('schema.sql has file_path columns', holders.size > 0, [...holders].join(', '))
+  const unchecked = [...holders].filter((t) => !FILE_PATH_TABLES.includes(t))
+  ok('every table holding a storage path is checked by mayReadStoredFile',
+     unchecked.length === 0, unchecked.join(', '))
+
+  // And a path must never be taken from the caller and handed to storage.
+  const offenders: string[] = []
+  for (const path of FILES.filter((p) => /\.tsx?$/.test(p))) {
+    const text = readFileSync(path, 'utf8')
+    if (!/storage\.from\([^)]*\)\.remove\(/.test(text)) continue
+    // The path handed to remove() must come from a row, not from FormData.
+    if (/const file_path = str\(formData/.test(text)) offenders.push(rel(path))
+  }
+  ok('nothing deletes a storage object at a path the caller supplied',
+     offenders.length === 0, offenders.join(', '))
 }
 
 console.log(`${pass} passed, ${fail} failed`)

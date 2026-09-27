@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 
@@ -10,6 +11,8 @@ function str(formData: FormData, key: string): string | null {
 }
 
 export async function createInstrument(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const instrument_id = str(formData, 'instrument_id')
   if (!project_id || !instrument_id) return
@@ -31,6 +34,8 @@ export async function createInstrument(formData: FormData) {
 }
 
 export async function updateInstrument(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -48,6 +53,8 @@ export async function updateInstrument(formData: FormData) {
 }
 
 export async function deleteInstrument(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   await supabase.from('instruments').delete().eq('id', id)

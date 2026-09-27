@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +27,8 @@ function str(formData: FormData, key: string): string | null {
  * a check went from pass to fail is the record.
  */
 export async function answerLine(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/scripts')
 

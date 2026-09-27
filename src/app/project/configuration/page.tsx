@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { getCurrentProject } from '@/lib/project'
@@ -31,6 +32,11 @@ const RESULT: Record<string, { cls: string; text: string }> = {
 }
 
 export default async function ConfigurationPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   const [{ config, columnMissing }, counts] = await Promise.all([
     loadProjectConfig(project?.id ?? null),

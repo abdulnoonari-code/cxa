@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getCurrentProject } from '@/lib/project'
@@ -35,6 +36,11 @@ const TONE: Record<string, string> = {
  *     how a tester knows to leave the panel open.
  */
 export default async function ScriptPage({ params }: { params: Promise<{ sheet: string }> }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { sheet: raw } = await params
   const sheet = decodeURIComponent(raw)
 

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -37,6 +38,8 @@ function refresh() {
  * put a check into the system that nobody performed.
  */
 export async function importItp(formData: FormData) {
+  await requireActor()
+
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) redirect('/itp?import=nofile')
 
@@ -170,6 +173,8 @@ function backTo(formData: FormData): string {
  * exactly the thing somebody argues about at handover.
  */
 export async function setPointParty(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/itp?set=noproject')
   if (!(await actorCan('review', project.id))) redirect('/itp?set=denied')
@@ -232,6 +237,8 @@ export async function setPointParty(formData: FormData) {
  * them all claiming an agreement nobody made.
  */
 export async function addConvention(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/itp?conv=noproject')
   if (!(await actorCan('manage', project.id))) redirect('/itp?conv=denied')
@@ -280,6 +287,8 @@ export async function addConvention(formData: FormData) {
 }
 
 export async function removeConvention(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/itp?conv=noproject')
   if (!(await actorCan('manage', project.id))) redirect('/itp?conv=denied')

@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
 import { loadRegister } from '@/data/register'
 import { registerNote } from '@/lib/access'
@@ -97,6 +98,11 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const sp = await searchParams
   const one = (k: string): string | undefined => {
     const v = sp[k]

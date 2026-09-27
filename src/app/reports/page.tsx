@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { LEVELS, REVIEW_STATES, REVIEW_COLORS, STATUSES, statusBadgeClass } from '@/lib/checklist'
@@ -26,6 +27,11 @@ function bucketBy<T>(rows: T[], key: (row: T) => string | null): Map<string, T[]
 // stands, what is blocking it, and what is coming — on one page, printable,
 // and exportable to Excel from the button at the top.
 export default async function ReportsPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
 
   const { data: equipmentRows } = project

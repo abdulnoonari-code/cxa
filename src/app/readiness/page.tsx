@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { getCurrentProject } from '@/lib/project'
 import { loadProjectReadiness } from '@/lib/system-data'
 import { stageLabel, readinessBadgeClass, readinessVerdict } from '@/lib/readiness'
@@ -5,6 +6,11 @@ import { stageLabel, readinessBadgeClass, readinessVerdict } from '@/lib/readine
 export const dynamic = 'force-dynamic'
 
 export default async function ReadinessPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   const { systems, unassigned, unassignedReadiness, overall, equipmentReadiness } = await loadProjectReadiness(
     project?.id ?? null

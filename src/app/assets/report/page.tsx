@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadAssetReport } from '@/data/asset-report'
@@ -125,6 +126,11 @@ function FindingCard({ f }: { f: Finding }) {
 }
 
 export default async function AssetReportPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   const { report, missing, error } = await loadAssetReport(project?.id ?? null)
   const schemaNote = missingColumnNote(missing, 'the outstanding SQL step')

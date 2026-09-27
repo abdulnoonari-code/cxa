@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import {
@@ -18,6 +19,11 @@ export default async function ReviewPage({
 }: {
   searchParams: Promise<{ level?: string; state?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { level: levelFilter, state: stateFilter } = await searchParams
 
   const project = await getCurrentProject()

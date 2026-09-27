@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -31,6 +32,8 @@ function refresh() {
 }
 
 export async function addDocument(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -86,6 +89,8 @@ export async function addDocument(formData: FormData) {
 // needing review — which is the §7 impact question, answered by the data
 // rather than by somebody remembering.
 export async function addRevision(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -144,6 +149,8 @@ export async function addRevision(formData: FormData) {
 }
 
 export async function deleteDocument(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -182,6 +189,8 @@ export async function deleteDocument(formData: FormData) {
  * obligations or requirements whenever somebody gets to it.
  */
 export async function attachRevisionFile(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/doc-control?read=noproject')
   if (!(await actorCan('review', project.id))) redirect('/doc-control?read=denied')
@@ -260,6 +269,8 @@ async function revisionText(revisionId: string): Promise<{
 
 /** Read the stored text of a revision for duties, and file them as obligations. */
 export async function readRevisionObligations(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) redirect('/doc-control?read=denied')
@@ -316,6 +327,8 @@ export async function readRevisionObligations(formData: FormData) {
 
 /** Read the stored text of a revision for acceptance criteria, and file them as requirements. */
 export async function readRevisionRequirements(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) redirect('/doc-control?read=denied')

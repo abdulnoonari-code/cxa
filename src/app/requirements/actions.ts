@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -27,6 +28,8 @@ function refresh() {
 }
 
 export async function addRequirement(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -69,6 +72,8 @@ export async function addRequirement(formData: FormData) {
 }
 
 export async function deleteRequirement(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -93,6 +98,8 @@ export async function deleteRequirement(formData: FormData) {
 // digital thread. Everything downstream — verification status, gate results,
 // revision impact — reads these rows.
 export async function linkVerification(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -134,6 +141,8 @@ export async function linkVerification(formData: FormData) {
 }
 
 export async function unlinkVerification(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -165,6 +174,8 @@ export async function unlinkVerification(formData: FormData) {
 // Accepting a new revision against a requirement: the statement stays, the
 // cited revision moves forward, and the change is on the record.
 export async function acceptRevision(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return

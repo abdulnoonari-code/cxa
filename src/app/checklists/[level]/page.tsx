@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -32,6 +33,11 @@ export default async function LevelPage({
   params: Promise<{ level: string }>
   searchParams: Promise<{ status?: string; q?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { level: slug } = await params
   const sp = await searchParams
 

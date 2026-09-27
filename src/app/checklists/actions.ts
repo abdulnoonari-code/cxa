@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -60,6 +61,8 @@ type Plan = {
 // If any row cannot be read, nothing at all is written. A half-applied
 // checklist is worse than none, because nobody can tell which half applied.
 export async function importProjectChecklist(formData: FormData) {
+  await requireActor()
+
   const file = formData.get('file')
   const equipmentIds = formData.getAll('equipment_ids').filter((v): v is string => typeof v === 'string')
   const defaultLevel = str(formData, 'default_level')
@@ -271,6 +274,8 @@ export async function importProjectChecklist(formData: FormData) {
 // Record the yes/no and the comment for one check. The rule-based reviewer
 // runs on every save, so there is no separate "check" step to remember.
 export async function saveCheck(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const equipment_id = str(formData, 'equipment_id')
   const status = str(formData, 'status') ?? 'pending'
@@ -286,6 +291,8 @@ export async function saveCheck(formData: FormData) {
 }
 
 export async function deleteCheck(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const equipment_id = str(formData, 'equipment_id')
   if (!id) return
@@ -296,6 +303,8 @@ export async function deleteCheck(formData: FormData) {
 
 // Attach evidence to a check without leaving the checklist screen.
 export async function attachEvidence(formData: FormData) {
+  await requireActor()
+
   const checklist_item_id = str(formData, 'checklist_item_id')
   const equipment_id = str(formData, 'equipment_id')
   const tag_id = str(formData, 'tag_id')
@@ -355,6 +364,8 @@ export async function attachEvidence(formData: FormData) {
  * property that makes this safe to put one click away.
  */
 export async function deleteCheckGroupAction(formData: FormData) {
+  await requireActor()
+
   const key = str(formData, 'group')
   const project = await getCurrentProject()
   if (!project) redirect('/checklists?purge=noproject')
@@ -400,6 +411,8 @@ export async function deleteCheckGroupAction(formData: FormData) {
  * quietly deleted — the same rule as the project cookie.
  */
 export async function deletePickedChecksAction(formData: FormData) {
+  await requireActor()
+
   const ids = formData.getAll('check_ids').filter((v): v is string => typeof v === 'string')
   const back = str(formData, 'back') === 'scripts' ? '/scripts' : '/checklists'
 
@@ -434,6 +447,8 @@ export async function deletePickedChecksAction(formData: FormData) {
 }
 
 export async function deleteChecklistAction(formData: FormData) {
+  await requireActor()
+
   const scopeKind = str(formData, 'scope')
   const equipmentId = str(formData, 'equipment_id')
 

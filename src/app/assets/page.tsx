@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadSubjectIndex } from '@/data/subjects'
@@ -12,6 +13,11 @@ export const dynamic = 'force-dynamic'
 const LEAF_LIMIT = 250
 
 export default async function AssetsPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   const index = await loadSubjectIndex(project?.id ?? null)
   const rollup = await loadProjectRollup(project?.id ?? null, index)

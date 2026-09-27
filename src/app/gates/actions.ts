@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { supabase } from '@/lib/supabase'
@@ -25,6 +26,8 @@ function refresh() {
 }
 
 export async function createGate(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -85,6 +88,8 @@ export async function createGate(formData: FormData) {
 // derived from the records and is deliberately not settable — otherwise the
 // gate could be talked into passing without the records changing.
 export async function confirmRule(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('record', project.id))) return
@@ -128,6 +133,8 @@ export async function confirmRule(formData: FormData) {
 // authorises anything itself; it reports what the records say, and a person
 // with approve rights puts their name to the decision.
 export async function signGate(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('approve', project.id))) return
@@ -171,6 +178,8 @@ export async function signGate(formData: FormData) {
 }
 
 export async function deleteGate(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -196,6 +205,8 @@ export async function deleteGate(formData: FormData) {
 // ── Editing rules directly ────────────────────────────────────────────────
 
 export async function addRule(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -234,6 +245,8 @@ export async function addRule(formData: FormData) {
 }
 
 export async function removeRule(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -265,6 +278,8 @@ export async function removeRule(formData: FormData) {
 // whether somebody has confirmed a prerequisite, or who did — a spreadsheet
 // must not be able to mark a permit as issued.
 export async function importGateRules(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return

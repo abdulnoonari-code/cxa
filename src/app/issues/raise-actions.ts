@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -27,6 +28,8 @@ import { unraised, draftFrom } from '@/lib/failed-checks'
  * decisions, and every one of them has money attached.
  */
 export async function raiseFromFailedChecks() {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/issues?raise=noproject')
 

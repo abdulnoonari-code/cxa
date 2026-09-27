@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -13,6 +14,8 @@ import { saveProjectConfig } from '@/data/project-config'
 import { configFromForm, nextAfterSave, RESULT_COOKIE } from '@/lib/project-config'
 
 export async function saveConfiguration(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
 

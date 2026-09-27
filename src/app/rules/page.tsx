@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { getCurrentProject } from '@/lib/project'
@@ -74,6 +75,11 @@ function Finding({ f }: { f: SiteFinding }) {
 }
 
 export default async function RulesPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const [project, store] = await Promise.all([getCurrentProject(), cookies()])
   const { findings, counts, photosReady } = await loadAllFindings(project)
   const report = decodeReport(store.get(EXAMPLE_REPORT_COOKIE)?.value)

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -102,6 +103,8 @@ function stamps(
 }
 
 export async function createIssue(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   const title = str(formData, 'title')
   if (!project || !title) return
@@ -310,6 +313,8 @@ export async function createIssue(formData: FormData) {
 }
 
 export async function updateIssue(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -419,6 +424,8 @@ export async function updateIssue(formData: FormData) {
 }
 
 export async function deleteIssue(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -462,6 +469,8 @@ function chunk<T>(list: T[], size: number): T[][] {
  * If any row cannot be read, nothing is written at all.
  */
 export async function importPunchList(formData: FormData) {
+  await requireActor()
+
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) redirect('/issues?import=nofile')
 

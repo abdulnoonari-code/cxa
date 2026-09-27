@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { roleLabel, roleBadgeClass } from '@/lib/roles'
@@ -18,6 +19,11 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<{ entity?: string; actor?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { entity, actor: actorFilter } = await searchParams
   const project = await getCurrentProject()
 

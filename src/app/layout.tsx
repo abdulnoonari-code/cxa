@@ -50,15 +50,34 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // The gate, in the ONE place that runs for every route.
+  // ⚠ THIS IS NOT THE DOOR. It is the sign on the door.
   //
-  // Not in proxy.ts, and the reason matters: since SQL part 27 the browser
-  // key cannot read the team list at all, and the proxy has only the browser
-  // key. A gate there would refuse everybody, including the owner, and look
-  // exactly like a broken login. Here the server key is available.
+  // What this does is draw a refusal instead of drawing the screen, and for
+  // the ordinary case — somebody followed a link to a job they are not on —
+  // that is exactly right and should stay.
   //
-  // Not on each page either. Thirty-odd screens, and the one somebody forgets
-  // to add it to is the one that leaks.
+  // What it does NOT do is stop the page running. Route segments are
+  // rendered by the router, not by this layout, so swapping {children} for
+  // <NoAccess/> changes what is DRAWN and not what is SENT: the page runs,
+  // and what it rendered is inlined into the response as flight data. A
+  // refused account gets the refusal on screen and the tag list in the body
+  // of the same reply. Reproduced against this version of Next on
+  // 26 September 2026 — the curl and its output are recorded at the top of
+  // src/data/require-page.tsx.
+  //
+  // Making this redirect() instead does not fix it either. The child has
+  // already rendered by then, so the 307 comes back carrying the data.
+  //
+  // THE DOOR IS requirePage() IN EACH PAGE, requireActor() IN EACH SERVER
+  // ACTION AND requireAccess() IN EACH ROUTE HANDLER. The old objection to
+  // per-page checks — "thirty-odd screens, and the one somebody forgets is
+  // the one that leaks" — is answered by src/checks/access.check.mts, which
+  // walks all four classes and fails by name if one is missed.
+  //
+  // (Still not in proxy.ts, and that reason is unchanged: since SQL part 27
+  // the browser key cannot read the team list at all, and the proxy has only
+  // the browser key. A gate there would refuse everybody, including the
+  // owner, and look exactly like a broken login.)
   const verdict = user ? await accessVerdict() : null;
   const refused = verdict !== null && !mayUseApp(verdict);
   const openDoor = verdict ? openDoorWarning(verdict) : null;

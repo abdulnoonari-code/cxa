@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -16,6 +17,8 @@ function str(formData: FormData, key: string): string | null {
 // result so a technician recording a result and an agent approving it are two
 // distinct acts, each with their own record.
 export async function setReviewState(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const review_state = str(formData, 'review_state') ?? 'draft'
   const review_comment = str(formData, 'review_comment')
@@ -64,6 +67,8 @@ export async function setReviewState(formData: FormData) {
 // Approve or reject everything currently listed at one level in one go — what
 // a commissioning agent actually does at the end of a level walkdown.
 export async function bulkSetReviewState(formData: FormData) {
+  await requireActor()
+
   const ids = formData.getAll('ids').filter((v): v is string => typeof v === 'string')
   const review_state = str(formData, 'review_state')
   if (ids.length === 0 || !review_state) return

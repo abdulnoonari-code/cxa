@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -36,6 +37,8 @@ function refresh() {
 }
 
 export async function createTest(formData: FormData) {
+  await requireActor()
+
   const equipment_id = str(formData, 'equipment_id')
   const name = str(formData, 'name')
   if (!equipment_id || !name) return
@@ -69,6 +72,8 @@ export async function createTest(formData: FormData) {
 // criteria — the engineer never types it — except where the criteria can only
 // be judged by a person, in which case their choice is taken as given.
 export async function recordResult(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -136,6 +141,8 @@ export async function recordResult(formData: FormData) {
 // One click from a failed test to a punch list item, with the numbers already
 // written into the description.
 export async function raiseIssueFromTest(formData: FormData) {
+  await requireActor()
+
   const test_id = str(formData, 'test_id')
   if (!test_id) return
 
@@ -181,6 +188,8 @@ export async function raiseIssueFromTest(formData: FormData) {
 }
 
 export async function approveTest(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const approval_state = str(formData, 'approval_state') ?? 'draft'
   if (!id) return
@@ -211,6 +220,8 @@ export async function approveTest(formData: FormData) {
 }
 
 export async function deleteTest(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   await supabase.from('test_records').delete().eq('id', id)
@@ -242,6 +253,8 @@ function chunkTests<T>(list: T[], size: number): T[][] {
  * All-or-nothing on errors, as with every other importer.
  */
 export async function importTests(formData: FormData) {
+  await requireActor()
+
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) redirect('/tests?import=nofile')
 

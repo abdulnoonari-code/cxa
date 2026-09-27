@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadLevelSummary } from '@/data/level-summary'
@@ -85,6 +86,11 @@ function levelHref(base: string, row: LevelRow, extra = ''): string {
 }
 
 export default async function LevelsPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   const today = new Date().toISOString().slice(0, 10)
   const { summary, missing, error } = await loadLevelSummary(project?.id ?? null, today)

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -61,6 +62,8 @@ type Planned = {
  * a link that CAN be checked and is wrong stops the file.
  */
 export async function importTestScript(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/checklists?script=noproject')
 

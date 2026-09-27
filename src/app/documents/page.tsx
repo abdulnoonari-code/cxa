@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { Fragment } from 'react'
 import UploadResult from '@/components/UploadResult'
 import DocumentAssessment from '@/components/DocumentAssessment'
@@ -61,6 +62,11 @@ export default async function DocumentsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const aiOn = aiConfigured()
   const sp = await searchParams
   const review = typeof sp.review === 'string' ? sp.review : undefined

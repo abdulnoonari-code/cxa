@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { headers } from 'next/headers'
 import { getCurrentProject } from '@/lib/project'
@@ -30,6 +31,11 @@ export default async function QrPage({
 }: {
   searchParams: Promise<{ scope?: string; size?: string; q?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { scope: scopeParam, size: sizeParam, q } = await searchParams
   const scope = SCOPES.find((s) => s.value === scopeParam)?.value ?? 'equipment'
   const size = labelSize(sizeParam)

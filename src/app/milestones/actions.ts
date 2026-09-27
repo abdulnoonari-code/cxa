@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 
@@ -10,6 +11,8 @@ function str(formData: FormData, key: string): string | null {
 }
 
 export async function createMilestone(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const name = str(formData, 'name')
   if (!project_id || !name) return
@@ -35,6 +38,8 @@ export async function createMilestone(formData: FormData) {
 }
 
 export async function updateMilestone(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -52,6 +57,8 @@ export async function updateMilestone(formData: FormData) {
 }
 
 export async function deleteMilestone(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   await supabase.from('milestones').delete().eq('id', id)

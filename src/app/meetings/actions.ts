@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 
@@ -10,6 +11,8 @@ function str(formData: FormData, key: string): string | null {
 }
 
 export async function createMeeting(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const title = str(formData, 'title')
   if (!project_id || !title) return
@@ -27,6 +30,8 @@ export async function createMeeting(formData: FormData) {
 }
 
 export async function updateMeeting(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -45,6 +50,8 @@ export async function updateMeeting(formData: FormData) {
 }
 
 export async function deleteMeeting(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   await supabase.from('meetings').delete().eq('id', id)

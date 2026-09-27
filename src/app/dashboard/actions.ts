@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { PANEL_COOKIE, PANELS, STANDARD_PANELS, encodePanels } from '@/lib/dashboard-panels'
@@ -15,6 +16,8 @@ const ONE_YEAR = 60 * 60 * 24 * 365
  * real answer meaning "hide everything" rather than an error.
  */
 export async function saveDashboardPanels(formData: FormData) {
+  await requireActor()
+
   const ticked = PANELS.filter((p) => formData.get(`panel_${p.id}`) === 'on').map((p) => p.id)
 
   const store = await cookies()
@@ -29,6 +32,8 @@ export async function saveDashboardPanels(formData: FormData) {
 
 /** Back to the four a new person gets. */
 export async function resetDashboardPanels() {
+  await requireActor()
+
   const store = await cookies()
   store.set(PANEL_COOKIE, encodePanels(STANDARD_PANELS), {
     maxAge: ONE_YEAR,

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -36,6 +37,8 @@ const back = (q: string) => `/documents?${q}`
  * can read is a scan nothing downstream can search, check, or cite.
  */
 export async function assessAttachment(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -235,6 +238,8 @@ export async function assessAttachment(formData: FormData) {
 
 /** Clear a reading. */
 export async function clearAttachmentAssessment(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 

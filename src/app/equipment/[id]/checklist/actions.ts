@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { generateAttachmentReview, generateCheckComment } from '@/lib/review'
@@ -22,6 +23,8 @@ async function projectOf(equipmentId: string): Promise<string | null> {
 }
 
 export async function addChecklistItem(formData: FormData) {
+  await requireActor()
+
   const equipment_id = str(formData, 'equipment_id')
   const level = str(formData, 'level')
   const item = str(formData, 'item')
@@ -41,6 +44,8 @@ export async function addChecklistItem(formData: FormData) {
 }
 
 export async function updateChecklistItem(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const equipment_id = str(formData, 'equipment_id')
   const status = str(formData, 'status') ?? 'pending'
@@ -59,6 +64,8 @@ export async function updateChecklistItem(formData: FormData) {
 }
 
 export async function deleteChecklistItem(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const equipment_id = str(formData, 'equipment_id')
   if (!id || !equipment_id) return
@@ -69,6 +76,8 @@ export async function deleteChecklistItem(formData: FormData) {
 }
 
 export async function uploadAttachment(formData: FormData) {
+  await requireActor()
+
   const checklist_item_id = str(formData, 'checklist_item_id')
   const equipment_id = str(formData, 'equipment_id')
   const file = formData.get('file')
@@ -101,6 +110,8 @@ export async function uploadAttachment(formData: FormData) {
 }
 
 export async function deleteAttachment(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const file_path = str(formData, 'file_path')
   const equipment_id = str(formData, 'equipment_id')
@@ -124,6 +135,8 @@ export async function deleteAttachment(formData: FormData) {
 // rather than duplicated, and rows the parser could not read are refused
 // outright rather than half-applied.
 export async function importChecklist(formData: FormData) {
+  await requireActor()
+
   const equipment_id = str(formData, 'equipment_id')
   const file = formData.get('file')
   if (!equipment_id || !(file instanceof File) || file.size === 0) return

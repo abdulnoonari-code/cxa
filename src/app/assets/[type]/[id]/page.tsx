@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -51,6 +52,11 @@ export default async function SubjectPage({
   params: Promise<{ type: string; id: string }>
   searchParams: Promise<{ lens?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { type, id } = await params
   const { lens: lensParam } = await searchParams
   const lens = LENSES.some((l) => l.value === lensParam) ? (lensParam as string) : 'overview'

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -68,6 +69,8 @@ function back(issueId: string, params: string, from?: string | null): string {
  * on the punch list six weeks later.
  */
 export async function uploadIssuePhoto(formData: FormData) {
+  await requireActor()
+
   const issueId = String(formData.get('issue_id') ?? '')
   const from = safeBack(formData)
   if (!issueId) redirect(`${from ?? '/issues'}${(from ?? '/issues').includes('?') ? '&' : '?'}photo=badrow`)
@@ -171,6 +174,8 @@ export async function uploadIssuePhoto(formData: FormData) {
 }
 
 export async function deleteIssuePhoto(formData: FormData) {
+  await requireActor()
+
   const issueId = String(formData.get('issue_id') ?? '')
   const id = String(formData.get('id') ?? '')
   const project = await getCurrentProject()
@@ -219,6 +224,8 @@ export async function deleteIssuePhoto(formData: FormData) {
  * reading that claims a defect is fixed is flagged rather than believed.
  */
 export async function reviewIssuePhoto(formData: FormData) {
+  await requireActor()
+
   const issueId = String(formData.get('issue_id') ?? '')
   const id = String(formData.get('id') ?? '')
   const project = await getCurrentProject()
@@ -328,6 +335,8 @@ export async function reviewIssuePhoto(formData: FormData) {
  * trustworthiness is in question.
  */
 export async function comparePhotos(formData: FormData) {
+  await requireActor()
+
   const issueId = String(formData.get('issue_id') ?? '')
   const defectId = String(formData.get('defect_id') ?? '')
   const fixId = String(formData.get('fix_id') ?? '')
@@ -422,6 +431,8 @@ export async function comparePhotos(formData: FormData) {
  * without spending a call.
  */
 export async function reviewDefect(formData: FormData) {
+  await requireActor()
+
   const issueId = String(formData.get('issue_id') ?? '')
   const project = await getCurrentProject()
   if (!project) redirect('/issues?assess=noproject')

@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { getActor } from '@/lib/audit'
@@ -34,6 +35,11 @@ function when(value: string | null): string {
 }
 
 export default async function GatePage({ params }: { params: Promise<{ id: string }> }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { id } = await params
 
   const project = await getCurrentProject()

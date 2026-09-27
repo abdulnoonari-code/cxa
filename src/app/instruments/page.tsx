@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
 import { calibrationStatus, calibrationBadgeClass, calibrationLabel } from '@/lib/tests'
@@ -6,6 +7,11 @@ import { createInstrument, updateInstrument, deleteInstrument } from './actions'
 export const dynamic = 'force-dynamic'
 
 export default async function InstrumentsPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
 
   const { data: rows } = project

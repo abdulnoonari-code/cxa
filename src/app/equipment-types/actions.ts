@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import ExcelJS from 'exceljs'
@@ -22,6 +23,8 @@ function refresh() {
 }
 
 export async function createType(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   const type_code = str(formData, 'type_code')
@@ -42,6 +45,8 @@ export async function createType(formData: FormData) {
 }
 
 export async function updateType(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -58,6 +63,8 @@ export async function updateType(formData: FormData) {
 }
 
 export async function deleteType(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   // The tags that referenced it are NOT deleted — the database sets their
@@ -67,6 +74,8 @@ export async function deleteType(formData: FormData) {
 }
 
 export async function importTypes(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/projects')
 

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -33,6 +34,8 @@ function capsFrom(formData: FormData): Capability[] {
 }
 
 export async function saveRole(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -98,6 +101,8 @@ export async function saveRole(formData: FormData) {
 // Removing a project row restores the built-in definition rather than
 // deleting the role, so a project can always get back to the defaults.
 export async function resetRole(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -130,6 +135,8 @@ export type ImportOutcome = {
 // Import is all-or-nothing when there are errors: a half-applied role list is
 // worse than none, because nobody can tell which half applied.
 export async function importRoles(formData: FormData): Promise<void> {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return

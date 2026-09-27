@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import { supabase, USING_SERVICE_ROLE } from '@/lib/supabase'
 import { runSetupProbes } from '@/data/setup-checks'
 import { countStates, setupHeadline, NOT_PROBED } from '@/lib/setup-checks'
@@ -15,6 +16,11 @@ const STATE: Record<string, { color: string; word: string }> = {
 }
 
 export default async function SetupPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   // Whether any project exists at all, asked with the SERVER key — which is
   // the whole reason this panel can be sure of anything.
   //

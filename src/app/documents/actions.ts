@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -17,6 +18,8 @@ function str(formData: FormData, key: string): string | null {
 // checklist item it belongs to, instead of having to navigate to that item's
 // equipment checklist first.
 export async function uploadDocument(formData: FormData) {
+  await requireActor()
+
   const checklist_item_id = str(formData, 'checklist_item_id')
   const file = formData.get('file')
 
@@ -65,6 +68,8 @@ export async function uploadDocument(formData: FormData) {
 }
 
 export async function deleteDocument(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const file_path = str(formData, 'file_path')
   if (!id) return

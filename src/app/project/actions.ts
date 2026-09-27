@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 
@@ -10,6 +11,8 @@ function str(formData: FormData, key: string): string | null {
 }
 
 export async function updateProject(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const name = str(formData, 'name')
   if (!id || !name) return

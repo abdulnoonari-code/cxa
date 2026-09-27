@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -71,6 +72,8 @@ async function insertRows(
  * edited half of them.
  */
 export async function addWorkedExample() {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/projects')
 
@@ -239,6 +242,8 @@ export async function addWorkedExample() {
  * still points at and a half-removed example is worse than one left in.
  */
 export async function removeWorkedExample() {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/projects')
   const projectId = project.id

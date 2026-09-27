@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
@@ -40,6 +41,8 @@ function refreshEverything() {
 }
 
 export async function createProject(formData: FormData) {
+  await requireActor()
+
   const name = str(formData, 'name')
   if (!name) return
 
@@ -96,6 +99,8 @@ export async function createProject(formData: FormData) {
 // Choosing an EXISTING project is a different act: that project has already
 // been configured and has records in it, so the dashboard is exactly right.
 export async function selectProject(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -145,6 +150,8 @@ async function ensureAProjectExists(): Promise<{ id: string; name: string } | nu
 }
 
 export async function deleteProject(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const password = str(formData, 'password')
   if (!id) return

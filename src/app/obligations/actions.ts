@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -47,6 +48,8 @@ function chunk<T>(list: T[], size: number): T[][] {
  * and counted as such by the verdict.
  */
 export async function readDocument(formData: FormData) {
+  await requireActor()
+
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) redirect('/obligations?read=nofile')
 
@@ -151,6 +154,8 @@ function stamps(status: string, actorName: string, previous: { closed_at: string
 }
 
 export async function addObligation(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   const statement = str(formData, 'statement')
   if (!project || !statement) return
@@ -189,6 +194,8 @@ export async function addObligation(formData: FormData) {
 }
 
 export async function updateObligation(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -246,6 +253,8 @@ export async function updateObligation(formData: FormData) {
 }
 
 export async function deleteObligation(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -277,6 +286,8 @@ export async function deleteObligation(formData: FormData) {
  * obligation is left alone, because those represent somebody's work.
  */
 export async function discardRead(formData: FormData) {
+  await requireActor()
+
   const source = str(formData, 'source_name')
   const project = await getCurrentProject()
   if (!project || !source) return
@@ -330,6 +341,8 @@ function stampsFor(status: string, actorName: string, previous: { closed_at: str
  * cannot recognise would otherwise be silently orphaned on a re-import.
  */
 export async function importObligations(formData: FormData) {
+  await requireActor()
+
   const file = formData.get('file')
   if (!(file instanceof File) || file.size === 0) redirect('/obligations?import=nofile')
 
@@ -518,6 +531,8 @@ export async function importObligations(formData: FormData) {
 // takes everything in scope — which is exactly why the project-wide version
 // is gated and the per-document one states its count first.
 export async function deleteObligationsAction(formData: FormData) {
+  await requireActor()
+
   const scopeKind = str(formData, 'scope')
   const source = str(formData, 'source_name')
 

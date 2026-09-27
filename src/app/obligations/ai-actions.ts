@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -34,6 +35,8 @@ const back = (q: string) => `/obligations?${q}`
  * trail.
  */
 export async function assessObligation(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -171,6 +174,8 @@ export async function assessObligation(formData: FormData) {
 
 /** Clear a reading. Nothing derived should be permanent against somebody's wishes. */
 export async function clearObligationAssessment(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   const project = await getCurrentProject()

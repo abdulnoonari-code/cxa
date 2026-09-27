@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -53,6 +54,8 @@ function refresh() {
 }
 
 export async function createEquipment(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const tag_id = str(formData, 'tag_id')
   if (!project_id || !tag_id) return
@@ -81,6 +84,8 @@ export async function createEquipment(formData: FormData) {
 }
 
 export async function deleteEquipment(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   const id = str(formData, 'id')
   if (!id) return
@@ -100,6 +105,8 @@ export async function deleteEquipment(formData: FormData) {
 }
 
 export async function updateEquipment(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   const id = str(formData, 'id')
   const tag_id = str(formData, 'tag_id')
@@ -142,6 +149,8 @@ export async function updateEquipment(formData: FormData) {
 // exist and matched by code or name if they do. Nothing is ever renamed or
 // deleted by an import.
 export async function importEquipment(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
 

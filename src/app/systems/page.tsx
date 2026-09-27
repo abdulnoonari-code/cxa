@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { loadProjectReadiness } from '@/lib/system-data'
@@ -20,6 +21,11 @@ export default async function SystemsPage({
     lost?: string
   }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const {
     import: imp,
     added = '0',

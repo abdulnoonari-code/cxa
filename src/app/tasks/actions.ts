@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { missingColumn } from '@/lib/pg-columns'
@@ -36,6 +37,8 @@ async function writeDroppingUnknownColumns(
 }
 
 export async function createTask(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const title = str(formData, 'title')
   if (!project_id || !title) return
@@ -60,6 +63,8 @@ export async function createTask(formData: FormData) {
 }
 
 export async function updateTask(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -80,6 +85,8 @@ export async function updateTask(formData: FormData) {
 }
 
 export async function deleteTask(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   await supabase.from('tasks').delete().eq('id', id)

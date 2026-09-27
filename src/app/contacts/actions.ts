@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -19,6 +20,8 @@ function refresh() {
 }
 
 export async function addContact(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -52,6 +55,8 @@ export async function addContact(formData: FormData) {
 // One toggle rather than a full edit form: whether this person gets invited to
 // witness and hold points is the field that actually changes week to week.
 export async function toggleWitness(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -74,6 +79,8 @@ export async function toggleWitness(formData: FormData) {
 }
 
 export async function removeContact(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return

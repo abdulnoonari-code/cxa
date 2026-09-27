@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
 import { getActor } from '@/lib/audit'
@@ -15,6 +16,11 @@ import { saveRole, resetRole, importRoles } from './actions'
 export const dynamic = 'force-dynamic'
 
 export default async function RolesPage() {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const project = await getCurrentProject()
   const actor = await getActor(project?.id ?? null)
   const roles = await loadRoles(project?.id ?? null)

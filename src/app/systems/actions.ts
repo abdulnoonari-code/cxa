@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import ExcelJS from 'exceljs'
@@ -34,6 +35,8 @@ function refresh() {
 }
 
 export async function createSystem(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const system_id = str(formData, 'system_id')
   const name = str(formData, 'name')
@@ -59,6 +62,8 @@ export async function createSystem(formData: FormData) {
 }
 
 export async function updateSystem(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -89,6 +94,8 @@ export async function updateSystem(formData: FormData) {
 }
 
 export async function deleteSystem(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
   // Equipment is not deleted — it simply loses its system assignment.
@@ -99,6 +106,8 @@ export async function deleteSystem(formData: FormData) {
 
 // Put a tag inside a system, or take it out again.
 export async function assignEquipment(formData: FormData) {
+  await requireActor()
+
   const equipment_id = str(formData, 'equipment_id')
   const system_id = str(formData, 'system_id')
   if (!equipment_id) return
@@ -128,6 +137,8 @@ export async function assignEquipment(formData: FormData) {
  *   stage rather than creating a second copy of each one.
  */
 export async function importSystems(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/projects')
 

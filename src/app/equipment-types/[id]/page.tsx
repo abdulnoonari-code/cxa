@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -13,6 +14,11 @@ export const dynamic = 'force-dynamic'
 // shelf or a crate and see the model's spec and every unit installed on the
 // job, rather than a piece of text saying "SIE-8DN9".
 export default async function TypeDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { id } = await params
   const project = await getCurrentProject()
 

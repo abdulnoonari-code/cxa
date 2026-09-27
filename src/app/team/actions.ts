@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -46,6 +47,8 @@ function refresh() {
 }
 
 export async function addMember(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -99,6 +102,8 @@ export async function addMember(formData: FormData) {
  * password sends an administrator back into Supabase.
  */
 export async function resetMemberPassword(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -123,6 +128,8 @@ export async function resetMemberPassword(formData: FormData) {
 }
 
 export async function updateMemberRole(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
@@ -149,6 +156,8 @@ export async function updateMemberRole(formData: FormData) {
 }
 
 export async function removeMember(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return

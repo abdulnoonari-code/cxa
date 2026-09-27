@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getCurrentProject } from '@/lib/project'
@@ -82,6 +83,8 @@ async function run(formData: FormData, scopeOf: (f: FormData) => RegisterScope |
 
 /** Everything that arrived in one file. */
 export async function deleteRegisterGroupAction(formData: FormData) {
+  await requireActor()
+
   const key = str(formData, 'group')
   const parsed = key ? parseGroupKey(key) : null
   await run(formData, () => (key && parsed ? { kind: 'group', groupKey: key } : null), parsed ? groupLabel(parsed) : 'an import')
@@ -89,6 +92,8 @@ export async function deleteRegisterGroupAction(formData: FormData) {
 
 /** Exactly the rows somebody ticked. */
 export async function deletePickedRegisterAction(formData: FormData) {
+  await requireActor()
+
   const ids = formData.getAll('row_ids').filter((v): v is string => typeof v === 'string')
   await run(formData, () => (ids.length > 0 ? { kind: 'picked', ids } : null), `${ids.length} selected`)
 }

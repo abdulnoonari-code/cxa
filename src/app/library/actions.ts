@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +24,8 @@ function chunk<T>(list: T[], size: number): T[][] {
 
 /** Add a definition. It applies to nothing until somebody applies it. */
 export async function createTemplate(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/library')
 
@@ -65,6 +68,8 @@ export async function createTemplate(formData: FormData) {
  * afterwards changes what they put their name to.
  */
 export async function editTemplate(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/library')
 
@@ -114,6 +119,8 @@ export async function editTemplate(formData: FormData) {
 
 /** Apply one definition to the ticked tags or systems. */
 export async function applyTemplate(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/library')
 
@@ -176,6 +183,8 @@ export async function applyTemplate(formData: FormData) {
  * of them have been answered.
  */
 export async function adoptCandidates(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/library')
 

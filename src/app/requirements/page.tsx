@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -37,6 +38,11 @@ export default async function RequirementsPage({
     rev?: string
   }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const sp = await searchParams
   const { status: statusFilter, criticality: critFilter, source: sourceFilter } = sp
 

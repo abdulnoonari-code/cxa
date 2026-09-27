@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -24,6 +25,8 @@ function str(formData: FormData, key: string): string | null {
  * the wrong tag should not be something you ration.
  */
 export async function runRulesOnAttachment(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   if (!id) return
 
@@ -143,6 +146,8 @@ export async function runRulesOnAttachment(formData: FormData) {
  * attachments nobody has ever checked.
  */
 export async function runRulesOnAll(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) redirect('/documents?rules=noproject')
 

@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -16,6 +17,8 @@ function str(formData: FormData, key: string): string | null {
 // to the project rather than to any one check, which is why they live in their
 // own table instead of `attachments`.
 export async function uploadProjectFile(formData: FormData) {
+  await requireActor()
+
   const project_id = str(formData, 'project_id')
   const file = formData.get('file')
   if (!project_id || !(file instanceof File) || file.size === 0) return
@@ -46,6 +49,8 @@ export async function uploadProjectFile(formData: FormData) {
 }
 
 export async function deleteProjectFile(formData: FormData) {
+  await requireActor()
+
   const id = str(formData, 'id')
   const file_path = str(formData, 'file_path')
   if (!id) return

@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import UploadResult from '@/components/UploadResult'
 import Link from 'next/link'
 import { getCurrentProject } from '@/lib/project'
@@ -64,6 +65,11 @@ export default async function IssuesPage({
     reason?: string
   }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const sp = await searchParams
   const project = await getCurrentProject()
   const page = Math.max(1, Number(sp.page ?? '1') || 1)

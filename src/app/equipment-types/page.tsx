@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -13,6 +14,11 @@ export default async function EquipmentTypesPage({
 }: {
   searchParams: Promise<{ import?: string; added?: string; updated?: string; warn?: string; why?: string; q?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { import: imp, added = '0', updated: changed = '0', warn = '0', why, q } = await searchParams
   const project = await getCurrentProject()
   const typeImports = await loadRegisterGroups('equipment_types', project?.id ?? null)

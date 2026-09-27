@@ -1,3 +1,4 @@
+import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
@@ -35,6 +36,11 @@ export default async function EditIssuePage({
   params: Promise<{ id: string }>
   searchParams: Promise<{ photo?: string; ai?: string; reason?: string; hint?: string; assess?: string }>
 }) {
+  // See src/data/require-page.tsx: the layout does not stop this page
+  // running, nor its output being sent. This is the door.
+  const refused = await requirePage()
+  if (refused) return refused
+
   const { id } = await params
   const sp = await searchParams
   const { data: issueRow } = await supabase.from('issues').select('*').eq('id', id).single()

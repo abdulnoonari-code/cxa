@@ -1,5 +1,6 @@
 'use server'
 
+import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { supabase } from '@/lib/supabase'
@@ -34,6 +35,8 @@ function refresh() {
 }
 
 export async function setInspectionType(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('review', project.id))) return
@@ -66,6 +69,8 @@ export async function setInspectionType(formData: FormData) {
 // this writes the full wording and the recipient list into `notifications`,
 // where neither can be rewritten afterwards, as well as stamping notified_at.
 export async function giveNotice(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('record', project.id))) return
@@ -146,6 +151,8 @@ export async function giveNotice(formData: FormData) {
 // records that it actually went out, so the register distinguishes a notice
 // that was merely prepared from one that was issued.
 export async function markNoticeSent(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('record', project.id))) return
@@ -170,6 +177,8 @@ export async function markNoticeSent(formData: FormData) {
 }
 
 export async function signHoldPoint(formData: FormData) {
+  await requireActor()
+
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('approve', project.id))) return

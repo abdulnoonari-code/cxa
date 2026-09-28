@@ -6,6 +6,7 @@ import { probeAnonAccess, accessVerdict } from '@/lib/db-access'
 import { accessVerdict as whoMayUseApp } from '@/data/gate'
 import { parseOwners } from '@/lib/gate'
 import { aiConfigured } from '@/lib/ai'
+import { RELEASES, CURRENT, releaseLabel } from '@/lib/release'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,36 @@ export default async function SetupPage() {
         What is actually in place, asked of the database each time this page opens. Nothing here is read from a
         setting or a list of what was supposed to have happened.
       </p>
+
+      {/* Which code is running. See src/lib/release.ts for why this is on
+          a screen at all: without it, "did that update go up?" has no
+          answer anybody can look up, and on 27 September that cost a day. */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h2 className="section-title" style={{ marginTop: 0 }}>The code on this site</h2>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>{releaseLabel()}</div>
+        <div className="text-secondary" style={{ fontSize: 12.5, marginTop: 2, marginBottom: 12 }}>
+          {CURRENT.what}.
+        </div>
+        <p className="text-secondary" style={{ fontSize: 12.5, marginTop: 0, marginBottom: 12 }}>
+          This is what is <strong>deployed</strong>, read from the running code rather than from a list of what was
+          meant to happen. If it is lower than the newest package you were sent, an upload did not land — that is
+          the fastest way to find out, and it is why it is here.
+        </p>
+        <details>
+          <summary className="link" style={{ fontSize: 13, cursor: 'pointer' }}>What came before this</summary>
+          <table className="table" style={{ fontSize: 12.5, marginTop: 10 }}>
+            <tbody>
+              {RELEASES.slice(1).map((r) => (
+                <tr key={r.update}>
+                  <td className="mono" style={{ whiteSpace: 'nowrap', width: 1 }}>{r.update}</td>
+                  <td className="mono text-secondary" style={{ whiteSpace: 'nowrap', width: 1 }}>{r.on}</td>
+                  <td>{r.what}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      </div>
 
       <div className="card">
         <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'baseline' }}>

@@ -129,6 +129,17 @@ export const NAV: NavSection[] = [
         ],
       },
       {
+        // FIRST in this group, on purpose. "How do I get my job in" was
+        // answered by four screens and four spreadsheets in an order
+        // nothing stated, and the person who asked was looking at
+        // Checklists when they said it was not clear. So the answer sits
+        // above Checklists, where they were already looking.
+        href: '/jobsheet',
+        label: 'Job sheet',
+        icon: 'checklist',
+        note: 'One spreadsheet that builds the systems, the tags and every check against them.',
+      },
+      {
         href: '/checklists',
         label: 'Checklists',
         icon: 'checklist',

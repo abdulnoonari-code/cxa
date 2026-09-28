@@ -85,12 +85,26 @@ function headerKey(value: unknown): string {
 
 // "L2", "L2 - IV", "Level 2", "Installation Verification" should all land on
 // the same level. Anything unrecognised is reported, never guessed.
+//
+// ── "Level 2" did not work, for two years, while this comment said it did ─
+//
+// The short-form pattern was /^l\s*([1-5])/ — an l, optional spaces, a
+// digit. "L2" and "L 2" passed. "Level 2" did not: after the l comes an e.
+// So the commonest spelling in the industry fell through to the label
+// search, where "level 2" is not a substring of
+// "L2 — Installation Verification (IV)", and came back null.
+//
+// Nobody noticed because the comment above says it works, and a comment is
+// what people read when they are checking whether something is handled.
+// Found by a fixture in the one-sheet importer written to look like a real
+// spreadsheet rather than like our own export.
 export function matchLevel(raw: string): string | null {
   const v = raw.trim().toLowerCase()
   if (!v) return null
   const exact = LEVELS.find((l) => l.value.toLowerCase() === v || l.label.toLowerCase() === v)
   if (exact) return exact.value
-  const short = v.match(/^l\s*([1-5])/)
+  // l2 · l 2 · lvl 2 · level 2 · level-2 · stage 2 · cx2
+  const short = v.match(/^(?:l|lvl|level|stage|cx|phase)\s*[-–—.:]?\s*([1-5])\b/)
   if (short) {
     const found = LEVELS.find((l) => l.value.startsWith(`L${short[1]}_`))
     if (found) return found.value

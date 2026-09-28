@@ -48,6 +48,7 @@ export type Release = {
  * that is the number written on the zip somebody has in their downloads.
  */
 export const RELEASES: Release[] = [
+  { update: 124, on: '2026-09-28', what: 'No importer can read another project\u2019s subsystems' },
   { update: 123, on: '2026-09-28', what: 'One job sheet builds the systems, the tags and every check in one go' },
   { update: 122, on: '2026-09-27', what: 'The Setup screen says which update is actually deployed' },
   { update: 121, on: '2026-09-27', what: 'Each readiness gate says whether it will make its planned date' },

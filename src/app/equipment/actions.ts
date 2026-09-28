@@ -314,11 +314,25 @@ export async function importEquipment(formData: FormData) {
   }
 
   // ── Build the hierarchy the sheet describes ────────────────────────────
-  const [{ data: areaRows }, { data: systemRows }, { data: subsystemRows }] = await Promise.all([
+  //
+  // The subsystem read is scoped through this project's systems. It used
+  // to have no filter at all — every subsystem on the database — and the
+  // map built from it is keyed on NAME, so a subsystem called "Incomer" on
+  // another job could be matched and one project's tag filed under another
+  // project's bay. Areas and systems beside it were already scoped; this
+  // one was missed because `subsystems` is one of the six tables with no
+  // project_id of its own, so there was no obvious column to filter on.
+  //
+  // Found by the sweep in src/checks/access.check.mts, which was written
+  // after the identical mistake was made in the job-sheet importer.
+  const [{ data: areaRows }, { data: systemRows }] = await Promise.all([
     supabase.from('areas').select('id, name, code').eq('project_id', project.id),
     supabase.from('systems').select('id, name, system_id').eq('project_id', project.id),
-    supabase.from('subsystems').select('id, name, code, system_id'),
   ])
+  const ourSystemIds = ((systemRows ?? []) as { id: string }[]).map((r) => r.id)
+  const { data: subsystemRows } = ourSystemIds.length
+    ? await supabase.from('subsystems').select('id, name, code, system_id').in('system_id', ourSystemIds)
+    : { data: [] as { id: string; name: string; code: string | null; system_id: string }[] }
 
   const areaKey = new Map<string, string>()
   for (const a of (areaRows ?? []) as { id: string; name: string; code: string | null }[]) {

@@ -118,8 +118,23 @@ export async function importJobSheet(formData: FormData) {
   // A subsystem name is only unique inside its system: "Incomer" under two
   // switchboards is two different subsystems, and matching on name alone
   // would file the second board's checks under the first board's bay.
-  const { data: existingSubs } = await supabase
-    .from('subsystems').select('id, name, system_id')
+  // ── Scoped through the systems, because subsystems has no project_id ──
+  //
+  // This read had no filter on it at all. It returned every subsystem on
+  // the database, and a name match against that set could file one job's
+  // tag under another job's bay — a cross-project WRITE, arrived at
+  // through an unscoped read.
+  //
+  // Harmless today, with one project on the database. Not harmless on the
+  // day there are two, and by then nothing would point at this line.
+  //
+  // `subsystems` is one of the six tables with no project_id of its own
+  // (see src/data/owned.ts), so it is scoped through its parent system —
+  // and only the systems of this project are in that list.
+  const ourSystemIds = [...systemByName.values()]
+  const { data: existingSubs } = ourSystemIds.length
+    ? await supabase.from('subsystems').select('id, name, system_id').in('system_id', ourSystemIds)
+    : { data: [] as { id: string; name: string; system_id: string | null }[] }
   const subKey = (systemId: string, name: string) => `${systemId}\u0000${name.trim().toLowerCase()}`
   const subByKey = new Map<string, string>(
     ((existingSubs ?? []) as { id: string; name: string; system_id: string | null }[])

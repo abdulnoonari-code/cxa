@@ -368,5 +368,96 @@ const FILE_PATH_TABLES = listIn('data/file-owner.ts', 'const PATH_COLUMNS')
      offenders.length === 0, offenders.join(', '))
 }
 
+// ════════ NO ACTION READS A TABLE WITHOUT SAYING WHICH PROJECT ════════
+//
+// The hole this closes was written BY ME, the day after writing the sweep
+// that was supposed to make this class impossible.
+//
+// The job-sheet importer had:
+//
+//     await supabase.from('subsystems').select('id, name, system_id')
+//
+// No filter. Every subsystem on the database, and then a name match
+// against that set — so "Incomer" on another job could be matched and one
+// project's tag filed under another project's bay. A cross-project WRITE,
+// arrived at through an unscoped READ.
+//
+// Update 117's sweep did not see it, and could not: that one looks for
+// mutations keyed on an id the caller posted. This is a read with no key
+// at all. Different shape, same consequence, and it slipped through a
+// suite written specifically to stop it happening.
+//
+// So: in any 'use server' file, a select on a project table must be
+// CONSTRAINED BY SOMETHING. Either project_id, or an id that a guard has
+// already proved — `.eq('id', …)` after ownedBy is safe, because ownedBy
+// is what made it safe.
+//
+// What is refused is a select with NO filter at all. That is the shape
+// that returns another job's rows, and it is the shape I wrote. An
+// assertion demanding project_id on every read would fail thirty-odd
+// legitimate reads-by-proved-id, and an assertion that fails on correct
+// code gets loosened until it means nothing.
+{
+  const actionFiles = FILES.filter((p) => /\.tsx?$/.test(p) && readFileSync(p, 'utf8').trimStart().startsWith("'use server'"))
+
+  // EVERY table that belongs to a project — the ones carrying project_id
+  // AND the ones reaching it through a parent. The first version of this
+  // exempted the parent-scoped six outright, which meant THE BUG THAT
+  // PROMPTED THE WHOLE CHECK WOULD NOT HAVE BEEN CAUGHT: `subsystems` is
+  // one of the six. An exemption written while fixing a bug, that exempts
+  // the bug, is worth more attention than the bug.
+  const scoped = new Set([...OWNED_TABLES.DIRECT, ...Object.keys(OWNED_TABLES.PARENTS)])
+
+  const EXEMPT: Record<string, string> = {
+    profiles: 'not project data — one row per account',
+    projects: 'the project list itself, scoped by mayOpenProject',
+  }
+
+  const unscoped: string[] = []
+  let swept = 0
+  for (const path of actionFiles) {
+    const name = rel(path)
+    const text = readFileSync(path, 'utf8')
+
+    for (const m of text.matchAll(/\.from\('(\w+)'\)/g)) {
+      const table = m[1]
+      if (!scoped.has(table) || table in EXEMPT) continue
+
+      // The chain that follows, to the end of the statement. Long enough
+      // to reach the filters, short enough not to borrow the next
+      // statement's.
+      const stmt = text.slice(m.index!, m.index! + 400).split(/\n\s*\n|\n  (?:const|await|return|if|for) /)[0]
+
+      // Only reads. `.select()` after `.insert()` is a RETURNING clause,
+      // not a read — the first version of this counted those and reported
+      // seventeen false positives, which is how an assertion gets
+      // switched off rather than fixed.
+      const sel = stmt.indexOf('.select(')
+      if (sel === -1) continue
+      const writeAt = ['.insert(', '.update(', '.upsert(', '.delete('].map((w) => stmt.indexOf(w)).filter((i) => i >= 0)
+      if (writeAt.some((i) => i < sel)) continue
+
+      // A schema probe — `.select('a_column').limit(1)` — asks whether a
+      // column exists and reads nothing out of the row. There are eight of
+      // them and they are how this application degrades on a database
+      // where a SQL step has not been run. A probe that starts USING the
+      // row it got back is a different thing, and this will not catch
+      // that; it is a gap, and writing it down beats pretending the
+      // pattern covers it.
+      if (/\.limit\(1\)/.test(stmt)) continue
+
+      swept++
+      const filtered = /\.eq\(|\.in\(|\.match\(|\.filter\(|\.or\(/.test(stmt)
+      if (!filtered) unscoped.push(`${name}: .from('${table}').select() with no filter at all`)
+    }
+  }
+
+  ok('there are project-table reads in actions to sweep', swept > 5, `${swept}`)
+  ok('no action reads a whole project table unfiltered',
+     unscoped.length === 0,
+     unscoped.slice(0, 8).join(', ') + (unscoped.length > 8 ? ` …and ${unscoped.length - 8} more` : ''))
+
+}
+
 console.log(`${pass} passed, ${fail} failed`)
 if (fail) process.exitCode = 1

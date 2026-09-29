@@ -48,6 +48,7 @@ export type Release = {
  * that is the number written on the zip somebody has in their downloads.
  */
 export const RELEASES: Release[] = [
+  { update: 135, on: '2026-09-29', what: 'An importer counts only the rows the database actually accepted' },
   { update: 134, on: '2026-09-29', what: 'Equipment is a level: one checklist reaches every tag of that kind, and a tag is called a Tag' },
   { update: 133, on: '2026-09-29', what: 'Nineteen ways one project could reach another project\u2019s records, closed' },
   { update: 132, on: '2026-09-29', what: 'Superseded by 133 \u2014 do not apply' },

@@ -1,5 +1,8 @@
 'use server'
 
+import { accessVerdict } from '@/data/gate'
+import { mayOpenProject } from '@/lib/gate'
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -9,6 +12,7 @@ import { getCurrentProject } from '@/lib/project'
 import { recordAudit } from '@/lib/audit'
 import { parseSystemWorkbook } from '@/lib/system-import'
 import { makeRef } from '@/lib/check-groups'
+import { newTally, record, anyFailed, failureLines } from '@/lib/write-report'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -38,6 +42,13 @@ export async function createSystem(formData: FormData) {
   await requireActor()
 
   const project_id = str(formData, 'project_id')
+  // The project a record is filed under is a form field, so it is whatever
+  // the caller sent. Without this, a member of one job could write records
+  // into another job's register — new tags, new systems, new instruments —
+  // which is not a leak but is worse in one way: it is a change to somebody
+  // else's record that looks, to them, like one of their own people made it.
+  if (project_id && !mayOpenProject(await accessVerdict(), project_id)) return
+
   const system_id = str(formData, 'system_id')
   const name = str(formData, 'name')
   if (!project_id || !system_id || !name) return
@@ -79,6 +90,9 @@ export async function updateSystem(formData: FormData) {
           ...(formData.has('floor') ? { floor: str(formData, 'floor') } : {}),
         }
       : {}
+  const project = await getCurrentProject()
+  await ownedBy(project, 'systems', id)
+
 
   await supabase
     .from('systems')
@@ -99,6 +113,9 @@ export async function deleteSystem(formData: FormData) {
   const id = str(formData, 'id')
   if (!id) return
   // Equipment is not deleted — it simply loses its system assignment.
+  const project = await getCurrentProject()
+  await ownedBy(project, 'systems', id)
+
   await supabase.from('equipment').update({ system_id: null, subsystem_id: null }).eq('system_id', id)
   await supabase.from('systems').delete().eq('id', id)
   refresh()
@@ -111,11 +128,19 @@ export async function assignEquipment(formData: FormData) {
   const equipment_id = str(formData, 'equipment_id')
   const system_id = str(formData, 'system_id')
   if (!equipment_id) return
+  const project = await getCurrentProject()
+  // BOTH ends. Checking only the tag would still let somebody file one of
+  // this job's tags under another job's system, which quietly moves it out
+  // of every rollup, every gate and every readiness figure it belonged to
+  // — and it would still be listed, on a screen nobody here can open.
+  await ownedBy(project, 'equipment', equipment_id)
+  if (system_id) await ownedBy(project, 'systems', system_id)
 
   await supabase
     .from('equipment')
     .update({ system_id, subsystem_id: null })
     .eq('id', equipment_id)
+    .eq('project_id', project!.id)
 
   refresh()
 }
@@ -217,6 +242,10 @@ export async function importSystems(formData: FormData) {
     return id
   }
 
+  // Counted only when the database says yes — see src/lib/write-report.ts.
+
+  const writes = newTally()
+
   let inserted = 0
   let updated = 0
 
@@ -241,14 +270,14 @@ export async function importSystems(formData: FormData) {
 
     const id = byCode.get(row.system_id.toLowerCase())
     if (id) {
-      await supabase.from('systems').update(values).eq('id', id)
-      updated += 1
+      const { error: upErr } = await supabase.from('systems').update(values).eq('id', id)
+      if (record(writes, upErr, { label: row.system_id ?? row.name ?? 'system', row: row.row })) updated += 1
     } else {
       // Only NEW rows carry the source. A row being UPDATED by this file was
       // already here and did not arrive in it — recording otherwise would put
       // an existing tag into a group whose Delete button would then remove
       // work that predates the import entirely.
-      await supabase
+      const { error } = await supabase
         .from('systems')
         .insert({
           project_id: project.id,
@@ -256,7 +285,7 @@ export async function importSystems(formData: FormData) {
           ...values,
           ...(hasSource ? { source_ref: makeRef('file', file.name, row.row) } : {}),
         })
-      inserted += 1
+      if (record(writes, error, { label: row.system_id ?? row.name ?? 'system', row: row.row })) inserted += 1
     }
   }
 
@@ -270,7 +299,7 @@ export async function importSystems(formData: FormData) {
     action: 'imported systems',
     entity: 'system',
     entityLabel: file.name,
-    newValue: `${inserted} added, ${updated} updated${areasCreated ? `, plus ${areasCreated} area${areasCreated === 1 ? '' : 's'}` : ''}${placeIgnored ? ' — Building and Floor IGNORED' : ''}`,
+    newValue: `${writes.failed.length ? `${writes.failed.length} REFUSED, ` : ''}${inserted} added, ${updated} updated${areasCreated ? `, plus ${areasCreated} area${areasCreated === 1 ? '' : 's'}` : ''}${placeIgnored ? ' — Building and Floor IGNORED' : ''}`,
     comment:
       `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
       (placeIgnored
@@ -286,6 +315,9 @@ export async function importSystems(formData: FormData) {
 
   refresh()
   redirect(
-    `/systems?import=ok&added=${inserted}&updated=${updated}&warn=${parsed.warnings.length}${placeIgnored ? '&lost=place' : ''}`
+    `/systems?import=ok&added=${inserted}&updated=${updated}&warn=${parsed.warnings.length}` +
+      `${placeIgnored ? '&lost=place' : ''}` +
+      // Rows the database refused are carried to the screen, not swallowed.
+      `${anyFailed(writes) ? `&refused=${writes.failed.length}&why=${encodeURIComponent(failureLines(writes, 3).join(' | ').slice(0, 300))}` : ''}`
   )
 }

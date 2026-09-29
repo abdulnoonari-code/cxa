@@ -18,6 +18,7 @@ import {
   type ImportOutcome,
 } from '@/lib/import-result'
 import { makeRef } from '@/lib/check-groups'
+import { newTally, record, anyFailed, failureLines } from '@/lib/write-report'
 
 function str(formData: FormData, key: string): string | null {
   const value = formData.get(key)
@@ -522,6 +523,16 @@ export async function importEquipment(formData: FormData) {
     })
   }
 
+  // ── Counted only when the database says yes ───────────────────────
+  //
+  // These used to go up regardless: the error from every insert and
+  // update was thrown away, so the banner said "1,842 tags added"
+  // whether the database wrote 1,842 rows or none. On a real register
+  // there are always some it refuses — a tag differing only in case, a
+  // category outside the CHECK constraint, a column a SQL step has not
+  // added yet — and the count is the one thing somebody checks to find
+  // out whether the import worked.
+  const writes = newTally()
   let inserted = 0
   let updated = 0
   let removed = 0
@@ -585,20 +596,20 @@ export async function importEquipment(formData: FormData) {
     const existingId = row.id ?? existingByTag.get(row.tag_id.toLowerCase())
 
     if (existingId) {
-      await supabase.from('equipment').update(values).eq('id', existingId)
-      updated += 1
+      const { error } = await supabase.from('equipment').update(values).eq('id', existingId)
+      if (record(writes, error, { label: row.tag_id, row: row.row })) updated += 1
     } else {
       // Only NEW rows carry the source. A tag being UPDATED by this file was
       // already in the register and did not arrive in it — recording
       // otherwise would put an existing tag into a group whose Delete button
       // would then destroy its checks, tests and punch items.
-      await supabase.from('equipment').insert({
+      const { error } = await supabase.from('equipment').insert({
         project_id: project.id,
         install_status: row.install_status,
         ...values,
         ...(hasSource ? { source_ref: makeRef('file', file.name, row.row) } : {}),
       })
-      inserted += 1
+      if (record(writes, error, { label: row.tag_id, row: row.row })) inserted += 1
     }
   }
 
@@ -748,6 +759,18 @@ export async function importEquipment(formData: FormData) {
   if (parsed.warnings.length > 0) {
     problems.push(
       `${parsed.warnings.length} cell${parsed.warnings.length === 1 ? ' was' : 's were'} not understood and left blank — the audit trail lists them by row and column.`
+    )
+  }
+
+  // ── Rows the database refused ──────────────────────────────────────
+  //
+  // Said FIRST, and said in the database's own words with the row it
+  // came from. A refusal reported after a success count is a refusal
+  // somebody stops reading before.
+  if (anyFailed(writes)) {
+    problems.unshift(
+      `${writes.failed.length} row${writes.failed.length === 1 ? '' : 's'} could not be written and ${writes.failed.length === 1 ? 'is' : 'are'} NOT in the register. Everything else was imported.`,
+      ...failureLines(writes),
     )
   }
 

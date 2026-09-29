@@ -19,6 +19,7 @@ export default async function SystemsPage({
     warn?: string
     why?: string
     lost?: string
+    refused?: string
   }>
 }) {
   // See src/data/require-page.tsx: the layout does not stop this page
@@ -33,6 +34,7 @@ export default async function SystemsPage({
     warn = '0',
     why,
     lost,
+    refused: refusedCount,
   } = await searchParams
   const project = await getCurrentProject()
   const systemImports = await loadRegisterGroups('systems', project?.id ?? null)
@@ -82,6 +84,23 @@ export default async function SystemsPage({
         </div>
       </div>
 
+      {/* Rows the database refused are said FIRST and on their own. A
+          refusal printed after a success count is a refusal somebody
+          stops reading before. */}
+      {imp === 'ok' && Number(refusedCount ?? '0') > 0 && (
+        <div className="alert alert-danger" role="alert">
+          <strong>
+            {refusedCount} row{refusedCount === '1' ? '' : 's'} could not be written and{' '}
+            {refusedCount === '1' ? 'is' : 'are'} NOT
+            in the register.
+          </strong>
+          {why && <div style={{ marginTop: 6, fontSize: 13 }}>{decodeURIComponent(why)}</div>}
+          <div style={{ marginTop: 6, fontSize: 13 }}>
+            Everything else was saved. Correct those rows and import the same file again — re-importing updates
+            rather than duplicates.
+          </div>
+        </div>
+      )}
       {imp === 'ok' && (
         <div className="alert alert-info">
           <strong>Imported.</strong> {added} system{added === '1' ? '' : 's'} added, {changed} updated.

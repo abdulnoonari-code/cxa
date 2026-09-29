@@ -5,6 +5,7 @@ import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { newTally, recordBatch, anyFailed, failureLines } from '@/lib/write-report'
 import { outcomeParams } from '@/lib/uploads'
 import { verifyPassword } from '@/lib/reauth'
 import { checklistImpact, deleteChecklist, type CheckScope } from '@/data/purge'
@@ -246,8 +247,12 @@ export async function importProjectChecklist(formData: FormData) {
     }))
   )
 
+  // Counted only when the database says yes. A chunk refused as one
+  // statement is every row in that chunk, not one.
+  const writes = newTally()
   for (const part of chunk(newRows, 500)) {
-    await supabase.from('checklist_items').insert(part)
+    const { error } = await supabase.from('checklist_items').insert(part)
+    recordBatch(writes, error, part.map((r) => ({ label: String(r.item ?? 'check'), row: null })))
   }
 
   await recordAudit({
@@ -255,7 +260,7 @@ export async function importProjectChecklist(formData: FormData) {
     action: 'imported checklist',
     entity: 'checklist_item',
     entityLabel: file.name,
-    newValue: `${newRows.length} added, ${updates.length} updated, ${removeIds.length} removed`,
+    newValue: `${writes.failed.length ? `${writes.failed.length} REFUSED, ` : ''}${writes.done} added, ${updates.length} updated, ${removeIds.length} removed`,
     comment:
       `Read from ${parsed.sheetName ?? 'sheet'}, header row ${parsed.headerRow}. Columns used: ${parsed.detectedColumns.join(', ')}.` +
       (parsed.warnings.length > 0
@@ -267,8 +272,9 @@ export async function importProjectChecklist(formData: FormData) {
   for (const id of equipmentIds) refresh(id)
 
   redirect(
-    `/checklists?import=ok&added=${newRows.length}&updated=${updates.length}&removed=${removeIds.length}` +
-      `&rows=${parsed.rows.length}&warnings=${parsed.warnings.length}`
+    `/checklists?import=ok&added=${writes.done}&updated=${updates.length}&removed=${removeIds.length}` +
+      `&rows=${parsed.rows.length}&warnings=${parsed.warnings.length}` +
+      `${anyFailed(writes) ? `&refused=${writes.failed.length}&why=${encodeURIComponent(failureLines(writes, 3).join(' | ').slice(0, 300))}` : ''}`
   )
 }
 

@@ -50,6 +50,8 @@ export default async function ChecklistsPage({
     removed?: string
     rows?: string
     warnings?: string
+    refused?: string
+    why?: string
     errors?: string
     detail?: string
     headings?: string
@@ -76,6 +78,8 @@ export default async function ChecklistsPage({
     warnings,
     errors,
     detail,
+    refused: refusedCount,
+    why: refusedWhy,
     headings,
     page: pageParam,
     purge,
@@ -200,6 +204,21 @@ export default async function ChecklistsPage({
         </div>
       )}
 
+      {/* Refusals first, on their own, in red. A refusal printed after a
+          success count is a refusal somebody stops reading before. */}
+      {importResult === 'ok' && Number(refusedCount ?? '0') > 0 && (
+        <div className="alert alert-danger" role="alert">
+          <strong>
+            {refusedCount} check{refusedCount === '1' ? '' : 's'} could not be written and{' '}
+            {refusedCount === '1' ? 'is' : 'are'} NOT on the register.
+          </strong>
+          {refusedWhy && <div style={{ marginTop: 6, fontSize: 13 }}>{decodeURIComponent(refusedWhy)}</div>}
+          <div style={{ marginTop: 6, fontSize: 13 }}>
+            Everything else was saved. Correct those rows and import the same file again — re-importing updates
+            rather than duplicates.
+          </div>
+        </div>
+      )}
       {importResult === 'ok' && (
         <div className="alert" style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
           <strong>Imported.</strong> {rowsRead} row{rowsRead === '1' ? '' : 's'} read —{' '}

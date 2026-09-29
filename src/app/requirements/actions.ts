@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { supabase } from '@/lib/supabase'
@@ -14,6 +15,17 @@ function str(formData: FormData, key: string): string | null {
 
 // Subject pickers post a single "type:id" value, which keeps the two columns
 // impossible to set inconsistently.
+// Which table each subject type lives in, so a subject id posted with a
+// requirement can be checked against this project before it is stored.
+const SUBJECT_TABLES: Record<string, Parameters<typeof ownedBy>[1] | undefined> = {
+  site: 'sites',
+  area: 'areas',
+  system: 'systems',
+  subsystem: 'subsystems',
+  equipment: 'equipment',
+  component: 'components',
+}
+
 function subjectRef(formData: FormData, key = 'subject'): { type: string | null; id: string | null } {
   const raw = str(formData, key)
   if (!raw || !raw.includes(':')) return { type: null, id: null }
@@ -38,6 +50,13 @@ export async function addRequirement(formData: FormData) {
   if (!statement) return
 
   const subject = subjectRef(formData)
+
+  // The subject is a caller-supplied id. A requirement hung on another
+  // job's system quietly counts toward that job's readiness.
+  if (subject.id && subject.type) {
+    const table = SUBJECT_TABLES[subject.type]
+    if (table) await ownedBy(project, table, subject.id)
+  }
 
   const { data } = await supabase
     .from('requirements')
@@ -80,6 +99,8 @@ export async function deleteRequirement(formData: FormData) {
 
   const id = str(formData, 'id')
   if (!id) return
+  await ownedBy(project, 'requirements', id)
+
 
   await supabase.from('requirements').delete().eq('id', id)
 
@@ -110,6 +131,14 @@ export async function linkVerification(formData: FormData) {
 
   const [kind, id] = raw.split(':')
   if (kind !== 'checklist_item' && kind !== 'test_record') return
+
+  // Both ends of the link. `unlinkVerification` below already checks the
+  // requirement; this one did not check either end, so a forged link made
+  // another project's check text and status render in this project's
+  // requirement register — and fed the readiness gates, which means a gate
+  // could be satisfied by evidence from a different job.
+  await ownedBy(project, 'requirements', requirementId)
+  await ownedBy(project, kind === 'checklist_item' ? 'checklist_items' : 'test_records', id)
 
   // The unique index makes a duplicate harmless, but catching it here keeps a
   // pointless error out of the log.
@@ -152,6 +181,8 @@ export async function unlinkVerification(formData: FormData) {
   const activityId = str(formData, 'activity_id')
   if (!requirementId || !kind || !activityId) return
 
+  await ownedBy(project, 'requirements', requirementId)
+
   await supabase
     .from('requirement_verifications')
     .delete()
@@ -184,6 +215,8 @@ export async function acceptRevision(formData: FormData) {
   const rev = str(formData, 'rev')
   const previous = str(formData, 'previous')
   if (!id || !rev) return
+  await ownedBy(project, 'requirements', id)
+
 
   await supabase.from('requirements').update({ source_revision: rev }).eq('id', id)
 

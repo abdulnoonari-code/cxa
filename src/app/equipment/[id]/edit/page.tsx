@@ -1,5 +1,8 @@
 import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
+import { notFound } from 'next/navigation'
+import { getCurrentProject } from '@/lib/project'
+import { isOwnedBy } from '@/data/owned'
 import { updateEquipment } from '../../actions'
 import { CATEGORIES, INSTALL_STATUSES } from '../../styles'
 
@@ -14,6 +17,12 @@ export default async function EditEquipmentPage({
   if (refused) return refused
 
   const { id } = await params
+  // `select('*')` on a URL-supplied id, with requirePage() only. That
+  // gates the application, not the record — any signed-in account could
+  // open another job's tag prefilled into an edit form.
+  const project = await getCurrentProject()
+  if (!(await isOwnedBy(project, 'equipment', id))) notFound()
+
   const { data: item } = await supabase.from('equipment').select('*').eq('id', id).single()
 
   if (!item) {

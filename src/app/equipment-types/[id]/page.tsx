@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
+import { isOwnedBy } from '@/data/owned'
 import { CATEGORIES, INSTALL_STATUSES, installBadgeClass } from '@/app/equipment/styles'
 import { updateType } from '../actions'
 
@@ -21,6 +22,12 @@ export default async function TypeDetailPage({ params }: { params: Promise<{ id:
 
   const { id } = await params
   const project = await getCurrentProject()
+
+  // The query below selects `project_id` and never compared it — the check
+  // looked like it was here and was not. Without this the page rendered
+  // another job's type card together with its full tag list: tag,
+  // description, location, install status and serial number.
+  if (!(await isOwnedBy(project, 'equipment_types', id))) notFound()
 
   const { data, error } = await supabase
     .from('equipment_types')

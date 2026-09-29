@@ -250,3 +250,99 @@ export function pickedIds(posted: string[], allowed: Iterable<string>): string[]
 export function groupLabel(g: { kind: CheckGroupKind; name: string }): string {
   return g.kind === 'script' ? `test script “${g.name}”` : `checklist file “${g.name}”`
 }
+
+// ── One tag's checks, as the several checklists they actually are ───────
+//
+// "even one tag have multiple checklist so how we can do that"
+//
+// A tag does not have A checklist. It has an L2 checklist, an L3
+// checklist, and sometimes two different L3 checklists that arrived from
+// two different documents — the manufacturer's and the consultant's. They
+// are separate pieces of work, signed at different times by different
+// people, and the screen showed them as one undivided run of cards
+// ordered by level, with nothing marking where one ended and the next
+// began.
+//
+// So they are divided. LEVEL FIRST, because that is the unit that gets
+// signed off and the unit the gates ask about. Then, inside a level, by
+// the document the checks came from — which every imported check already
+// records in `source_ref`, and which nothing was reading here.
+//
+// Checks somebody typed in by hand parse to no source. They are NOT
+// gathered into an "Other" pile pretending to be a document; they go last,
+// under their own honest heading.
+
+export type LevelledCheck = {
+  id: string
+  level: string
+  status: string | null
+  sourceRef?: string | null
+}
+
+export type CheckSet<T> = {
+  /** The document these came from, or null when they were typed in. */
+  source: { kind: CheckGroupKind; name: string } | null
+  checks: T[]
+  done: number
+}
+
+export type LevelGroup<T> = {
+  level: string
+  checks: T[]
+  done: number
+  /** One entry per document, plus at most one for hand-typed checks. */
+  sets: CheckSet<T>[]
+}
+
+/** A check that counts as finished. Anything else is outstanding. */
+const DONE = new Set(['passed', 'pass', 'complete', 'completed', 'closed', 'n/a', 'na', 'not applicable'])
+
+export function isDone(status: string | null | undefined): boolean {
+  return DONE.has((status ?? '').trim().toLowerCase())
+}
+
+/**
+ * Group one tag's checks by level, and within a level by source document.
+ *
+ * Order is the order the checks arrive in, which the caller has already
+ * sorted by level and then creation — so this never reorders a level or a
+ * document, it only puts the boundaries in.
+ */
+export function groupByLevel<T extends LevelledCheck>(checks: T[]): LevelGroup<T>[] {
+  const byLevel = new Map<string, T[]>()
+  for (const c of checks) {
+    const key = (c.level ?? '').trim()
+    const list = byLevel.get(key)
+    if (list) list.push(c)
+    else byLevel.set(key, [c])
+  }
+
+  const out: LevelGroup<T>[] = []
+  for (const [level, levelChecks] of byLevel) {
+    // Keyed by the group key rather than the raw name, for the same reason
+    // the delete is: "A:B" and "A" must never collide.
+    const bySource = new Map<string, { source: { kind: CheckGroupKind; name: string } | null; checks: T[] }>()
+    for (const c of levelChecks) {
+      const parsed = parseRef(c.sourceRef)
+      const key = parsed ? groupKey(parsed.kind, parsed.name) : '\u0000typed'
+      const found = bySource.get(key)
+      if (found) found.checks.push(c)
+      else bySource.set(key, { source: parsed ? { kind: parsed.kind, name: parsed.name } : null, checks: [c] })
+    }
+
+    // Documents in the order they first appear; hand-typed checks last,
+    // because they are the exception and an exception at the top reads as
+    // the main event.
+    const sets = [...bySource.values()]
+      .sort((a, b) => (a.source === null ? 1 : 0) - (b.source === null ? 1 : 0))
+      .map((s) => ({ ...s, done: s.checks.filter((c) => isDone(c.status)).length }))
+
+    out.push({
+      level,
+      checks: levelChecks,
+      done: levelChecks.filter((c) => isDone(c.status)).length,
+      sets,
+    })
+  }
+  return out
+}

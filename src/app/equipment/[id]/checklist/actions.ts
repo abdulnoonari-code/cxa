@@ -32,9 +32,14 @@ export async function addChecklistItem(formData: FormData) {
   const item = str(formData, 'item')
   if (!equipment_id || !level || !item) return
 
+  // project_id came from the TARGET tag, so posting another job's uuid
+  // added a check to their register under their project.
+  const project = await getCurrentProject()
+  await ownedBy(project, 'equipment', equipment_id)
+
   await supabase.from('checklist_items').insert({
     equipment_id,
-    project_id: await projectOf(equipment_id),
+    project_id: project!.id,
     subject_type: 'equipment',
     subject_id: equipment_id,
     level,
@@ -91,6 +96,13 @@ export async function uploadAttachment(formData: FormData) {
   const file = formData.get('file')
 
   if (!checklist_item_id || !equipment_id || !(file instanceof File) || file.size === 0) return
+
+  // Both ids, because the row is keyed on the check and filed under the
+  // tag. Unguarded, this uploaded a file into another project's evidence
+  // register with a review verdict attached to it.
+  const project = await getCurrentProject()
+  await ownedBy(project, 'equipment', equipment_id)
+  await ownedBy(project, 'checklist_items', checklist_item_id)
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const path = `${checklist_item_id}/${Date.now()}-${safeName}`

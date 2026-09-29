@@ -1,5 +1,8 @@
 import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
+import { notFound } from 'next/navigation'
+import { getCurrentProject } from '@/lib/project'
+import { isOwnedBy } from '@/data/owned'
 import {
   addChecklistItem,
   updateChecklistItem,
@@ -11,6 +14,8 @@ import {
 import { createIssue } from '@/app/issues/actions'
 import { createMilestone } from '@/app/milestones/actions'
 import { LEVELS, STATUSES, statusBadgeClass } from './styles'
+import { levelTone, levelCode } from '@/lib/levels'
+import { groupByLevel, groupLabel } from '@/lib/check-groups'
 import { SEVERITIES, CATEGORIES, severityBadgeClass, categoryBadgeClass, issueStatusBadgeClass } from '@/lib/issues'
 import { MILESTONE_STATUSES, milestoneBadgeClass } from '@/lib/milestones'
 import { viewUrl } from '@/lib/file-url'
@@ -28,6 +33,14 @@ export default async function ChecklistPage({
   if (refused) return refused
 
   const { id } = await params
+
+  // The page selected `project_id` and never compared it to anything — the
+  // value was only used as a hidden form field, so the check LOOKED like it
+  // was here and was not. Any signed-in account could change the uuid in
+  // the address bar and read another job's tag with its whole checklist,
+  // its evidence, its issues and its milestones.
+  const currentProject = await getCurrentProject()
+  if (!(await isOwnedBy(currentProject, 'equipment', id))) notFound()
 
   const { data: equipment } = await supabase
     .from('equipment')
@@ -48,10 +61,26 @@ export default async function ChecklistPage({
 
   const { data: items } = await supabase
     .from('checklist_items')
-    .select('id, level, item, status, notes, ai_comment')
+    .select('id, level, item, status, notes, ai_comment, source_ref')
     .eq('equipment_id', id)
     .order('level', { ascending: true })
     .order('created_at', { ascending: true })
+
+  // Level first, then the document each check came from. The query
+  // already orders by level and then creation, so this only inserts the
+  // boundaries — it never reorders a level or a document.
+  type ChecklistRow = {
+    id: string
+    level: string
+    item: string
+    status: string
+    notes: string | null
+    ai_comment: string | null
+    source_ref: string | null
+  }
+  const levelGroups = groupByLevel(
+    ((items ?? []) as ChecklistRow[]).map((it) => ({ ...it, sourceRef: it.source_ref })),
+  )
 
   const itemIds = (items ?? []).map((it) => it.id)
   const { data: attachments } =
@@ -183,8 +212,58 @@ export default async function ChecklistPage({
       </div>
 
       {items && items.length > 0 ? (
-        <div style={{ display: 'grid', gap: 16, marginTop: 24 }}>
-          {items.map((it) => (
+        <div style={{ marginTop: 24 }}>
+          {/* ── SEVERAL CHECKLISTS, NOT ONE LONG LIST ─────────────────
+              "even one tag have multiple checklist so how we can do that"
+
+              A tag does not have a checklist. It has an L2 checklist and
+              an L3 checklist, and sometimes two different L3 checklists
+              from two different documents — the manufacturer's and the
+              consultant's. They are separate pieces of work signed at
+              different times by different people, and this screen used to
+              run them together in one undivided column ordered by level,
+              with nothing marking where one ended and the next began.
+
+              Level first, because that is what gets signed off and what
+              the gates ask about. Then the document each check came from,
+              which every imported check already recorded and nothing here
+              was reading. */}
+          {levelGroups.map((g) => (
+            <section key={g.level} style={{ marginBottom: 26 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+                <span className={`badge ${levelTone(g.level)}`} style={{ fontSize: 11 }}>{levelCode(g.level)}</span>
+                <h2 className="section-title" style={{ margin: 0 }}>{levelLabel(g.level)}</h2>
+                <span className="text-secondary" style={{ fontSize: 12.5 }}>
+                  {g.done} of {g.checks.length} done
+                  {g.sets.length > 1 && ` · ${g.sets.length} checklists`}
+                </span>
+              </div>
+
+              {g.sets.map((set, si) => (
+                <div key={si} style={{ marginBottom: 14 }}>
+                  {/* The heading is shown even when there is only one set,
+                      so somebody can always see WHICH document they are
+                      signing against. That is the question an auditor asks
+                      and the one this screen could not answer. */}
+                  <div
+                    className="text-secondary"
+                    style={{
+                      fontSize: 12,
+                      padding: '7px 0 7px 12px',
+                      borderLeft: '3px solid var(--color-brand)',
+                      marginBottom: 10,
+                    }}
+                  >
+                    {set.source
+                      ? <>From the {groupLabel(set.source)}</>
+                      : <>Typed in on this screen, not from any document</>}
+                    <span style={{ marginLeft: 8 }}>
+                      · {set.done} of {set.checks.length} done
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 16 }}>
+                    {set.checks.map((it) => (
             <div key={it.id} className="card">
               <div
                 style={{
@@ -426,6 +505,11 @@ export default async function ChecklistPage({
                 </details>
               </div>
             </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
           ))}
         </div>
       ) : (

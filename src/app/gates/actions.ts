@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
@@ -98,6 +99,8 @@ export async function confirmRule(formData: FormData) {
   const status = str(formData, 'status') ?? 'pending'
   if (!id) return
   if (!['pending', 'satisfied', 'not_satisfied', 'na'].includes(status)) return
+  await ownedBy(project, 'gate_rules', id)
+
 
   const { data: rule } = await supabase.from('gate_rules').select('rule_kind, label, status').eq('id', id).single()
   const existing = rule as { rule_kind: string; label: string; status: string | null } | null
@@ -145,6 +148,9 @@ export async function signGate(formData: FormData) {
   if (!gateId || !decision || !signedName) return
   if (!DECISIONS.some((d) => d.value === decision)) return
 
+  // Signing another project's gate is the worst thing on this page.
+  await ownedBy(project, 'gates', gateId)
+
   const actor = await getActor(project.id)
   const userAgent = (await headers()).get('user-agent')
 
@@ -189,6 +195,8 @@ export async function deleteGate(formData: FormData) {
 
   // Rules go with it. Signatures do not — they are permanent, and a gate that
   // was signed and later removed must still leave the signature on record.
+  await ownedBy(project, 'gates', id)
+
   await supabase.from('gates').delete().eq('id', id)
 
   await recordAudit({
@@ -215,6 +223,11 @@ export async function addRule(formData: FormData) {
   const label = str(formData, 'label')
   const kind = resolveKind(str(formData, 'rule_kind') ?? 'manual_confirmation')
   if (!gateId || !label || !kind) return
+
+  // Every other function in this file checks the gate. This one did not,
+  // so a rule could be added to another project's gate — a mandatory
+  // prerequisite nobody there had agreed to, blocking their readiness.
+  await ownedBy(project, 'gates', gateId)
 
   const { params, error } = settingToParams(kind, str(formData, 'setting') ?? '')
   if (error) return
@@ -253,6 +266,8 @@ export async function removeRule(formData: FormData) {
 
   const id = str(formData, 'rule_id')
   if (!id) return
+  await ownedBy(project, 'gate_rules', id)
+
 
   await supabase.from('gate_rules').delete().eq('id', id)
 

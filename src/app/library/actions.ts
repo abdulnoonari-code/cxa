@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -82,6 +83,8 @@ export async function editTemplate(formData: FormData) {
   if (!template) redirect('/library?saved=gone')
 
   const plan = planEdit(template, lib.records)
+  await ownedBy(project, 'check_templates', id)
+
 
   const { error } = await supabase
     .from('check_templates')
@@ -126,6 +129,8 @@ export async function applyTemplate(formData: FormData) {
 
   const id = str(formData, 'id')
   if (!id) redirect('/library')
+
+  await ownedBy(project, 'check_templates', id)
 
   const lib = await loadLibrary(project.id)
   const template = lib.templates.find((t) => t.id === id)

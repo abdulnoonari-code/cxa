@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
@@ -49,7 +50,11 @@ export async function setInspectionType(formData: FormData) {
   if (!target || !id) return
   if (value === previous) return
 
-  await supabase.from(target.table).update({ inspection_type: value }).eq('id', id)
+  // `kind` chooses the table, so the ownership check has to follow it. A
+  // fixed table name here would have checked the wrong one half the time.
+  await ownedBy(project, target.table, id)
+
+  await supabase.from(target.table).update({ inspection_type: value }).eq('id', id).eq('project_id', project.id)
 
   await recordAudit({
     projectId: project.id,
@@ -79,6 +84,10 @@ export async function giveNotice(formData: FormData) {
   const target = TABLES[kind]
   const id = str(formData, 'id')
   if (!target || !id) return
+
+  // `kind` picks the table, so the check follows it — same as
+  // setInspectionType above.
+  await ownedBy(project, target.table, id)
 
   const actor = await getActor(project.id)
   const label = str(formData, 'label')
@@ -159,6 +168,8 @@ export async function markNoticeSent(formData: FormData) {
 
   const id = str(formData, 'notification_id')
   if (!id) return
+  await ownedBy(project, 'notifications', id)
+
 
   await supabase
     .from('notifications')
@@ -193,6 +204,10 @@ export async function signHoldPoint(formData: FormData) {
   // A signature with nobody's name on it is not a signature.
   if (!signedName) return
   if (!DECISIONS.some((d) => d.value === decision)) return
+
+  // The table is chosen by `kind`, so the ownership question is asked
+  // against that same table rather than a hard-coded one.
+  await ownedBy(project, target.table as Parameters<typeof ownedBy>[1], id)
 
   const actor = await getActor(project.id)
   const userAgent = (await headers()).get('user-agent')

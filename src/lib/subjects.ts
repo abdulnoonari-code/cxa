@@ -230,3 +230,46 @@ export function breadcrumb(index: SubjectIndex, ref: SubjectRef | null): Subject
   const chain = ancestorsOf(index, ref)
   return self ? [...chain, self] : chain
 }
+
+// ── Structure, and the things that have no place in it yet ──────────────
+//
+// A tag with no system is still shown rather than hidden, because a tag
+// that vanishes is worse than a tag in the wrong place. It was shown by
+// hanging it off the PROJECT — which put it at the top level, as a sibling
+// of the substations and plant rooms.
+//
+// On a real register that is what the tree looked like:
+//
+//     Plant Room                     Asset
+//     Substation A                   Asset
+//     ACB — AC Distribution Board    Equipment      <- not under anything
+//     ACSP — Access Control & Alarm  Equipment
+//     BATT — 125VDC Battery          Equipment
+//
+// Five rows, one indent, assets and equipment interleaved, and nothing
+// anywhere saying that the bottom three are unplaced rather than top-level.
+// "it has mixed it all" — exactly right, and it is this.
+//
+// So the two are separated before anything is drawn. The structure is the
+// tree; the unplaced tags are a list underneath it with a heading that says
+// what they are and what to do about them. Nothing is hidden and nothing
+// pretends to be a level it is not.
+
+const LEAF_TYPES = new Set<SubjectType>(['equipment', 'component'])
+
+export type ProjectChildren = {
+  /** Sites, areas and systems — the real top of the tree. */
+  structure: Subject[]
+  /** Tags hanging off the project because they have no system. */
+  unplaced: Subject[]
+}
+
+export function partitionProjectChildren(children: Subject[]): ProjectChildren {
+  const structure: Subject[] = []
+  const unplaced: Subject[] = []
+  for (const child of children) {
+    if (LEAF_TYPES.has(child.type)) unplaced.push(child)
+    else structure.push(child)
+  }
+  return { structure, unplaced }
+}

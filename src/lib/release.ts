@@ -48,7 +48,9 @@ export type Release = {
  * that is the number written on the zip somebody has in their downloads.
  */
 export const RELEASES: Release[] = [
-  { update: 131, on: '2026-09-29', what: 'The setup page rebuilt on the house design system' },
+  { update: 133, on: '2026-09-29', what: 'Nineteen ways one project could reach another project\u2019s records, closed' },
+  { update: 132, on: '2026-09-29', what: 'Superseded by 133 \u2014 do not apply' },
+  { update: 131, on: '2026-09-29', what: 'Superseded by 132 \u2014 do not apply' },
   { update: 130, on: '2026-09-29', what: 'Superseded by 131 \u2014 do not apply' },
   { update: 129, on: '2026-09-29', what: 'Superseded by 130 \u2014 do not apply' },
   { update: 128, on: '2026-09-29', what: 'One sheet sets up assets, systems, subsystems, equipment types and tags' },

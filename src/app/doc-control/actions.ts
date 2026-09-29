@@ -290,6 +290,12 @@ export async function readRevisionObligations(formData: FormData) {
   const revisionId = str(formData, 'revision_id')
   if (!revisionId) return
 
+  // `document_revisions` carries no project_id of its own; ownedBy walks
+  // it up through controlled_documents. Unguarded, posting another job's
+  // revision id read out their contract or specification text and filed
+  // its clauses into this project's register.
+  await ownedBy(project, 'document_revisions', revisionId)
+
   const source = await revisionText(revisionId)
   if (!source) redirect('/doc-control?read=notext')
 
@@ -347,6 +353,12 @@ export async function readRevisionRequirements(formData: FormData) {
 
   const revisionId = str(formData, 'revision_id')
   if (!revisionId) return
+
+  // `document_revisions` carries no project_id of its own; ownedBy walks
+  // it up through controlled_documents. Unguarded, posting another job's
+  // revision id read out their contract or specification text and filed
+  // its clauses into this project's register.
+  await ownedBy(project, 'document_revisions', revisionId)
 
   const source = await revisionText(revisionId)
   if (!source) redirect('/doc-control?read=notext')

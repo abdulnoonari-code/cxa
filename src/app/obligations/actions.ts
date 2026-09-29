@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -72,6 +73,7 @@ export async function readDocument(formData: FormData) {
 
   const candidates: Candidate[] = readObligations(extraction.paragraphs)
   const documentId = str(formData, 'document_id')
+  if (documentId) await ownedBy(project, 'controlled_documents', documentId)
   const defaultParty = str(formData, 'default_party')
 
   if (candidates.length === 0) {
@@ -164,10 +166,15 @@ export async function addObligation(formData: FormData) {
   const actor = await getActor(project.id)
   const ref = nextRef(await loadObligationRefs(project.id))
 
+  // The document is a caller-supplied id. An obligation pointing at
+  // another job's document is a citation nobody on this job can open.
+  const documentId = str(formData, 'document_id')
+  if (documentId) await ownedBy(project, 'controlled_documents', documentId)
+
   await supabase.from('obligations').insert({
     project_id: project.id,
     ref,
-    document_id: str(formData, 'document_id'),
+    document_id: documentId,
     source_name: str(formData, 'source_name'),
     clause: str(formData, 'clause'),
     statement,
@@ -204,6 +211,8 @@ export async function updateObligation(formData: FormData) {
   if (!(await actorCan('review', project.id))) return
 
   const actor = await getActor(project.id)
+  await ownedBy(project, 'obligations', id)
+
   const { data: before } = await supabase
     .from('obligations')
     .select('ref, statement, status, party, closed_at, closed_by, accepted_at')
@@ -261,6 +270,8 @@ export async function deleteObligation(formData: FormData) {
   const project = await getCurrentProject()
   if (!project) return
   if (!(await actorCan('manage', project.id))) return
+  await ownedBy(project, 'obligations', id)
+
 
   const { data: before } = await supabase.from('obligations').select('ref, statement').eq('id', id).single()
   await supabase.from('obligations').delete().eq('id', id)

@@ -2,6 +2,8 @@ import ExcelJS from 'exceljs'
 import { supabase } from '@/lib/supabase'
 import { LEVELS, STATUSES } from '@/lib/checklist'
 import { requireAccess } from '@/data/require-access'
+import { getCurrentProject } from '@/lib/project'
+import { isOwnedBy } from '@/data/owned'
 
 export async function GET(
   request: Request,
@@ -10,6 +12,16 @@ export async function GET(
   const refused = await requireAccess()
   if (refused) return refused
   const { id } = await params
+
+  // requireAccess() answers "may this account use the application", which
+  // is not the same question as "is this tag yours". Without this, any
+  // signed-in account could change the uuid in the address bar and
+  // download another job's tag with its complete checklist — every level,
+  // every engineer's note, every AI comment.
+  const project = await getCurrentProject()
+  if (!(await isOwnedBy(project, 'equipment', id))) {
+    return new Response('Equipment not found', { status: 404 })
+  }
 
   const { data: equipment } = await supabase
     .from('equipment')

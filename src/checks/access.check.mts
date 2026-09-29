@@ -283,7 +283,15 @@ const FILE_PATH_TABLES = listIn('data/file-owner.ts', 'const PATH_COLUMNS')
       const body = text.slice(start, j)
 
       const takesId = /str\(formData, '(id|\w+_id)'\)|formData\.getAll\('ids'\)/.test(body)
-      const mutates = /\.(update|delete|upsert)\(/.test(body)
+      // INSERT IS A WRITE. It was left out of this list, and that one
+      // omission hid fourteen actions — createTest, addChecklistItem,
+      // uploadAttachment, addRule, linkVerification among them — each of
+      // which takes a caller-supplied id and writes a row with it. An
+      // insert keyed on someone else's record does not corrupt their
+      // data, it ADDS to it: a forged test record, a forged check, a
+      // forged prerequisite on their readiness gate. That is worse than a
+      // bad update, because nothing about it looks wrong afterwards.
+      const mutates = /\.(insert|update|delete|upsert)\(/.test(body)
       if (!takesId || !mutates) continue
       swept++
 
@@ -299,7 +307,7 @@ const FILE_PATH_TABLES = listIn('data/file-owner.ts', 'const PATH_COLUMNS')
   ok('there are id-taking mutations to sweep', swept > 40, `${swept}`)
   ok('every action that mutates by a posted id proves the record is this project’s',
      unguarded.length === 0,
-     unguarded.slice(0, 10).join(', ') + (unguarded.length > 10 ? ` …and ${unguarded.length - 10} more` : ''))
+     unguarded.slice(0, 40).join(', ') + (unguarded.length > 40 ? ` …and ${unguarded.length - 40} more` : ''))
 }
 
 // ════════ THE TABLE LISTS MATCH THE SCHEMA ════════
@@ -457,6 +465,98 @@ const FILE_PATH_TABLES = listIn('data/file-owner.ts', 'const PATH_COLUMNS')
      unscoped.length === 0,
      unscoped.slice(0, 8).join(', ') + (unscoped.length > 8 ? ` …and ${unscoped.length - 8} more` : ''))
 
+}
+
+
+// ════════ A PAGE OR ROUTE KEYED ON A URL ID PROVES IT IS YOURS ════════
+//
+// ── The hole this closes ────────────────────────────────────────────────
+//
+// Both sweeps above begin the same way:
+//
+//     FILES.filter((p) => readFileSync(p).trimStart().startsWith("'use server'"))
+//
+// So they look at Server Actions and NOTHING ELSE. Every `page.tsx` and
+// every `route.ts` was invisible to them — and a dynamic segment is a
+// caller-supplied id just as surely as a posted form field is. The address
+// bar is a form anybody can fill in.
+//
+// Five of them were reading a record straight off that id with no project
+// filter: the tag's checklist page and its export route, the equipment
+// type page, and the two edit forms. Any signed-in account could change
+// the uuid in the address bar and read another job's tag, its complete
+// checklist with every engineer's note, or its punch item.
+//
+// Two of those pages even SELECTED `project_id` and never compared it, so
+// the check looked like it was there. That is the specific way this kind
+// of bug survives being read.
+//
+// ── What counts as proof ────────────────────────────────────────────────
+//
+// Any one of:
+//   · ownedBy / isOwnedBy            — asks the question directly
+//   · .eq('project_id', …)           — scopes the read itself
+//   · mayReadStoredFile              — the file store's own question
+//   · a loader taking the project id — loadGate(project.id, id, …), and
+//     the subject index, which is built from this project's rows only
+//
+// The last is why this is a list of shapes rather than one rule: several
+// pages are correct by loading through a project-scoped index and then
+// finding the id inside it. That is a good pattern and must not be made to
+// look like a failure.
+{
+  const dynamic = FILES.filter((p) => /\[[^\]]+\]/.test(p) && /\/(page\.tsx|route\.ts)$/.test(p))
+  ok('there are id-keyed pages and routes to sweep', dynamic.length >= 8, `${dynamic.length}`)
+
+  // Named, with the reason, because "it is fine" is what was believed
+  // about the five that were not.
+  const SAFE_BY_LOADER: Record<string, string> = {
+    'src/app/assets/[type]/[id]/page.tsx': 'loadSubjectIndex(project.id), then finds the id inside it',
+    'src/app/gates/[id]/page.tsx': 'loadGate(project?.id, id, rollup) — scoped in the loader',
+    'src/app/dossier/[type]/[id]/pdf/route.ts': 'buildDossier → loadPack(project.id, index, ref)',
+    'src/app/dossier/[type]/[id]/word/route.ts': 'buildDossier → loadPack(project.id, index, ref)',
+    'src/app/issues/photo/[id]/download/route.ts': 'loadPhoto(id, project.id) filters on project_id',
+    'src/app/file/[...path]/route.ts': 'mayReadStoredFile — whether any record you may open points at the file',
+    'src/app/checklists/[level]/page.tsx': 'the level is not a record id; the register under it is project-scoped',
+    'src/app/scripts/[sheet]/page.tsx': 'the sheet name is not a record id; the checks under it are project-scoped',
+  }
+
+  const unproven: string[] = []
+  for (const path of dynamic) {
+    const rel = path.replace(process.cwd() + '/', '')
+    const text = readFileSync(path, 'utf8')
+
+    // ONLY the shapes that ask about THIS record. An earlier draft also
+    // accepted "calls some loader with project.id" and "mentions
+    // project_id somewhere" — and both are true of pages that then read a
+    // DIFFERENT record straight off the URL id. Planting the bug back
+    // proved it: the issues edit page passed this sweep with its guard
+    // removed, because it happens to load the project further down for an
+    // unrelated dropdown.
+    //
+    // A page that is safe because of a project-scoped loader is named in
+    // the list below, by hand, with the loader written out. A general
+    // pattern for that cannot tell "scoped by the loader" from "calls a
+    // loader and then does something else".
+    const proves =
+      /\bownedBy\s*\(|\bisOwnedBy\s*\(/.test(text) ||
+      /\bmayReadStoredFile\s*\(/.test(text)
+
+    if (proves) continue
+    if (SAFE_BY_LOADER[rel]) continue
+    unproven.push(rel)
+  }
+
+  ok('every page and route keyed on a URL id proves the record is this project\u2019s',
+     unproven.length === 0, unproven.join(', '))
+
+  // The exemption list must not outlive the files it names. An entry for a
+  // file that no longer exists is an entry nobody will re-examine, and the
+  // next file to take that path inherits a waiver it never earned.
+  for (const rel of Object.keys(SAFE_BY_LOADER)) {
+    ok(`the exemption for ${rel} still names a real file`,
+       dynamic.some((p) => p.replace(process.cwd() + '/', '') === rel))
+  }
 }
 
 console.log(`${pass} passed, ${fail} failed`)

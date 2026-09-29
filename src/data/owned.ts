@@ -177,3 +177,50 @@ export async function ownedAllBy(
 
 /** For the assertion suite, so the lists above can be checked against schema.sql. */
 export const OWNED_TABLES = { DIRECT: [...DIRECT], PARENTS }
+
+/**
+ * The same question, asked where a throw is the wrong answer.
+ *
+ * ── Why this exists ─────────────────────────────────────────────────────
+ *
+ * `ownedBy` throws, which is right for a Server Action: a mutation that
+ * cannot prove ownership must stop, loudly, before it writes anything.
+ *
+ * A PAGE and a ROUTE HANDLER need the same answer and a different reply. A
+ * page that throws gives an error screen where "not found" is both truer
+ * and less informative to somebody guessing at ids; a route handler needs
+ * to return a 404 response, not blow up mid-stream.
+ *
+ * So they get a boolean, built on exactly the same parent walk — one
+ * implementation, because two would drift and only one of them would be
+ * the one anybody remembered to fix.
+ *
+ * ── The gap this closes ─────────────────────────────────────────────────
+ *
+ * `ownedBy` was used in twenty-seven `actions.ts` files and in NO page and
+ * NO route handler. Both sweeps in src/checks/access.check.mts only walked
+ * files beginning `'use server'`, so nothing ever looked at a page keyed on
+ * a URL id — and five of them read a record by that id with no project
+ * filter at all. Any signed-in account could open another job's tag,
+ * another job's punch item, or export another job's complete checklist,
+ * by changing the uuid in the address bar.
+ */
+export async function isOwnedBy(
+  project: { id: string } | null | undefined,
+  table: OwnedTable,
+  id: string | null | undefined,
+): Promise<boolean> {
+  try {
+    await ownedBy(project, table, id)
+    return true
+  } catch {
+    // An unknown table throws a programmer error from ownedBy rather than a
+    // refusal, and that must not be swallowed into a quiet "no" — it would
+    // turn a wiring mistake into a page that is simply always empty.
+    if (!project?.id || !id) return false
+    if (!DIRECT.has(table) && !PARENTS[table]) throw new Error(
+      `isOwnedBy: '${table}' is not a table this can scope. Add it to DIRECT or PARENTS in src/data/owned.ts.`,
+    )
+    return false
+  }
+}

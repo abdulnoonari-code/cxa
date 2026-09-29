@@ -1,7 +1,9 @@
 import { requirePage } from '@/data/require-page'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { notFound } from 'next/navigation'
 import { getCurrentProject } from '@/lib/project'
+import { isOwnedBy } from '@/data/owned'
 import { loadSubjectIndex } from '@/data/subjects'
 import { refKey, subjectLabel } from '@/lib/subjects'
 import { remedyFor } from '@/lib/remedy'
@@ -43,6 +45,13 @@ export default async function EditIssuePage({
 
   const { id } = await params
   const sp = await searchParams
+  // `select('*')` on a URL-supplied id after requirePage() only. The
+  // project is loaded further down and was never compared to this row, so
+  // any signed-in account could open another job's punch item — title,
+  // description, severity, who raised it, how it was closed.
+  const owner = await getCurrentProject()
+  if (!(await isOwnedBy(owner, 'issues', id))) notFound()
+
   const { data: issueRow } = await supabase.from('issues').select('*').eq('id', id).single()
 
   if (!issueRow) {

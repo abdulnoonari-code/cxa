@@ -1,5 +1,6 @@
 'use server'
 
+import { ownedBy } from '@/data/owned'
 import { requireActor } from '@/data/require-actor'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -43,14 +44,20 @@ export async function createTest(formData: FormData) {
   const name = str(formData, 'name')
   if (!equipment_id || !name) return
 
-  // Same rule as everywhere else: a record that does not carry its project is
-  // invisible to every project-scoped screen. This is the third place it was
-  // missing.
-  const { data: owner } = await supabase.from('equipment').select('project_id').eq('id', equipment_id).single()
+  // ── The tag must be OURS ──────────────────────────────────────────
+  //
+  // This took project_id from the TARGET equipment, so posting another
+  // job's uuid filed a test record — name, procedure ref, acceptance
+  // criteria — into that job's register, its ITP, its dossier and its
+  // gate roll-up. Signed commissioning evidence, forged from outside.
+  //
+  // The project now comes from the caller, and the tag has to be in it.
+  const project = await getCurrentProject()
+  await ownedBy(project, 'equipment', equipment_id)
 
   await supabase.from('test_records').insert({
     equipment_id,
-    project_id: (owner as { project_id: string | null } | null)?.project_id ?? null,
+    project_id: project!.id,
     subject_type: 'equipment',
     subject_id: equipment_id,
     test_ref: str(formData, 'test_ref'),
@@ -76,6 +83,9 @@ export async function recordResult(formData: FormData) {
 
   const id = str(formData, 'id')
   if (!id) return
+
+  const project = await getCurrentProject()
+  await ownedBy(project, 'test_records', id)
 
   const { data: test } = await supabase
     .from('test_records')
@@ -107,7 +117,6 @@ export async function recordResult(formData: FormData) {
     })
     .eq('id', id)
 
-  const project = await getCurrentProject()
   await recordAudit({
     projectId: project?.id ?? null,
     action: `recorded result — ${result.toUpperCase()}`,
@@ -145,6 +154,8 @@ export async function raiseIssueFromTest(formData: FormData) {
 
   const test_id = str(formData, 'test_id')
   if (!test_id) return
+
+  await ownedBy(await getCurrentProject(), 'test_records', test_id)
 
   const { data: test } = await supabase
     .from('test_records')
@@ -197,6 +208,8 @@ export async function approveTest(formData: FormData) {
   const project = await getCurrentProject()
   const capability = approval_state === 'approved' || approval_state === 'rejected' ? 'approve' : 'review'
   if (!(await actorCan(capability, project?.id ?? null))) return
+  await ownedBy(project, 'test_records', id)
+
 
   const { data: before } = await supabase
     .from('test_records')
@@ -224,6 +237,9 @@ export async function deleteTest(formData: FormData) {
 
   const id = str(formData, 'id')
   if (!id) return
+  const project = await getCurrentProject()
+  await ownedBy(project, 'test_records', id)
+
   await supabase.from('test_records').delete().eq('id', id)
   refresh()
 }

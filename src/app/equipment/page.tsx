@@ -389,7 +389,7 @@ export default async function EquipmentPage({
                   one-sheet import sets. Without these the import looked
                   like it had done nothing. */}
               <th>Where it sits</th>
-              <th>Type</th>
+              <th>Equipment</th>
               <th>Category</th>
               <th>Building</th>
               <th>Floor</th>

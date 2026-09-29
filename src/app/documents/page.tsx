@@ -243,7 +243,7 @@ export default async function DocumentsPage({
         <table className="table">
           <thead>
             <tr>
-              <th>Equipment</th>
+              <th>Tag</th>
               <th>Checklist item</th>
               <th>Document</th>
               <th>Intake check</th>

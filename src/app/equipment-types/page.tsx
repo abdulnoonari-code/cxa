@@ -70,7 +70,7 @@ export default async function EquipmentTypesPage({
 
   return (
     <>
-      <h1 className="page-title">Equipment Types</h1>
+      <h1 className="page-title">Equipment</h1>
       <p className="page-subtitle">
         {project ? project.name : 'No project selected'} — the catalogue behind the tags. A type is a make and
         model; a tag is one of them installed somewhere. Forty identical breakers are forty tags and one type.
@@ -231,7 +231,7 @@ export default async function EquipmentTypesPage({
           <thead>
             <tr>
               <th style={{ width: 30 }}></th>
-              <th>Type code</th>
+              <th>Equipment code</th>
               <th>Name</th>
               <th>Discipline</th>
               <th>Manufacturer</th>

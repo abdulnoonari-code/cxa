@@ -735,10 +735,10 @@ export default async function HoldPointsPage({
         <table className="table">
           <thead>
             <tr>
-              <th>Equipment</th>
+              <th>Tag</th>
               <th>Activity</th>
               <th>Result</th>
-              <th>Type</th>
+              <th>Point type</th>
               <th>Release</th>
               {mayAssign && <th style={{ minWidth: 230 }}>Change type</th>}
             </tr>

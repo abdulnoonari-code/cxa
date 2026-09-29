@@ -16,6 +16,7 @@ import {
   type LevelKey,
 } from '@/lib/levels-standard'
 import { HIERARCHY_HEADER, HIERARCHY_EXAMPLE, hierarchyFromRows } from '@/lib/hierarchy-io'
+import { SUBJECT_TYPES, subjectLabel } from '@/lib/subjects'
 
 let pass = 0, fail = 0
 function ok(n: string, c: boolean, extra = '') { if (c) pass++; else { fail++; console.log('FAIL: ' + n + (extra ? ' — ' + extra : '')) } }
@@ -221,6 +222,42 @@ function eq(n: string, a: unknown, b: unknown) { ok(n, JSON.stringify(a) === JSO
   ok('with more tags than equipment, which is the lesson',
      h.tags.length > h.equipmentTypes.length,
      `${h.tags.length} tags, ${h.equipmentTypes.length} equipment`)
+}
+
+// ════════ THE SCREENS CALL EACH LEVEL WHAT THE STANDARD CALLS IT ════════
+//
+// The bug this exists for, found by him on his own screen: a row badged
+// "Equipment" sitting under a column headed "Tag". The `equipment` table
+// is the TAG level — the kind of plant lives on equipment_types — and
+// subjects.ts had not been told.
+//
+// Two lists of words for one set of levels is two lists that drift, and
+// this is the drift. They are checked against each other now.
+{
+  // standard level key -> the table it lives in, and what subjects.ts
+  // calls whatever subject type sits on that same table.
+  const SAME: { key: string; subjectType: string }[] = [
+    { key: 'asset', subjectType: 'area' },
+    { key: 'system', subjectType: 'system' },
+    { key: 'subsystem', subjectType: 'subsystem' },
+    { key: 'tag', subjectType: 'equipment' },
+  ]
+
+  for (const { key, subjectType } of SAME) {
+    const standard = LEVEL_BY_KEY[key as LevelKey]
+    eq(`the ${subjectType} subject is called "${standard.label}"`,
+       subjectLabel(subjectType), standard.label)
+  }
+
+  // And the table each one names must be the table the subject is on,
+  // or the two lists agree on a word while meaning different things.
+  eq('the Tag level is the equipment table', LEVEL_BY_KEY.tag.table, 'equipment')
+  eq('the Equipment level is the equipment_types table', LEVEL_BY_KEY.equipment.table, 'equipment_types')
+
+  // Nothing in subjects.ts may claim the word "Equipment", because that
+  // word now belongs to the KIND, which has no subject type of its own.
+  const claims = SUBJECT_TYPES.filter((t) => t.label === 'Equipment').map((t) => t.value)
+  eq('no subject type calls itself Equipment', claims, [])
 }
 
 console.log(`${pass} passed, ${fail} failed`)

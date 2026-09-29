@@ -232,7 +232,7 @@ export default async function HoldPointsPage({
       return {
         kind: 'check' as const,
         id: c.id,
-        label: `${tagOf.get(c.equipment_id) ?? 'Equipment'} — ${c.item}`,
+        label: `${tagOf.get(c.equipment_id) ?? 'Tag'} — ${c.item}`,
         tag: tagOf.get(c.equipment_id) ?? '—',
         detail: c.item,
         level: c.level,
@@ -261,7 +261,7 @@ export default async function HoldPointsPage({
       return {
         kind: 'test' as const,
         id: t.id,
-        label: `${tagOf.get(t.equipment_id) ?? 'Equipment'} — ${t.name}`,
+        label: `${tagOf.get(t.equipment_id) ?? 'Tag'} — ${t.name}`,
         tag: tagOf.get(t.equipment_id) ?? '—',
         detail: t.test_ref ? `${t.test_ref} · ${t.name}` : t.name,
         level: null,

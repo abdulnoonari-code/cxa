@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic'
 const SCOPES = [
   { value: 'system', label: 'Systems', note: 'One label per system — for the switchroom door, the panel schedule, the front of the board.' },
   { value: 'subsystem', label: 'Subsystems', note: 'One per bay or train.' },
-  { value: 'equipment', label: 'Equipment', note: 'One per tagged item. This is the sheet most jobs print.' },
+  { value: 'equipment', label: 'Tags', note: 'One per tagged item. This is the sheet most jobs print.' },
   { value: 'component', label: 'Parts', note: 'One per part inside an item — each cubicle, each CT.' },
   { value: 'area', label: 'Assets', note: 'One per switchroom, building or zone.' },
   { value: 'site', label: 'Sites', note: 'One per site.' },

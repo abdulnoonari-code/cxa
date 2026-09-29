@@ -29,8 +29,16 @@ export const SUBJECT_TYPES: {
   { value: 'area', label: 'Asset', plural: 'Assets', depth: 2, note: 'A switchroom, building or zone that holds systems' },
   { value: 'system', label: 'System', plural: 'Systems', depth: 3, note: 'A functional system with a boundary' },
   { value: 'subsystem', label: 'Subsystem', plural: 'Subsystems', depth: 4, note: 'A division within a system' },
-  { value: 'equipment', label: 'Equipment', plural: 'Equipment', depth: 5, note: 'A tagged item of plant' },
-  { value: 'component', label: 'Component', plural: 'Components', depth: 6, note: 'A part within an item' },
+  // THE `equipment` TABLE IS THE TAG LEVEL. The kind of plant — "MV
+  // Panel" — lives on equipment_types and is called Equipment. Labelling
+  // this "Equipment" put a row badged Equipment under a column headed
+  // Tag, on the same screen, which is the application contradicting
+  // itself about the distinction it was just rebuilt around.
+  //
+  // src/checks/levels-standard.check.mts holds these labels to
+  // src/lib/levels-standard.ts so the two cannot drift apart again.
+  { value: 'equipment', label: 'Tag', plural: 'Tags', depth: 5, note: 'One numbered item of plant, carrying the tag' },
+  { value: 'component', label: 'Component', plural: 'Components', depth: 6, note: 'A part within a tagged item' },
 ]
 
 export function subjectLabel(type: string | null | undefined): string {

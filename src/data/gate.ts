@@ -23,6 +23,8 @@ import { decideAccess, parseOwners, type Verdict } from '@/lib/gate'
  * worth caching or worth leaking.
  */
 export const accessVerdict = cache(async function accessVerdict(): Promise<Verdict> {
+
+
   const auth = await createClient()
   const {
     data: { user },

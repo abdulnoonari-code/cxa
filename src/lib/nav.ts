@@ -57,9 +57,13 @@ export const NAV: NavSection[] = [
           { href: '/plan', label: 'Plan & Progress', icon: 'plan', note: 'Progress by commissioning level, L1 through L5.' },
           {
             href: '/project/configuration',
-            label: 'Configuration',
+            // Named for what somebody comes here to DO. It was called
+            // "Configuration", which describes the older half of the page
+            // and not the half that now matters most: every import and
+            // export on the job, in the order they are done, on one page.
+            label: 'Set up the project',
             icon: 'settings',
-            note: 'What this job actually commissions — which levels, which disciplines, against which standards. Not the Setup screen: that one checks the database, this one describes the work.',
+            note: 'Every sheet on the job in one place — the hierarchy, checklists, obligations, documents and the rest — plus which levels and disciplines this job actually commissions.',
           },
         ],
       },
@@ -76,43 +80,56 @@ export const NAV: NavSection[] = [
     ],
   },
   {
+    // ── Three levels, and nothing else ────────────────────────────────
+    //
+    // This group had seven entries: Systems, Equipment Types, Equipment &
+    // Tags, Asset Tree, Asset Report, QR Labels. Somebody looking at it
+    // said, in these words, that it was "messed" — and they were right.
+    // Behind those seven entries were six levels of hierarchy (site, area,
+    // system, subsystem, equipment, component) of which three could not be
+    // managed on any screen at all.
+    //
+    // The model is three levels UNDER THE PROJECT: SYSTEM, SUBSYSTEM, TAG.
+    // The project IS the substation — it is not a level you fill in, it is
+    // the thing you are already inside. Published guidance says five levels
+    // for a company with many sites and three for a single site; one
+    // substation per project is a single site.
+    //
+    // There is no screen here for getting the job in. That was a mistake I
+    // made and removed: the sheet is exported and imported from the Project
+    // screen, because that is where somebody looks for their project's
+    // data, and a new page for it is one more thing to find.
+    //
+    // Nothing is deleted. Equipment Types and the Asset Report still work
+    // and are still reachable — Asset Report from a link on Equipment &
+    // Tags, and equipment types from the type field on a tag. They are not
+    // in the rail because they are not part of the three levels, and a
+    // rail is a list of the things you need, not of the things that exist.
     label: 'Assets',
     items: [
+      {
+        href: '/assets',
+        label: 'The tree',
+        icon: 'tree',
+        note: 'System, subsystem, tag — the whole job in one place, and what is recorded against each.',
+      },
       {
         href: '/systems',
         label: 'Systems',
         icon: 'system',
-        note: 'What gets energised and handed over. Systems and subsystems, with their boundaries.',
-      },
-      {
-        href: '/equipment-types',
-        label: 'Equipment Types',
-        icon: 'catalogue',
-        note: 'The catalogue behind the tags — makes and models, with their ratings. Forty identical breakers are forty tags and one type.',
+        note: 'What gets energised and handed over, with their boundaries.',
       },
       {
         href: '/equipment',
         label: 'Equipment & Tags',
         icon: 'equipment',
-        note: 'Every tagged item of plant, and the parts inside each one.',
-      },
-      {
-        href: '/assets',
-        label: 'Asset Tree',
-        icon: 'tree',
-        note: 'The whole tree in one place — site, area, system, subsystem, equipment, part — and what is recorded against each.',
-      },
-      {
-        href: '/assets/report',
-        label: 'Asset Report',
-        icon: 'validity',
-        note: 'What is in the register and whether it can be trusted — counts by system, discipline, status and type, and the rows that will make another screen wrong.',
+        note: 'Every tagged item of plant.',
       },
       {
         href: '/qr',
         label: 'QR Labels',
         icon: 'qr',
-        note: 'Printable codes for the plant. A scan opens that system, tag or part on this site — its checks, its punch items, its documents.',
+        note: 'Printable codes for the plant. A scan opens that system or tag on this site — its checks, its punch items, its documents.',
       },
     ],
   },
@@ -127,17 +144,6 @@ export const NAV: NavSection[] = [
         children: [
           { href: '/holdpoints', label: 'Hold & Witness Points', icon: 'hold', note: 'The hold and witness points from the plan, with their signatures.' },
         ],
-      },
-      {
-        // FIRST in this group, on purpose. "How do I get my job in" was
-        // answered by four screens and four spreadsheets in an order
-        // nothing stated, and the person who asked was looking at
-        // Checklists when they said it was not clear. So the answer sits
-        // above Checklists, where they were already looking.
-        href: '/jobsheet',
-        label: 'Job sheet',
-        icon: 'checklist',
-        note: 'One spreadsheet that builds the systems, the tags and every check against them.',
       },
       {
         href: '/checklists',

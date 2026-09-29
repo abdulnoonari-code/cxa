@@ -3165,3 +3165,262 @@ textarea.phone-input {
     background: transparent;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   THE SETUP PAGE
+   ═══════════════════════════════════════════════════════════════════
+
+   "but i donot look beautiful" — and he was right. The first version of
+   this page was built out of inline styles: hand-rolled dividers, raw
+   file inputs showing the browser's grey "Choose File | No file chosen",
+   and ten rows of them stacked in a table. The application already had
+   `.io-file` and `.stat` and I had used neither, so the page did not look
+   like the rest of the product. These classes put it back on the house
+   system and give the one card that matters the weight it deserves.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* The card the whole page is about. Lifted off the page with a tinted
+   ground and a coloured top edge, so it reads as the first thing before
+   anybody has read a word of it. */
+.setup-hero {
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(0, 151, 184, 0.045) 0%, rgba(0, 151, 184, 0) 190px),
+    var(--color-surface);
+  box-shadow: var(--shadow-card);
+  padding: 22px 24px 20px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.setup-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-brand), var(--color-primary));
+}
+
+/* The buttons sit on a line of their own under the sentence, so the row
+   cannot break in half and strand Export above Import. */
+.setup-hero-io {
+  margin-top: 16px;
+}
+
+.setup-hero-title {
+  font-size: 19px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+/* The six columns, as the sheet's own header row rather than a sentence
+   with bold words in it. It looks like the thing it describes. */
+.setup-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 0;
+}
+
+.setup-column {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 7px;
+  background: var(--color-neutral-bg);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+/* Equipment Type is not a level. It is written in the row because it is a
+   column of the sheet, and marked because it is not part of the tree. */
+.setup-column-aside {
+  border-style: dashed;
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+/* The five numbers. Tighter than `.stat-grid`, because these are one
+   reading — "here is what is in the list" — not five separate figures. */
+.setup-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 1px;
+  margin-top: 18px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius);
+  background: var(--color-border-soft);
+  overflow: hidden;
+}
+
+.setup-count {
+  background: var(--color-surface);
+  padding: 13px 15px;
+}
+
+.setup-count-value {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+
+/* Nothing yet is stated quietly rather than as a bold zero, because five
+   bold zeros look like a query that failed. */
+.setup-count-empty .setup-count-value {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.setup-count-label {
+  font-family: 'IBM Plex Mono', monospace;
+  /* 10.5px to match .stat-label. It was 9.5 and read as fine print on a
+     number that is the whole point of the card. */
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--color-text-secondary);
+  margin-top: 6px;
+}
+
+/* ---------- The hierarchy ---------- */
+
+.setup-level {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0 8px 14px;
+  border-left: 2px solid var(--color-border-soft);
+}
+
+.setup-level-root {
+  border-left-color: transparent;
+  padding-left: 0;
+}
+
+.setup-level-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  flex: 0 0 92px;
+}
+
+.setup-level-example {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  color: var(--color-primary);
+  flex: 0 0 auto;
+}
+
+.setup-level-note {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  flex: 1 1 200px;
+}
+
+/* ---------- The other sheets ---------- */
+
+/* Cards rather than table rows. Ten file pickers stacked in a table read
+   as a form to fill in; ten cards read as a list of jobs, which is what
+   they are — you do one, then come back another day and do the next. */
+.setup-sheets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 12px;
+}
+
+.setup-sheet {
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  padding: 15px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.setup-sheet:hover {
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.setup-sheet-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.setup-sheet-step {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+  flex: 0 0 auto;
+}
+
+.setup-sheet-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.setup-sheet-builds {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.setup-sheet-io {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  --io-control-height: 32px;
+}
+
+.setup-sheet-io .io-file {
+  flex: 1 1 130px;
+  font-size: 12px;
+}
+
+.setup-sheet-io .io-file::file-selector-button {
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+/* The picker is given a size rather than allowed to stretch. Inside
+   `.io-bar` a file input takes `flex: 1 1 220px`, which on a wide card
+   turns the empty "No file chosen" box into the largest thing on the
+   screen — heavier than the numbers, which are the point. */
+.setup-hero .io-file {
+  flex: 0 1 250px;
+}
+
+@media (max-width: 720px) {
+  .setup-hero .io-file {
+    flex: 1 1 100%;
+  }
+}
+
+/* Each sheet card puts its buttons on one line of their own, pinned to the
+   bottom, so ten cards of different text lengths still line their controls
+   up instead of each sitting wherever its paragraph happened to end. */
+.setup-sheet-io {
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.setup-sheet-io .io-file {
+  flex: 1 1 100px;
+  min-width: 84px;
+}

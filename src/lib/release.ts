@@ -48,8 +48,21 @@ export type Release = {
  * that is the number written on the zip somebody has in their downloads.
  */
 export const RELEASES: Release[] = [
+  { update: 131, on: '2026-09-29', what: 'The setup page rebuilt on the house design system' },
+  { update: 130, on: '2026-09-29', what: 'Superseded by 131 \u2014 do not apply' },
+  { update: 129, on: '2026-09-29', what: 'Superseded by 130 \u2014 do not apply' },
+  { update: 128, on: '2026-09-29', what: 'One sheet sets up assets, systems, subsystems, equipment types and tags' },
+  { update: 127, on: '2026-09-28', what: 'Superseded by 128 \u2014 do not apply' },
+  // 123 to 127 were all attempts at the same thing and none of them was
+  // deployed: 123-126 built a separate "job sheet" screen with a Facility
+  // column, and 127 fixed the shape but only carried three levels and put
+  // a diagram and two paragraphs in front of the buttons. 128 replaces all
+  // five. Their numbers stay listed because zips carrying them were sent,
+  // and a gap in this list is a question somebody has to go and answer.
+  { update: 126, on: '2026-09-28', what: 'Superseded by 127 \u2014 do not apply' },
+  { update: 125, on: '2026-09-28', what: 'Superseded by 127 \u2014 do not apply' },
   { update: 124, on: '2026-09-28', what: 'No importer can read another project\u2019s subsystems' },
-  { update: 123, on: '2026-09-28', what: 'One job sheet builds the systems, the tags and every check in one go' },
+  { update: 123, on: '2026-09-28', what: 'Superseded by 127 \u2014 do not apply' },
   { update: 122, on: '2026-09-27', what: 'The Setup screen says which update is actually deployed' },
   { update: 121, on: '2026-09-27', what: 'Each readiness gate says whether it will make its planned date' },
   { update: 120, on: '2026-09-27', what: 'Project Plan forecasts each level from the rate checks are signed' },

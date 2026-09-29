@@ -8,6 +8,38 @@ import { LEVELS } from '@/lib/checklist'
 import { levelTone, levelCode } from '@/lib/levels'
 import { CATEGORIES } from '@/app/equipment/styles'
 import { saveConfiguration } from './actions'
+import { SETUP_SHEETS, ASSET_SHEET, HIERARCHY_LEVELS, HIERARCHY_COLUMNS } from '@/lib/setup-sheets'
+import { loadAssetCounts } from '@/data/asset-counts'
+
+// Every importer on the job, wired to the table below. They are all the
+// same shape — one FormData carrying a `file` — which is the only reason
+// gathering them onto one page is a table and not a rewrite.
+//
+// Each one redirects to its OWN screen when it finishes, which is exactly
+// "then we look each page": you import here and land where the records are.
+import { importHierarchy } from '../actions'
+import { importTypes } from '@/app/equipment-types/actions'
+import { importSystems } from '@/app/systems/actions'
+import { importEquipment } from '@/app/equipment/actions'
+import { importProjectChecklist } from '@/app/checklists/actions'
+import { importItp } from '@/app/itp/actions'
+import { importTests } from '@/app/tests/actions'
+import { importObligations } from '@/app/obligations/actions'
+import { importRoles } from '@/app/roles/actions'
+import { importPunchList } from '@/app/issues/actions'
+
+const SETUP_ACTIONS: Record<string, (formData: FormData) => Promise<void>> = {
+  hierarchy: importHierarchy,
+  'equipment-types': importTypes,
+  systems: importSystems,
+  equipment: importEquipment,
+  checklists: importProjectChecklist,
+  itp: importItp,
+  tests: importTests,
+  obligations: importObligations,
+  roles: importRoles,
+  issues: importPunchList,
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -38,9 +70,10 @@ export default async function ConfigurationPage() {
   if (refused) return refused
 
   const project = await getCurrentProject()
-  const [{ config, columnMissing }, counts] = await Promise.all([
+  const [{ config, columnMissing }, counts, assetCounts] = await Promise.all([
     loadProjectConfig(project?.id ?? null),
     recordsByLevel(project?.id ?? null),
+    loadAssetCounts(project?.id ?? null),
   ])
   const warnings = scopeWarnings(config, counts)
   const jar = await cookies()
@@ -98,6 +131,147 @@ export default async function ConfigurationPage() {
           {w.message}
         </div>
       ))}
+
+      {/* ── THE PROJECT ASSET LIST. ONE FILE. ───────────────────────────
+          "go configuration page you have the project asset list on one
+          file." It was row 1 of a table of eleven, which put it on a
+          level with the punch list. It is not one of eleven — it is THE
+          file, the one that has to exist before any of the others mean
+          anything, because every one of them attaches to tags this file
+          creates.
+
+          "but i donot look beautiful" — also true, and the cause was that
+          I built it out of inline styles while the application already had
+          `.io-file` and `.stat`. It is on the house system now, and the
+          card that matters is lifted off the page instead of being one
+          more grey box among grey boxes. */}
+      <section className="setup-hero">
+        {/* Title, then what it is, THEN the buttons on a line of their
+            own. They were on the title line, and on any width where the
+            title and the picker did not both fit the row broke in half
+            and put Export above Import — which reads as two unrelated
+            controls rather than one out-and-back-in. */}
+        <h2 className="setup-hero-title">{ASSET_SHEET.title}</h2>
+
+        <p className="text-secondary" style={{ fontSize: 13.5, margin: '6px 0 0', maxWidth: 660 }}>
+          One file builds the whole tree. Export first — an empty project comes back with worked example rows to
+          type over, so there is never a format to guess at. Importing the same file twice changes nothing.
+        </p>
+
+        <div className="io-bar setup-hero-io">
+          <a href={ASSET_SHEET.exportHref!} className="btn btn-secondary">Export</a>
+          <form action={SETUP_ACTIONS[ASSET_SHEET.key]}>
+            <input type="file" name="file" accept=".xlsx" required className="io-file" disabled={!project} />
+            <button type="submit" className="btn btn-primary" disabled={!project}>Import</button>
+          </form>
+        </div>
+
+        {/* The six columns drawn as the sheet's own header row. A sentence
+            with six bold words in it describes the file; this looks like
+            it. Equipment Type is marked apart because it is a column of
+            the sheet but not a level of the tree. */}
+        <div className="setup-columns">
+          {HIERARCHY_COLUMNS.map((c) => (
+            <span key={c.name} className={c.level ? 'setup-column' : 'setup-column setup-column-aside'}>
+              {c.name}
+            </span>
+          ))}
+        </div>
+
+        {/* What is in it right now — the answer to "did that import work?".
+            Until this existed the question meant opening four screens and
+            adding up, and the Export button on its own says nothing. */}
+        <div className="setup-counts">
+          {assetCounts.map((c) => (
+            <div key={c.label} className={c.n === 0 ? 'setup-count setup-count-empty' : 'setup-count'}>
+              <div className="setup-count-value">{c.n}</div>
+              <div className="setup-count-label">{c.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {assetCounts.every((c) => c.n === 0) && (
+          <p className="io-note">
+            Nothing in the asset list yet. Press <strong>Export</strong> — the file comes back with example rows
+            showing the shape, and you type your job over them.
+          </p>
+        )}
+      </section>
+
+      {/* ── THE HIERARCHY, STATED ONCE ──────────────────────────────────
+          "i want clear hirarchy". Under the file rather than in front of
+          it: it explains the six columns the card above just named, and
+          reference belongs beneath the thing it explains. */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h2 className="section-title" style={{ marginTop: 0, marginBottom: 6 }}>The hierarchy</h2>
+        <p className="text-secondary" style={{ fontSize: 13, margin: '0 0 12px' }}>
+          Five levels. Only the middle three are columns in the sheet — the project is the job you are already
+          inside, and the tag is what the checklists attach to.
+        </p>
+        <div>
+          {HIERARCHY_LEVELS.map((l) => (
+            <div key={l.label} style={{ marginLeft: l.depth * 20 }}>
+              <div className={l.depth === 0 ? 'setup-level setup-level-root' : 'setup-level'}>
+                <span className="setup-level-name">{l.label}</span>
+                <span className="setup-level-example">{l.example}</span>
+                <span className="setup-level-note">{l.note}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="io-note">
+          <strong>Equipment Type</strong> is deliberately not one of these. It is a fact about a tag
+          (&ldquo;this one is an MV Panel&rdquo;), which is how one checklist will reach every panel on the job.
+        </p>
+      </div>
+
+      {/* ── EVERYTHING ELSE ────────────────────────────────────────────
+          "like one page with setup all project and then we look each
+          page." Every register grew its own screen and its own Export
+          button, and setting up a job meant knowing which ten screens to
+          visit and in what order. That knowledge existed nowhere except
+          in my head.
+
+          CARDS, NOT TABLE ROWS. Ten file pickers stacked in a table read
+          as one long form somebody has to fill in today. Ten cards read
+          as a list of jobs — you do one, and come back another day and do
+          the next, which is how this work actually happens.
+
+          The screens keep their own buttons. Nothing was taken away —
+          this is a table of contents. */}
+      <div className="card" style={{ marginBottom: 18 }}>
+        <h2 className="section-title" style={{ marginTop: 0, marginBottom: 6 }}>The other sheets</h2>
+        <p className="text-secondary" style={{ fontSize: 13, margin: '0 0 16px', maxWidth: 680 }}>
+          Everything else on the job, in the order it is done — all of it attaching to tags, so do the asset list
+          first. <strong>Export</strong> gives you your own data back, <strong>Blank</strong> an empty sheet with
+          the right columns. After an import you land on the screen that owns that register, so you can see it
+          went in.
+        </p>
+
+        <div className="setup-sheets">
+          {SETUP_SHEETS.map((s) => (
+            <div key={s.key} className="setup-sheet">
+              <div className="setup-sheet-head">
+                <span className="setup-sheet-step">{s.step}</span>
+                <Link href={s.page} className="link setup-sheet-title">{s.title}</Link>
+              </div>
+              <p className="setup-sheet-builds">{s.builds}</p>
+              <div className="setup-sheet-io">
+                {s.exportHref && <a href={s.exportHref} className="btn btn-secondary btn-sm">Export</a>}
+                {s.templateHref && <a href={s.templateHref} className="btn btn-secondary btn-sm">Blank</a>}
+                {s.linkOnly ? (
+                  <Link href={s.page} className="btn btn-secondary btn-sm">Upload files →</Link>
+                ) : (
+                  <form action={SETUP_ACTIONS[s.key]} style={{ display: 'flex', gap: 7, alignItems: 'center', flex: '1 1 150px', minWidth: 0 }}>
+                    <input type="file" name="file" accept=".xlsx,.xls,.csv" required className="io-file" disabled={!project} />
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={!project}>Import</button>
+                  </form>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <form action={saveConfiguration}>
         <div className="card" style={{ marginBottom: 20 }}>

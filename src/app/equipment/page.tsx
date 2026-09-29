@@ -120,6 +120,65 @@ export default async function EquipmentPage({
   // error, which is read as "no parts anywhere" rather than being allowed to
   // empty the register.
   const shownIds = (rows ?? []).map((r) => r.id)
+
+  // ── Where each tag sits, and what it is ─────────────────────────────
+  //
+  // The register used to show Tag, Description, Category, Building, Floor
+  // and Location — and NOT the system, the subsystem or the equipment type.
+  // So a tag brought in by the one-sheet import arrived here looking empty:
+  // everything the sheet had set was in columns this table did not have,
+  // and the import looked like it had done nothing.
+  //
+  // Asked for the hundred tags on this page only, in the same shape as the
+  // part count below, rather than joined into the select above — those two
+  // column lists are written out literally on purpose, because of the
+  // floor-column fallback, and a join would have to be added to both.
+  type Where = { asset: string; system: string; subsystem: string; type: string }
+  const where = new Map<string, Where>()
+  if (shownIds.length > 0 && project) {
+    const { data: placed } = await supabase
+      .from('equipment')
+      .select('id, system_id, subsystem_id, type_id')
+      .eq('project_id', project.id)
+      .in('id', shownIds)
+    const placedRows = (placed ?? []) as
+      { id: string; system_id: string | null; subsystem_id: string | null; type_id: string | null }[]
+
+    const systemIds = [...new Set(placedRows.map((r) => r.system_id).filter(Boolean) as string[])]
+    const subsystemIds = [...new Set(placedRows.map((r) => r.subsystem_id).filter(Boolean) as string[])]
+    const typeIds = [...new Set(placedRows.map((r) => r.type_id).filter(Boolean) as string[])]
+
+    // Every one of these is scoped: by project where the table carries a
+    // project_id, and by the ids we already hold where it does not.
+    const [sysRes, subRes, typeRes, areaRes] = await Promise.all([
+      systemIds.length
+        ? supabase.from('systems').select('id, name, area_id').eq('project_id', project.id).in('id', systemIds)
+        : Promise.resolve({ data: [] }),
+      subsystemIds.length
+        ? supabase.from('subsystems').select('id, name').in('id', subsystemIds)
+        : Promise.resolve({ data: [] }),
+      typeIds.length
+        ? supabase.from('equipment_types').select('id, type_code').eq('project_id', project.id).in('id', typeIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from('areas').select('id, name').eq('project_id', project.id),
+    ])
+    const areaName = new Map(((areaRes.data ?? []) as { id: string; name: string }[]).map((a) => [a.id, a.name]))
+    const sysRows = (sysRes.data ?? []) as { id: string; name: string; area_id: string | null }[]
+    const sysName = new Map(sysRows.map((s) => [s.id, s.name]))
+    const sysAsset = new Map(sysRows.map((s) => [s.id, (s.area_id && areaName.get(s.area_id)) || '']))
+    const subName = new Map(((subRes.data ?? []) as { id: string; name: string }[]).map((s) => [s.id, s.name]))
+    const typeName = new Map(((typeRes.data ?? []) as { id: string; type_code: string }[]).map((t) => [t.id, t.type_code]))
+
+    for (const r of placedRows) {
+      where.set(r.id, {
+        asset: (r.system_id && sysAsset.get(r.system_id)) || '',
+        system: (r.system_id && sysName.get(r.system_id)) || '',
+        subsystem: (r.subsystem_id && subName.get(r.subsystem_id)) || '',
+        type: (r.type_id && typeName.get(r.type_id)) || '',
+      })
+    }
+  }
+
   const partCount = new Map<string, number>()
   if (shownIds.length > 0) {
     const { data: parts } = await supabase
@@ -326,6 +385,11 @@ export default async function EquipmentPage({
               <th style={{ width: 30 }}></th>
               <th>Tag</th>
               <th>Description</th>
+              {/* Where it sits and what it is — the four things the
+                  one-sheet import sets. Without these the import looked
+                  like it had done nothing. */}
+              <th>Where it sits</th>
+              <th>Type</th>
               <th>Category</th>
               <th>Building</th>
               <th>Floor</th>
@@ -351,6 +415,28 @@ export default async function EquipmentPage({
                   </td>
                   <td className="mono tag-id">{item.tag_id}</td>
                   <td style={{ fontSize: 13.5 }}>{item.description ?? '—'}</td>
+                  {(() => {
+                    const w = where.get(item.id)
+                    // Read top down: Asset, then System, then Subsystem.
+                    // An unplaced tag says so rather than showing a dash
+                    // that could be mistaken for a missing column.
+                    const parts = [w?.asset, w?.system, w?.subsystem].filter((v): v is string => !!v)
+                    return (
+                      <>
+                        <td style={{ fontSize: 12.5, lineHeight: 1.45, minWidth: 150 }}>
+                          {parts.length === 0
+                            ? <span className="text-secondary">Not placed</span>
+                            : parts.map((p, i) => (
+                                <span key={i}>
+                                  {i > 0 && <span className="text-secondary"> › </span>}
+                                  {p}
+                                </span>
+                              ))}
+                        </td>
+                        <td style={{ fontSize: 13 }}>{w?.type || '—'}</td>
+                      </>
+                    )
+                  })()}
                   <td style={{ fontSize: 13 }}>{item.category ? categoryLabel(item.category) : '—'}</td>
                   <td style={{ fontSize: 13 }}>
                     {item.building || <span className="text-secondary">—</span>}

@@ -1,7 +1,9 @@
 import { requirePage } from '@/data/require-page'
 import { supabase } from '@/lib/supabase'
 import { getCurrentProject } from '@/lib/project'
-import { updateProject } from './actions'
+import { updateProject, importHierarchy } from './actions'
+import { cookies } from 'next/headers'
+import { IMPORT_COOKIE, decodeOutcome, summaryLine, alertClass, detailLines } from '@/lib/import-result'
 import DatabaseAccess from '@/components/DatabaseAccess'
 import TimelineChart from '@/components/TimelineChart'
 import { loadTimeline } from '@/data/timeline'
@@ -37,6 +39,9 @@ export default async function ProjectPage() {
 
   const timeline = await loadTimeline(project.id, new Date().toISOString().slice(0, 10))
 
+  const jar = await cookies()
+  const outcome = decodeOutcome(jar.get(IMPORT_COOKIE)?.value)
+
   return (
     <>
       <h1 className="page-title">Project Details</h1>
@@ -44,6 +49,48 @@ export default async function ProjectPage() {
         The name, client and dates used across every screen and every export — and the plan they are measured
         against. Change anything here and the whole site updates.
       </p>
+
+      {outcome && (
+        <div className={alertClass(outcome)} style={{ marginBottom: 16 }}>
+          <strong>{summaryLine(outcome)}</strong>
+          {detailLines(outcome).length > 0 && (
+            <ul style={{ margin: '8px 0 0', paddingLeft: 20 }}>
+              {detailLines(outcome).map((line, i) => (
+                <li key={i} style={{ fontSize: 13, marginBottom: 2 }}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ── Set up the job from one sheet ────────────────────────────────
+          Here, on the project, and not on a screen of its own. Somebody
+          looking for their project's data looks at the project.
+
+          THIS CARD WAS REDESIGNED AFTER "i dont like , interface". The
+          first version explained the tree with a diagram and two
+          paragraphs before it showed a button. He asked for "simple
+          button with import and export", so that is all there is: the
+          two buttons on one line, one sentence of columns under them,
+          and everything else deleted. The explaining belongs in the
+          sheet the Export button hands you, which is a thing you can
+          read at your own speed, not on the screen in the way of it. */}
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+          <h2 className="section-title" style={{ margin: 0, flex: '1 1 auto' }}>Set up from one sheet</h2>
+          <a href="/project/hierarchy/export" className="btn btn-secondary btn-sm">Export</a>
+          <form action={importHierarchy} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input type="file" name="file" accept=".xlsx" required className="input" style={{ maxWidth: 230 }} />
+            <button type="submit" className="btn btn-primary btn-sm">Import</button>
+          </form>
+        </div>
+        <p className="text-secondary" style={{ fontSize: 13, margin: 0 }}>
+          One spreadsheet builds the whole job: <strong>Asset</strong> · <strong>System</strong> ·{' '}
+          <strong>Subsystem</strong> · <strong>Equipment Type</strong> · <strong>Tag</strong>. Export first — an
+          empty project comes back with example rows to type over, so there is no format to guess at. Importing
+          the same sheet twice changes nothing.
+        </p>
+      </div>
 
       {/* The plan first. Somebody opening Project Details wants to know
           where the job stands before they want to edit its name. */}

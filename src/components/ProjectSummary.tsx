@@ -14,7 +14,7 @@ import { devicePercent, systemPercent, sumCells, HIERARCHY_NOTE, type HierarchyN
 
 const TYPE_WORD: Record<string, string> = {
   site: 'Site',
-  area: 'Area',
+  area: 'Asset',
   system: 'System',
   subsystem: 'Subsystem',
 }

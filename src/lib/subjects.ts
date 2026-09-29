@@ -22,7 +22,11 @@ export const SUBJECT_TYPES: {
 }[] = [
   { value: 'project', label: 'Project', plural: 'Projects', depth: 0, note: 'The whole job' },
   { value: 'site', label: 'Site', plural: 'Sites', depth: 1, note: 'A physical location on the project' },
-  { value: 'area', label: 'Area', plural: 'Areas', depth: 2, note: 'A zone within a site' },
+  // Called an ASSET on every screen, because that is the word the people
+  // using this use — "asset, system, subsystem, tags". The table behind it
+  // is still `areas`, and renaming a table that thirty files read is a
+  // different job from calling the thing by its right name.
+  { value: 'area', label: 'Asset', plural: 'Assets', depth: 2, note: 'A switchroom, building or zone that holds systems' },
   { value: 'system', label: 'System', plural: 'Systems', depth: 3, note: 'A functional system with a boundary' },
   { value: 'subsystem', label: 'Subsystem', plural: 'Subsystems', depth: 4, note: 'A division within a system' },
   { value: 'equipment', label: 'Equipment', plural: 'Equipment', depth: 5, note: 'A tagged item of plant' },

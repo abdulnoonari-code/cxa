@@ -43,7 +43,12 @@ import { Readable } from 'stream'
 const ASSET_ALIASES = ['asset', 'asset name', 'facility', 'substation', 'plant', 'station', 'building', 'area', 'asset group']
 const SYSTEM_ALIASES = ['system', 'system name', 'system id', 'sys', 'package', 'discipline system']
 const SUBSYSTEM_ALIASES = ['subsystem', 'sub system', 'sub-system', 'subsys', 'section', 'bay', 'panel', 'cubicle']
-const TYPE_ALIASES = ['equipment type', 'type', 'type code', 'equip type', 'asset type', 'item type', 'equipment category', 'family']
+// 'equipment' is FIRST and is also in TAG_ALIASES. The exact-match pass
+// runs fields in the order of `want` below, and equipmentType comes before
+// tag there, so a column headed "Equipment" is read as the KIND. A sheet
+// whose only item column is called "Equipment" is rescued further down,
+// the same way "Asset" is.
+const TYPE_ALIASES = ['equipment', 'equipment type', 'type', 'type code', 'equip type', 'asset type', 'item type', 'equipment category', 'family', 'model']
 const TAG_ALIASES = ['tag', 'tag no', 'tag id', 'tag number', 'equipment tag', 'equipment', 'asset', 'asset id', 'kks', 'item no', 'equipment no']
 const DESC_ALIASES = ['description', 'tag description', 'equipment description', 'desc', 'name', 'equipment name', 'title']
 
@@ -70,7 +75,7 @@ const headerKey = (v: unknown) => norm(v).toLowerCase().replace(/\s+/g, ' ').rep
 // src/checks/hierarchy.check.mts writes a real workbook from these and
 // reads it back — which can only be honest because there is one copy.
 
-export const HIERARCHY_HEADER = ['Asset', 'System', 'Subsystem', 'Equipment Type', 'Tag', 'Description'] as const
+export const HIERARCHY_HEADER = ['Asset', 'System', 'Subsystem', 'Equipment', 'Tag', 'Description'] as const
 
 /**
  * What an empty project exports. Not an empty grid — an empty grid is still
@@ -78,18 +83,22 @@ export const HIERARCHY_HEADER = ['Asset', 'System', 'Subsystem', 'Equipment Type
  * fill-down, to be typed over.
  */
 export const HIERARCHY_EXAMPLE: string[][] = [
-  ['22 kV Switchroom', 'MV Switchgear', 'Incomer', 'MV Panel', 'MV-SWGR-01', '22 kV incomer panel'],
-  ['', '', '', 'MV Panel', 'MV-SWGR-02', 'Bus section'],
-  ['', '', 'Feeder 1', 'MV Panel', 'MV-SWGR-03', 'Feeder to TX-01'],
+  // Equipment is written ONCE and the tags of that kind listed beneath it.
+  // This is the shape a hundred MV panels take: one Equipment row, a
+  // hundred tag rows, one checklist.
+  ['22 kV Switchroom', 'MV Switchgear', 'Incomer', 'MV Panel', 'MV-SWGR-001', '22 kV incomer panel'],
+  ['', '', '', '', 'MV-SWGR-002', 'Bus section'],
+  ['', '', '', '', 'MV-SWGR-003', 'Feeder to TX-01'],
   ['', 'Transformers', '', 'Dry Transformer', 'TX-01', '22/0.4 kV 2000 kVA'],
-  ['', '', '', 'Dry Transformer', 'TX-02', '22/0.4 kV 2000 kVA'],
+  ['', '', '', '', 'TX-02', '22/0.4 kV 2000 kVA'],
   ['LV Room', 'LV Distribution', '', 'LV Panel', 'LV-MDB-01', 'Main distribution board'],
 ]
 
 /** Printed under the table, in italic. Must survive its own reader. */
 export const HIERARCHY_FOOTNOTES: string[] = [
-  'Leave a cell blank to repeat the one above it. Asset, then System, then Subsystem, then the Tag.',
-  'Equipment Type is what the thing IS, so the same type is written on every tag of that kind and never repeats down.',
+  'Leave a cell blank to repeat the one above it: Asset, then System, then Subsystem, then Equipment, then the Tag.',
+  'Equipment is the KIND of plant and Tag is one numbered item of it. A hundred panels are a hundred Tag rows under one Equipment.',
+  'The checklist attaches to the Equipment once and reaches every Tag beneath it, so write the Equipment once and list the tags.',
   'The project is the substation, so it is not a column. Type over these example rows and import this file back.',
 ]
 
@@ -181,6 +190,15 @@ function findColumns(header: unknown[]): Record<string, number | null> {
   //
   // So: if nothing claimed a tag column and Asset did claim one, Asset was
   // the tag. A sheet with BOTH is unambiguous and is left alone.
+  //
+  // EQUIPMENT IS CHECKED FIRST, because it is the nearer meaning: a
+  // register whose item column is headed "Equipment" is far more common
+  // than one headed "Asset", and if both are present and there is no Tag
+  // column then the Equipment column is the item.
+  if (found.tag === null && found.equipmentType !== null) {
+    found.tag = found.equipmentType
+    found.equipmentType = null
+  }
   if (found.tag === null && found.asset !== null) {
     found.tag = found.asset
     found.asset = null
@@ -219,17 +237,26 @@ export function hierarchyFromRows(grid: unknown[][]): Hierarchy {
   // leave blanks, and a sheet that repeats the system on every one of
   // sixty rows is a sheet somebody will get wrong.
   //
-  // The reset is the part that matters, and it now runs two levels deep:
-  // naming a new ASSET clears the system and the subsystem under it, and
-  // naming a new SYSTEM clears the subsystem. Without that, the first tag
-  // of a system with no bays silently inherits the last bay of the system
-  // above, and it is then filed somewhere its owner will never look.
+  // THE RESET IS THE PART THAT MATTERS, and it runs the whole way down:
+  // naming a level clears every level beneath it. A new Asset clears the
+  // system, the subsystem and the equipment; a new System clears the
+  // subsystem and the equipment; a new Subsystem clears the equipment.
   //
-  // EQUIPMENT TYPE AND DESCRIPTION DO NOT FILL DOWN. They are not levels
-  // of the tree, they are facts about one tag. A type carried down by
-  // accident puts the wrong checklist on a piece of equipment, which is
-  // exactly the kind of wrong that gets signed off.
-  let lastAsset = '', lastSystem = '', lastSub = ''
+  // Without that, the first tag under a new heading silently inherits the
+  // last one from the heading above — filed somewhere its owner will never
+  // look, with nothing anywhere saying so.
+  //
+  // EQUIPMENT FILLS DOWN because it is a LEVEL, and that is the whole
+  // point of it: write "MV Panel" once and list a hundred tags beneath it.
+  // An earlier version made Equipment an attribute that never filled down,
+  // to stop a transformer inheriting the switchgear's kind. The reset
+  // above is the right answer to that, not refusing to fill down — and
+  // refusing cost a hundred checklists on a hundred identical panels.
+  //
+  // DESCRIPTION STILL DOES NOT FILL DOWN. It is not a level; it is a
+  // sentence about one tag, and a sentence copied down a hundred rows is
+  // a hundred wrong descriptions.
+  let lastAsset = '', lastSystem = '', lastSub = '', lastEquipment = ''
   const rows: HierarchyRow[] = []
 
   for (let i = headerAt + 1; i < grid.length; i++) {
@@ -238,11 +265,11 @@ export function hierarchyFromRows(grid: unknown[][]): Hierarchy {
     const assetCell = at(raw, 'asset')
     const systemCell = at(raw, 'system')
     const subCell = at(raw, 'subsystem')
-    const equipmentType = at(raw, 'equipmentType')
+    const equipmentCell = at(raw, 'equipmentType')
     const tag = at(raw, 'tag')
     const description = at(raw, 'description')
 
-    if (!assetCell && !systemCell && !subCell && !equipmentType && !tag && !description) continue
+    if (!assetCell && !systemCell && !subCell && !equipmentCell && !tag && !description) continue
 
     // A footnote under the table. Real sheets end with prose — "Prepared
     // by…", "Sheet 1 of 3" — and so does the one this application hands
@@ -256,10 +283,14 @@ export function hierarchyFromRows(grid: unknown[][]): Hierarchy {
 
     const newAsset = !!assetCell && assetCell !== lastAsset
     const asset = assetCell || lastAsset
-    const systemFromCell = systemCell || (newAsset ? '' : lastSystem)
+
+    const system = systemCell || (newAsset ? '' : lastSystem)
     const newSystem = newAsset || (!!systemCell && systemCell !== lastSystem)
-    const system = systemFromCell
+
     const subsystem = subCell || (newSystem ? '' : lastSub)
+    const newSub = newSystem || (!!subCell && subCell !== lastSub)
+
+    const equipment = equipmentCell || (newSub ? '' : lastEquipment)
 
     if (!system) problems.push({ row: rowNo, column: 'System', value: '', message: 'No system on this row, and no row above it to take one from.' })
     if (!tag) problems.push({ row: rowNo, column: 'Tag', value: '', message: 'This row names part of the tree but no tag.' })
@@ -267,8 +298,9 @@ export function hierarchyFromRows(grid: unknown[][]): Hierarchy {
     lastAsset = asset
     lastSystem = system
     lastSub = subsystem
+    lastEquipment = equipment
     if (!system || !tag) continue
-    rows.push({ row: rowNo, asset, system, subsystem, equipmentType, tag, description })
+    rows.push({ row: rowNo, asset, system, subsystem, equipmentType: equipment, tag, description })
   }
 
   if (rows.length === 0 && problems.length === 0) {

@@ -9,7 +9,7 @@ import { recordAudit, getActor } from '@/lib/audit'
 import { getCurrentProject } from '@/lib/project'
 import { LEVELS } from '@/lib/checklist'
 import { loadLibrary } from '@/data/templates'
-import { planApply, planEdit, candidatesFrom } from '@/lib/templates'
+import { planApply, planEdit, candidatesFrom, expandKinds } from '@/lib/templates'
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key)
@@ -136,8 +136,16 @@ export async function applyTemplate(formData: FormData) {
   const template = lib.templates.find((t) => t.id === id)
   if (!template) redirect('/library?applied=gone')
 
-  const chosen = new Set(formData.getAll('target').map(String))
-  const targets = lib.targets.filter((t) => chosen.has(t.id))
+  // A ticked id is either an equipment KIND or one target. Kinds are
+  // expanded into their tags first, so everything below this line sees
+  // ordinary targets and the scope rules, the already-have check and the
+  // batching are all untouched.
+  //
+  // This is what makes "one check, a hundred panels" the same code path
+  // as "one check, one panel" — and what makes running it again next
+  // month pick up only the newly imported tags.
+  const ticked = formData.getAll('target').map(String)
+  const { targets } = expandKinds(ticked, lib.kinds, lib.targets)
   if (targets.length === 0) redirect('/library?applied=none')
 
   const plan = planApply(template, targets, lib.records)

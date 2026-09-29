@@ -1,6 +1,7 @@
 import { requirePage } from '@/data/require-page'
 import { getCurrentProject } from '@/lib/project'
 import { loadLibrary, targetsForLevel } from '@/data/templates'
+import { scopeOf } from '@/lib/scope'
 import { coverageOf, planApply, applySentence, planEdit, editSentence, candidatesFrom } from '@/lib/templates'
 import { LEVELS } from '@/lib/checklist'
 import { LevelBadge } from '@/components/LevelBadge'
@@ -156,6 +157,11 @@ export default async function LibraryPage({
           const cov = coverageOf(t, lib.records)
           const targets = targetsForLevel(lib.targets, t.level)
           const plan = planApply(t, targets, lib.records)
+          // Kinds are only offered for a check that belongs on a tag. An
+          // L4 functional test belongs to a system, and offering "apply
+          // to every MV panel" there would be offering the exact mistake
+          // the scope rules were written to catch.
+          const kindsHere = scopeOf(t.level) === 'tag' ? lib.kinds : []
           const edit = planEdit(t, lib.records)
 
           return (
@@ -198,6 +204,58 @@ export default async function LibraryPage({
                 </summary>
                 <form action={applyTemplate} style={{ marginTop: 10 }}>
                   <input type="hidden" name="id" value={t.id} />
+
+                  {/* ── BY EQUIPMENT KIND ────────────────────────────────
+                      One tick, every tag of that kind — including the
+                      ones imported next month, because applying again
+                      creates records for the new tags and leaves the rest
+                      alone. A hundred MV panels should not be a hundred
+                      ticks, and they should certainly not be a hundred
+                      separately typed checks. */}
+                  {kindsHere.length > 0 && (
+                    <>
+                      <div className="text-secondary mono" style={{ fontSize: 10.5, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+                        By equipment — one tick covers every tag of that kind
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                          gap: 6,
+                          marginBottom: 14,
+                        }}
+                      >
+                        {kindsHere.map((kind) => {
+                          const have = kind.tags.filter((tag) => plan.alreadyHave.some((a) => a.id === tag.id)).length
+                          const all = have === kind.tags.length && kind.tags.length > 0
+                          return (
+                            <label
+                              key={kind.id}
+                              style={{
+                                display: 'flex', gap: 7, alignItems: 'center', fontSize: 12.5,
+                                border: '1px solid var(--color-border-soft)', borderRadius: 8,
+                                padding: '7px 10px', opacity: all ? 0.55 : 1,
+                              }}
+                            >
+                              <input type="checkbox" name="target" value={kind.id} disabled={all} />
+                              <span style={{ fontWeight: 600 }}>{kind.code}</span>
+                              <span className="text-secondary" style={{ fontSize: 11.5, marginLeft: 'auto' }}>
+                                {all
+                                  ? 'all have it'
+                                  : have > 0
+                                    ? `${kind.tags.length - have} of ${kind.tags.length} to do`
+                                    : `${kind.tags.length} tag${kind.tags.length === 1 ? '' : 's'}`}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <div className="text-secondary mono" style={{ fontSize: 10.5, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }}>
+                        Or one at a time
+                      </div>
+                    </>
+                  )}
+
                   <div
                     style={{
                       display: 'grid',

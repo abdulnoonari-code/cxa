@@ -81,17 +81,22 @@ for (const s of [ASSET_SHEET, ...SETUP_SHEETS]) {
 
 // ════════ THE HIERARCHY IS STATED ONCE AND STATED WHOLE ════════
 {
-  eq('five levels', HIERARCHY_LEVELS.map((l) => l.label),
-     ['Project', 'Asset', 'System', 'Subsystem', 'Tag'])
-  eq('the depths are 0..4 in order', HIERARCHY_LEVELS.map((l) => l.depth), [0, 1, 2, 3, 4])
+  eq('six levels', HIERARCHY_LEVELS.map((l) => l.label),
+     ['Project', 'Asset', 'System', 'Subsystem', 'Equipment', 'Tag'])
+  eq('the depths are 0..5 in order', HIERARCHY_LEVELS.map((l) => l.depth), [0, 1, 2, 3, 4, 5])
   for (const l of HIERARCHY_LEVELS) {
     ok(`${l.label} has an example`, l.example.length > 0)
     ok(`${l.label} says what it is`, l.note.length > 10 && /[.!?]$/.test(l.note))
   }
-  // Equipment Type is deliberately NOT a level. It was made one twice and
-  // both times it put the wrong checklist on the wrong plant.
-  ok('Equipment Type is not one of the levels',
-     !HIERARCHY_LEVELS.some((l) => /type/i.test(l.label)))
+  // EQUIPMENT IS A LEVEL, and Tag sits under it. Collapse the two and a
+  // hundred identical panels need a hundred checklists, because there is
+  // nowhere above a tag for one to attach.
+  {
+    const equipment = HIERARCHY_LEVELS.find((l) => l.label === 'Equipment')
+    const tag = HIERARCHY_LEVELS.find((l) => l.label === 'Tag')
+    ok('Equipment is one of the levels', !!equipment)
+    ok('  …and Tag sits directly under it', !!equipment && !!tag && tag.depth === equipment.depth + 1)
+  }
 }
 
 // ════════ THE PAGE CANNOT ADVERTISE A COLUMN THE READER IGNORES ════════
@@ -110,14 +115,19 @@ for (const s of [ASSET_SHEET, ...SETUP_SHEETS]) {
      HIERARCHY_COLUMNS.map((c) => c.name), [...HIERARCHY_HEADER])
 
   const levels = HIERARCHY_COLUMNS.filter((c) => c.level).map((c) => c.name)
-  eq('four of them are levels of the tree', levels, ['Asset', 'System', 'Subsystem', 'Tag'])
+  eq('five of them are levels of the tree', levels,
+     ['Asset', 'System', 'Subsystem', 'Equipment', 'Tag'])
 
-  // Equipment Type marked as a level is how the switchgear checklist ends
-  // up on a transformer. It has happened twice.
-  ok('Equipment Type is marked as not a level',
-     HIERARCHY_COLUMNS.some((c) => c.name === 'Equipment Type' && !c.level))
-  ok('Description is marked as not a level',
-     HIERARCHY_COLUMNS.some((c) => c.name === 'Description' && !c.level))
+  // EQUIPMENT IS A LEVEL. An earlier version of this file asserted the
+  // opposite, on the reasoning that a type carried down by accident puts
+  // the switchgear checklist on a transformer. That risk is real and the
+  // answer to it is the fill-down RESET, not refusing the level — and
+  // refusing it meant a hundred identical panels needed a hundred
+  // checklists, because there was nowhere above a tag to attach one.
+  ok('Equipment is marked as a level',
+     HIERARCHY_COLUMNS.some((c) => c.name === 'Equipment' && c.level))
+  ok('Description is the only column that is not a level',
+     HIERARCHY_COLUMNS.filter((c) => !c.level).map((c) => c.name).join() === 'Description')
 
   // Every level named on the card must be a level named in the hierarchy
   // diagram below it, or the page contradicts itself half a screen apart.

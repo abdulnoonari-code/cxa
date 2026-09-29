@@ -1,3 +1,4 @@
+import { HIERARCHY, SHEET_LEVELS } from '@/lib/levels-standard'
 // Every spreadsheet that sets up a project, in the order somebody does them.
 //
 // ── Why this list exists ────────────────────────────────────────────────
@@ -176,31 +177,26 @@ export const SETUP_SHEETS: SetupSheet[] = [
  * Configuration page renders it. Depth is the indent; `via` names the
  * column in the setup sheet that creates it.
  */
-export const HIERARCHY_LEVELS: { depth: number; label: string; example: string; note: string }[] = [
-  { depth: 0, label: 'Project', example: 'Bang Pakong Substation', note: 'The job itself. Not a column — you are already inside it.' },
-  { depth: 1, label: 'Asset', example: '22 kV Switchroom', note: 'A switchroom, building or zone that holds systems.' },
-  { depth: 2, label: 'System', example: 'MV Switchgear', note: 'A functional system with a boundary.' },
-  { depth: 3, label: 'Subsystem', example: 'Incomer', note: 'A bay, panel or section within a system. Optional.' },
-  { depth: 4, label: 'Tag', example: 'MV-SWGR-01', note: 'The tagged item itself. Checklists attach here.' },
-]
+export const HIERARCHY_LEVELS: { depth: number; label: string; example: string; note: string }[] =
+  HIERARCHY.map((l) => ({ depth: l.depth, label: l.label, example: l.example, note: l.means }))
+
 
 /**
- * The six columns of the asset list, drawn as the sheet's own header row.
+ * The columns of the asset list, drawn as the sheet's own header row.
+ *
+ * DERIVED from the standard in src/lib/levels-standard.ts rather than
+ * typed out again. It was typed out again, and the day Equipment became a
+ * level the page went on calling it "Equipment Type" and describing it as
+ * not-a-level — a screen contradicting the importer behind it.
  *
  * A sentence with six bold words in it DESCRIBES the file. A row of column
  * chips LOOKS like it, which is a shorter distance to travel when somebody
  * is about to open the thing in Excel.
  *
- * `level` is false for the one column that is not part of the tree.
- * Equipment Type is a fact about a tag — "this one is an MV Panel" — and
- * it is drawn differently for that reason, because making it a level put
- * the switchgear checklist on a transformer twice.
+ * `level` is false only for Description, which is a sentence about one
+ * tag rather than a level of the tree.
  */
 export const HIERARCHY_COLUMNS: { name: string; level: boolean }[] = [
-  { name: 'Asset', level: true },
-  { name: 'System', level: true },
-  { name: 'Subsystem', level: true },
-  { name: 'Equipment Type', level: false },
-  { name: 'Tag', level: true },
+  ...SHEET_LEVELS.map((l) => ({ name: l.label, level: true })),
   { name: 'Description', level: false },
 ]

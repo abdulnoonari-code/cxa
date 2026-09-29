@@ -290,3 +290,104 @@ export function candidatesFrom(
 
   return out.sort((a, b) => b.records - a.records || a.title.localeCompare(b.title))
 }
+
+// ── Applying a check to an EQUIPMENT KIND ───────────────────────────────
+//
+// "we can 100 MVSG, so hundred checklist"
+//
+// A hundred MV panels are a hundred tags of ONE equipment kind. Ticking a
+// hundred boxes to apply one check to them is the same work as typing the
+// check a hundred times, only faster to get wrong — miss three and nobody
+// finds out until handover.
+//
+// So a kind is offered as one thing to tick, and ticking it means every
+// tag of that kind. It is EXPANDED here, before planApply runs, so the
+// scope rules, the already-have check and the batching downstream are
+// untouched and still see nothing but ordinary tag targets.
+//
+// ── Why expanding beats a "type-level record" ───────────────────────────
+//
+// The tempting alternative is to attach one record to the kind itself and
+// have the tags inherit it. It is wrong for this application: each panel
+// is torqued separately and each one is separately wrong if it was not,
+// so each needs its own record to sign and its own evidence. The kind is
+// how the check is DEFINED and distributed; the tag is where it is DONE.
+//
+// ── Doing it again next month ───────────────────────────────────────────
+//
+// Applying the same kind again after twenty more panels arrive creates
+// records for the twenty and leaves the eighty alone, because planApply
+// already refuses a target that has this template at this level. That is
+// the whole "including the tags you import next month" promise, and it
+// costs nothing extra — it is the dedupe that was already there.
+
+export type EquipmentKind = {
+  /** equipment_types.id */
+  id: string
+  /** What it is called, e.g. "MV Panel". */
+  code: string
+  /** Every tag of this kind, as targets planApply already understands. */
+  tags: Target[]
+}
+
+export type Expansion = {
+  /** Ordinary tag targets, ready for planApply. */
+  targets: Target[]
+  /** What each ticked kind turned into, for the sentence on the button. */
+  from: { code: string; tags: number }[]
+}
+
+/**
+ * Turn ticked ids — a mix of kinds and plain targets — into targets.
+ *
+ * A kind whose id is ticked contributes all of its tags. A plain target
+ * ticked directly contributes itself. A tag reached both ways appears
+ * ONCE: ticking "MV Panel" and also MV-SWGR-001 must not plan the same
+ * record twice, because the second one would be silently dropped by the
+ * unique index and reported as created.
+ */
+export function expandKinds(
+  ticked: Iterable<string>,
+  kinds: EquipmentKind[],
+  plain: Target[],
+): Expansion {
+  // Walked in the order things were TICKED, not in the order the two
+  // lists happen to be in. The preview sentence and the list of targets
+  // then agree with each other and with the screen, which matters when
+  // the sentence is the only thing somebody reads before pressing a
+  // button that writes two thousand records.
+  const kindById = new Map(kinds.map((k) => [k.id, k]))
+  const plainById = new Map(plain.map((t) => [t.id, t]))
+
+  const seen = new Set<string>()
+  const targets: Target[] = []
+  const from: { code: string; tags: number }[] = []
+
+  for (const id of ticked) {
+    const kind = kindById.get(id)
+    if (kind) {
+      let added = 0
+      for (const tag of kind.tags) {
+        if (seen.has(tag.id)) continue
+        seen.add(tag.id)
+        targets.push(tag)
+        added++
+      }
+      from.push({ code: kind.code, tags: added })
+      continue
+    }
+    const one = plainById.get(id)
+    if (!one || seen.has(one.id)) continue
+    seen.add(one.id)
+    targets.push(one)
+  }
+
+  return { targets, from }
+}
+
+/** "MV Panel (18 tags)" — said before the button is pressed, not after. */
+export function expansionLine(e: Expansion): string {
+  if (e.from.length === 0) return ''
+  const parts = e.from.map((f) => `${f.code} (${f.tags} tag${f.tags === 1 ? '' : 's'})`)
+  return parts.join(', ')
+}

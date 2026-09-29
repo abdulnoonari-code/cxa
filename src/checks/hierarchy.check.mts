@@ -280,10 +280,13 @@ const BARE: ExistingTree = { assets: [], systems: [], subsystems: [], equipmentT
 
   eq('the exported example sheet imports with no problems', h.problems, [])
   eq('  …six tags', h.tags.map((t) => t.tag),
-     ['MV-SWGR-01', 'MV-SWGR-02', 'MV-SWGR-03', 'TX-01', 'TX-02', 'LV-MDB-01'])
+     ['MV-SWGR-001', 'MV-SWGR-002', 'MV-SWGR-003', 'TX-01', 'TX-02', 'LV-MDB-01'])
   eq('  …two assets', h.assets, ['22 kV Switchroom', 'LV Room'])
   eq('  …three systems', h.systems.length, 3)
-  eq('  …two subsystems', h.subsystems.length, 2)
+  // One, not two: the example now shows THREE PANELS UNDER ONE EQUIPMENT
+  // rather than three panels in three bays, because that is the shape the
+  // sheet has to teach — write the Equipment once, list the tags.
+  eq('  …one subsystem', h.subsystems.length, 1)
   eq('  …three equipment types', h.equipmentTypes, ['MV Panel', 'Dry Transformer', 'LV Panel'])
   eq('  …the blank cells carried the asset down', h.tags[3].asset, '22 kV Switchroom')
   eq('  …and the footnotes became neither a level nor a tag',

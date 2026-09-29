@@ -5,6 +5,11 @@ import { loadSubjectIndex } from '@/data/subjects'
 import { loadProjectRollup, rollupFor } from '@/data/rollup'
 import { childrenOf, partitionProjectChildren, subjectLabel, subjectBadgeClass, refKey, type Subject } from '@/lib/subjects'
 import { SubjectMeter, VerdictBadge } from '@/components/SubjectMeter'
+import { supabase } from '@/lib/supabase'
+import { filterRows, recount, choicesFor, anyFilter, type TreeRow, type Filters } from '@/lib/tree-view'
+
+// The install_status vocabulary the equipment table's CHECK enforces.
+const STATUSES = ['not_delivered', 'received', 'installed', 'energized'] as const
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +17,11 @@ export const dynamic = 'force-dynamic'
 // by opening a system. Below it, every tag is listed.
 const LEAF_LIMIT = 250
 
-export default async function AssetsPage() {
+export default async function AssetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; area?: string; system?: string; equipment?: string; status?: string }>
+}) {
   // See src/data/require-page.tsx: the layout does not stop this page
   // running, nor its output being sent. This is the door.
   const refused = await requirePage()
@@ -37,13 +46,74 @@ export default async function AssetsPage() {
   const showLeaves = equipmentCount <= LEAF_LIMIT
   const isLeaf = (t: string) => t === 'equipment' || t === 'component'
 
-  type Row = { subject: Subject; depth: number }
-  const rows: Row[] = []
-  const walk = (subject: Subject, depth: number) => {
+  // ── THE EQUIPMENT LEVEL ─────────────────────────────────────────────
+  //
+  // The tree stores tags directly under a system or subsystem. The
+  // Equipment level — the KIND, "MV Panel" — lives on equipment_types,
+  // beside them rather than above them in the parent chain, so it has to
+  // be inserted while the rows are built.
+  //
+  // It is the level that makes a hundred identical panels readable: one
+  // "MV Panel" row you can collapse, with a hundred tags under it,
+  // instead of a hundred rows at the same indent.
+  const { data: typeRows } = project
+    ? await supabase.from('equipment_types').select('id, type_code, name').eq('project_id', project.id)
+    : { data: [] as { id: string; type_code: string; name: string | null }[] }
+  const typeName = new Map(
+    ((typeRows ?? []) as { id: string; type_code: string; name: string | null }[])
+      .map((t) => [t.id, t.name || t.type_code]),
+  )
+  const { data: tagTypeRows } = project
+    ? await supabase.from('equipment').select('id, type_id, install_status').eq('project_id', project.id)
+    : { data: [] as { id: string; type_id: string | null; install_status: string | null }[] }
+  const typeOfTag = new Map<string, string | null>()
+  const statusOfTag = new Map<string, string | null>()
+  for (const t of (tagTypeRows ?? []) as { id: string; type_id: string | null; install_status: string | null }[]) {
+    typeOfTag.set(t.id, t.type_id)
+    statusOfTag.set(t.id, t.install_status)
+  }
+
+  const viewRows: TreeRow[] = []
+  const push = (
+    key: string, parentKey: string | null, depth: number,
+    kind: TreeRow['kind'], label: string, code: string | null,
+    status: string | null, subject: { type: string; id: string } | null,
+  ) => { viewRows.push({ key, parentKey, depth, kind, label, code, status, subject, tagCount: 0 }) }
+
+  const walk = (subject: Subject, depth: number, parentKey: string | null) => {
     if (!showLeaves && isLeaf(subject.type)) return
-    rows.push({ subject, depth })
-    for (const child of childrenOf(index, { type: subject.type, id: subject.id })) {
-      walk(child, depth + 1)
+    const key = refKey(subject)
+    push(key, parentKey, depth, subject.type as TreeRow['kind'],
+         subject.name, subject.code, null, { type: subject.type, id: subject.id })
+
+    const children = childrenOf(index, { type: subject.type, id: subject.id })
+    const tags = children.filter((c) => c.type === 'equipment')
+    const rest = children.filter((c) => c.type !== 'equipment')
+
+    for (const child of rest) walk(child, depth + 1, key)
+
+    if (tags.length === 0) return
+
+    // Group this branch's tags by their kind. A tag with no kind set goes
+    // under "Equipment not set" rather than being hidden or promoted — it
+    // is real plant somebody still has to classify.
+    const groups = new Map<string, { label: string; tags: Subject[] }>()
+    for (const t of tags) {
+      const typeId = typeOfTag.get(t.id) ?? null
+      const label = typeId ? typeName.get(typeId) ?? 'Equipment not set' : 'Equipment not set'
+      const gk = typeId ?? '\u0000none'
+      const g = groups.get(gk)
+      if (g) g.tags.push(t)
+      else groups.set(gk, { label, tags: [t] })
+    }
+
+    for (const [gk, g] of groups) {
+      const groupKey = `${key}::equipment:${gk}`
+      push(groupKey, key, depth + 1, 'equipment', g.label, null, null, null)
+      for (const t of g.tags) {
+        push(refKey(t), groupKey, depth + 2, 'tag', t.name, t.code,
+             statusOfTag.get(t.id) ?? null, { type: t.type, id: t.id })
+      }
     }
   }
   // ── Structure first, unplaced tags after ──────────────────────────
@@ -57,7 +127,7 @@ export default async function AssetsPage() {
   const { structure, unplaced } = partitionProjectChildren(
     root ? childrenOf(index, { type: 'project', id: root.id }) : [],
   )
-  for (const child of structure) walk(child, 0)
+  for (const child of structure) walk(child, 0, null)
 
   // Capped, because a register imported before systems existed can be the
   // whole project. The count above the list is always the true one.
@@ -79,14 +149,35 @@ export default async function AssetsPage() {
     return n
   }
   if (root) countTags(root)
-  const tagsUnder = (subject: Subject): number => tagCount.get(refKey(subject)) ?? 0
+
+  // ── Search and filters ─────────────────────────────────────────────
+  //
+  // Read from the address bar, so a filtered view is a link somebody can
+  // send. The dropdowns are built from the tree itself — there is no
+  // point offering a system nothing is under.
+  const sp = await searchParams
+  const filters: Filters = {
+    q: (sp.q ?? '').trim(),
+    area: sp.area ?? '',
+    system: sp.system ?? '',
+    equipment: sp.equipment ?? '',
+    status: sp.status ?? '',
+  }
+  const areaChoices = choicesFor(viewRows, 'area')
+  const systemChoices = choicesFor(viewRows, 'system')
+  const equipmentChoices = choicesFor(viewRows, 'equipment')
+
+  const shown = recount(filterRows(viewRows, filters))
+  const filtering = anyFilter(filters)
+  const shownTags = shown.filter((r) => r.kind === 'tag').length
 
   const counts = {
     systems: [...index.byKey.values()].filter((s) => s.type === 'system').length,
     equipment: [...index.byKey.values()].filter((s) => s.type === 'equipment').length,
-    blocked: [...rows.map((r) => r.subject), ...unplaced].filter(
-      (s) => rollupFor(rollup, { type: s.type, id: s.id }).readiness.blockers.length > 0,
-    ).length,
+    blocked: [
+      ...viewRows.map((r) => r.subject).filter((x): x is { type: string; id: string } => x !== null),
+      ...unplaced.map((u) => ({ type: u.type, id: u.id })),
+    ].filter((s) => rollupFor(rollup, { type: s.type as never, id: s.id }).readiness.blockers.length > 0).length,
   }
 
   return (
@@ -163,7 +254,69 @@ export default async function AssetsPage() {
         </Link>
       )}
 
-      {rows.length === 0 ? (
+      {/* ── SEARCH AND FILTERS ──────────────────────────────────────────
+          A GET form, so a filtered view is an address somebody can send
+          to the person who has to go and look at it. The dropdowns are
+          built from this project's own tree — there is no point offering
+          a system that nothing sits under. */}
+      {viewRows.length > 0 && (
+        <form method="get" className="card no-print" style={{ marginTop: 20, marginBottom: 0 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label className="field" style={{ flex: '2 1 220px', minWidth: 180 }}>
+              Search
+              <input
+                type="search"
+                name="q"
+                defaultValue={filters.q}
+                placeholder="tag, system, room…"
+                className="input"
+              />
+            </label>
+            <label className="field" style={{ flex: '1 1 150px' }}>
+              Area
+              <select name="area" defaultValue={filters.area} className="input">
+                <option value="">Any area</option>
+                {areaChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ flex: '1 1 150px' }}>
+              System
+              <select name="system" defaultValue={filters.system} className="input">
+                <option value="">Any system</option>
+                {systemChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ flex: '1 1 150px' }}>
+              Equipment
+              <select name="equipment" defaultValue={filters.equipment} className="input">
+                <option value="">Any equipment</option>
+                {equipmentChoices.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </label>
+            <label className="field" style={{ flex: '1 1 140px' }}>
+              Status
+              <select name="status" defaultValue={filters.status} className="input">
+                <option value="">Any status</option>
+                {STATUSES.map((v) => (
+                  <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </label>
+            <div style={{ display: 'flex', gap: 8, paddingBottom: 2 }}>
+              <button type="submit" className="btn btn-primary btn-sm">Filter</button>
+              {filtering && <Link href="/assets" className="btn btn-secondary btn-sm">Clear</Link>}
+            </div>
+          </div>
+          {filtering && (
+            <p className="io-note">
+              Showing <strong>{shownTags}</strong> of {counts.equipment} tag{counts.equipment === 1 ? '' : 's'}.
+              Every branch above a match is kept, so you can still see where each one sits.
+            </p>
+          )}
+        </form>
+      )}
+
+      {viewRows.length === 0 ? (
         <div className="card" style={{ marginTop: 20 }}>
           <p className="text-secondary" style={{ marginBottom: 0, fontSize: 14 }}>
             Nothing beneath the project yet. Add areas and systems on the{' '}
@@ -178,7 +331,15 @@ export default async function AssetsPage() {
           </p>
         </div>
       ) : (
-        <div className="table-wrap" style={{ marginTop: 20 }}>
+        shown.length === 0 ? (
+        <div className="card" style={{ marginTop: 18 }}>
+          <p className="text-secondary" style={{ margin: 0, fontSize: 14 }}>
+            Nothing matches that. <Link href="/assets" className="link">Clear the filters</Link> to see the whole
+            tree again.
+          </p>
+        </div>
+        ) : (
+        <div className="table-wrap" style={{ marginTop: 18 }}>
           <table className="table">
             <thead>
               <tr>
@@ -193,10 +354,20 @@ export default async function AssetsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ subject, depth }) => {
-                const r = rollupFor(rollup, { type: subject.type, id: subject.id })
+              {shown.map((viewRow) => {
+                const { subject, depth } = viewRow
+                // A grouping row has no subject of its own — it is the
+                // Equipment level, which lives beside the tags rather
+                // than above them, so there is nothing to open and
+                // nothing to roll up.
+                // An Equipment grouping row has no rollup of its own, so
+                // its measured columns show an em dash rather than a zero
+                // that would read as "nothing recorded here".
+                const r = subject
+                  ? rollupFor(rollup, { type: subject.type as never, id: subject.id })
+                  : null
                 return (
-                  <tr key={`${subject.type}:${subject.id}`}>
+                  <tr key={viewRow.key}>
                     <td style={{ paddingLeft: 12 + depth * 24 }}>
                       {/* The indent alone is easy to lose across a wide
                           row, so each level below the top also carries a
@@ -214,63 +385,68 @@ export default async function AssetsPage() {
                           }}
                         />
                       )}
-                      <Link
-                        href={`/assets/${subject.type}/${subject.id}`}
-                        className="link"
-                        style={{ fontWeight: depth === 0 ? 600 : 500, fontSize: 13.5 }}
-                      >
-                        {subject.code && <span className="mono">{subject.code}</span>}
-                        {subject.code && subject.name !== subject.code ? ' — ' : ''}
-                        {subject.name !== subject.code ? subject.name : ''}
-                      </Link>
+                      {subject ? (
+                        <Link
+                          href={`/assets/${subject.type}/${subject.id}`}
+                          className="link"
+                          style={{ fontWeight: depth === 0 ? 600 : 500, fontSize: 13.5 }}
+                        >
+                          {viewRow.code && <span className="mono">{viewRow.code}</span>}
+                          {viewRow.code && viewRow.label !== viewRow.code ? ' — ' : ''}
+                          {viewRow.label !== viewRow.code ? viewRow.label : ''}
+                        </Link>
+                      ) : (
+                        <span style={{ fontWeight: 600, fontSize: 13.5 }}>{viewRow.label}</span>
+                      )}
                       <div>
-                        <span className={subjectBadgeClass(subject.type)} style={{ fontSize: 10 }}>
-                          {subjectLabel(subject.type)}
+                        <span className={subjectBadgeClass(viewRow.kind)} style={{ fontSize: 10 }}>
+                          {viewRow.kind === 'equipment' && !subject ? 'Equipment' : subjectLabel(viewRow.kind)}
                         </span>
-                        {!showLeaves && tagsUnder(subject) > 0 && (
+                        {viewRow.kind !== 'tag' && viewRow.tagCount > 0 && (
                           <span className="text-secondary" style={{ fontSize: 11, marginLeft: 8 }}>
-                            {tagsUnder(subject)} tag{tagsUnder(subject) === 1 ? '' : 's'}
+                            {viewRow.tagCount} tag{viewRow.tagCount === 1 ? '' : 's'}
+                          </span>
+                        )}
+                        {viewRow.status && (
+                          <span className="text-secondary" style={{ fontSize: 11, marginLeft: 8 }}>
+                            {viewRow.status.replace(/_/g, ' ')}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td>
-                      <VerdictBadge readiness={r.readiness} />
-                    </td>
-                    <td>
-                      <SubjectMeter readiness={r.readiness} width={110} />
+                    <td>{r && <VerdictBadge readiness={r.readiness} />}</td>
+                    <td>{r && <SubjectMeter readiness={r.readiness} width={110} />}</td>
+                    <td className="mono" style={{ textAlign: 'right', fontSize: 12.5 }}>
+                      {r ? r.checks.length || '—' : '—'}
                     </td>
                     <td className="mono" style={{ textAlign: 'right', fontSize: 12.5 }}>
-                      {r.checks.length || '—'}
-                    </td>
-                    <td className="mono" style={{ textAlign: 'right', fontSize: 12.5 }}>
-                      {r.tests.length || '—'}
+                      {r ? r.tests.length || '—' : '—'}
                     </td>
                     <td
                       className="mono"
                       style={{
                         textAlign: 'right',
                         fontSize: 12.5,
-                        color: r.categoryA > 0 ? 'var(--color-danger)' : undefined,
-                        fontWeight: r.categoryA > 0 ? 600 : 400,
+                        color: r && r.categoryA > 0 ? 'var(--color-danger)' : undefined,
+                        fontWeight: r && r.categoryA > 0 ? 600 : 400,
                       }}
                     >
-                      {r.openIssues || '—'}
-                      {r.categoryA > 0 && <span style={{ fontSize: 10 }}> ({r.categoryA}A)</span>}
+                      {r ? r.openIssues || '—' : '—'}
+                      {r && r.categoryA > 0 && <span style={{ fontSize: 10 }}> ({r.categoryA}A)</span>}
                     </td>
                     <td
                       className="mono"
                       style={{
                         textAlign: 'right',
                         fontSize: 12.5,
-                        color: r.heldPoints > 0 ? 'var(--color-danger)' : undefined,
-                        fontWeight: r.heldPoints > 0 ? 600 : 400,
+                        color: r && r.heldPoints > 0 ? 'var(--color-danger)' : undefined,
+                        fontWeight: r && r.heldPoints > 0 ? 600 : 400,
                       }}
                     >
-                      {r.heldPoints || '—'}
+                      {r ? r.heldPoints || '—' : '—'}
                     </td>
                     <td className="mono" style={{ textAlign: 'right', fontSize: 12.5 }}>
-                      {r.requirements.length > 0 ? `${r.requirementsVerified}/${r.requirements.length}` : '—'}
+                      {r && r.requirements.length > 0 ? `${r.requirementsVerified}/${r.requirements.length}` : '—'}
                     </td>
                   </tr>
                 )
@@ -278,6 +454,7 @@ export default async function AssetsPage() {
             </tbody>
           </table>
         </div>
+        )
       )}
 
       {/* ── TAGS WITH NO PLACE IN THE TREE ────────────────────────────

@@ -2,7 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { loadSubjectIndex } from '@/data/subjects'
 import { refKey } from '@/lib/subjects'
 import { scopeOf } from '@/lib/scope'
-import type { AppliedRecord, Target, Template } from '@/lib/templates'
+import type { AppliedRecord, Target, Template, EquipmentKind } from '@/lib/templates'
+import { supabase as db } from '@/lib/supabase'
 
 const T_COLUMNS = 'id, code, title, level, section, answer_type, guidance'
 const R_COLUMNS = 'id, template_id, subject_id, subject_type, level, item, status'
@@ -12,13 +13,21 @@ export type LibraryLoad = {
   records: AppliedRecord[]
   /** Everything a template could be applied to, tags and systems alike. */
   targets: Target[]
+  /**
+   * The equipment KINDS, each carrying its tags.
+   *
+   * Offered as one thing to tick so that one check reaches a hundred
+   * panels. The expansion happens in expandKinds() before planApply, so
+   * everything downstream still sees ordinary tag targets.
+   */
+  kinds: EquipmentKind[]
   codeOf: (id: string | null) => string
   /** False when SQL part 30 has not been run. */
   ready: boolean
 }
 
 export async function loadLibrary(projectId: string | null): Promise<LibraryLoad> {
-  const empty: LibraryLoad = { templates: [], records: [], targets: [], codeOf: () => '—', ready: true }
+  const empty: LibraryLoad = { templates: [], records: [], targets: [], kinds: [], codeOf: () => '—', ready: true }
   if (!projectId) return empty
 
   const [tpl, rec, index] = await Promise.all([
@@ -76,6 +85,31 @@ export async function loadLibrary(projectId: string | null): Promise<LibraryLoad
     .map((s) => ({ id: s.id, type: s.type, code: s.code ?? s.name ?? '—' }))
     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
 
+  // ── The equipment kinds, with their tags ──
+  //
+  // Read straight from the two tables rather than from the subject index,
+  // because the index has no Equipment level in it: the kind lives on
+  // equipment_types, beside the tags rather than above them.
+  const [{ data: kindRows }, { data: tagRows }] = await Promise.all([
+    db.from('equipment_types').select('id, type_code, name').eq('project_id', projectId),
+    db.from('equipment').select('id, tag_id, type_id').eq('project_id', projectId).not('type_id', 'is', null),
+  ])
+  const tagsByKind = new Map<string, Target[]>()
+  for (const t of (tagRows ?? []) as { id: string; tag_id: string; type_id: string | null }[]) {
+    if (!t.type_id) continue
+    const list = tagsByKind.get(t.type_id)
+    const entry: Target = { id: t.id, type: 'equipment', code: t.tag_id }
+    if (list) list.push(entry)
+    else tagsByKind.set(t.type_id, [entry])
+  }
+  const kinds: EquipmentKind[] = ((kindRows ?? []) as { id: string; type_code: string; name: string | null }[])
+    .map((k) => ({
+      id: k.id,
+      code: k.name || k.type_code,
+      tags: (tagsByKind.get(k.id) ?? []).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })),
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code))
+
   const byId = new Map(targets.map((t) => [t.id, t.code]))
   const typeById = new Map(records.map((r) => [r.subjectId ?? '', r.subjectType ?? '']))
 
@@ -83,6 +117,7 @@ export async function loadLibrary(projectId: string | null): Promise<LibraryLoad
     templates,
     records,
     targets,
+    kinds,
     codeOf: (id) => {
       if (!id) return 'Unassigned'
       const direct = byId.get(id)
